@@ -1,0 +1,490 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no,viewport-fit=cover">
+<meta name="theme-color" content="#040507">
+<meta name="robots" content="noindex,nofollow">
+<title>镜子</title>
+<style>
+:root{--bg:#040507;--ink:rgba(232,236,244,.88);--dim:rgba(232,236,244,.48)}
+*{box-sizing:border-box}
+html,body{margin:0;height:100%;overflow:hidden;background:var(--bg);color:var(--ink)}
+body{font-family:-apple-system,BlinkMacSystemFont,"PingFang SC","Hiragino Sans GB","Noto Sans CJK SC","Microsoft YaHei",sans-serif;
+  -webkit-font-smoothing:antialiased;-webkit-user-select:none;user-select:none;-webkit-tap-highlight-color:transparent;touch-action:none}
+canvas{display:block}
+#sil{position:fixed;left:-12%;top:-12%;width:124%;height:124%;filter:blur(24px) saturate(1.2) brightness(1.25);opacity:0;transition:opacity 3s ease}
+#glass{position:fixed;inset:0;pointer-events:none;opacity:0;transition:opacity 3s ease;
+  background:
+    radial-gradient(120% 90% at 50% 45%,rgba(0,0,0,0) 40%,rgba(0,0,0,.55) 100%),
+    linear-gradient(118deg,rgba(255,255,255,0) 32%,rgba(255,255,255,.045) 44%,rgba(255,255,255,0) 56%);
+  background-size:100% 100%,240% 240%;animation:sheen 17s ease-in-out infinite}
+@keyframes sheen{0%,100%{background-position:0 0,0% 0%}50%{background-position:0 0,100% 100%}}
+#fog{position:fixed;inset:0;width:100%;height:100%;filter:blur(2.5px);opacity:0;transition:opacity 3s ease}
+#field{position:fixed;inset:0;opacity:0;transition:opacity 2.4s ease}
+.on{opacity:1!important}
+
+.drop{position:absolute;left:0;top:0;width:var(--s);height:var(--s);margin:calc(var(--s) / -2) 0 0 calc(var(--s) / -2);
+  border:0;padding:0;border-radius:var(--r);cursor:pointer;background:transparent;
+  animation:drift var(--d) ease-in-out var(--dl) infinite alternate;transition:transform .5s ease}
+.drop::before{content:"";position:absolute;inset:0;border-radius:inherit;
+  background:radial-gradient(circle at 32% 28%,rgba(255,255,255,.5),rgba(255,255,255,.06) 30%,rgba(255,255,255,0) 55%),
+             radial-gradient(circle at 55% 60%,hsla(var(--h),45%,70%,.22),hsla(var(--h),45%,60%,.04) 72%);
+  box-shadow:inset 0 0 0 1px rgba(255,255,255,.12),inset 0 -3px 9px rgba(255,255,255,.1),0 0 18px hsla(var(--h),70%,70%,.1);
+  -webkit-backdrop-filter:blur(3px);backdrop-filter:blur(3px);transition:box-shadow .6s,opacity .6s}
+.drop.seen::before{box-shadow:inset 0 0 0 1px rgba(255,255,255,.3),inset 0 -3px 8px rgba(255,255,255,.1),0 0 26px hsla(var(--h),80%,72%,.26)}
+.drop.mine::after{content:"";position:absolute;left:50%;top:50%;width:62%;height:62%;transform:translate(-50%,-50%);
+  background:center/contain no-repeat url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='rgba(255,236,210,0.85)'%3E%3Cpath d='M12 22c-4 0-6.5-2.6-7.2-5.6l-1.3-5a1.2 1.2 0 0 1 2.3-.6l1 3V5.2a1.2 1.2 0 0 1 2.4 0V11V3.6a1.2 1.2 0 0 1 2.4 0V11V4.4a1.2 1.2 0 0 1 2.4 0V11.6V6.6a1.2 1.2 0 0 1 2.4 0V15c0 4-2.4 7-6.4 7z'/%3E%3C/svg%3E")}
+.drop.known{outline:1px dashed rgba(255,255,255,.35);outline-offset:4px}
+.drop.pulse{transform:scale(1.7)}
+@keyframes drift{from{translate:0 0}to{translate:var(--dx) var(--dy)}}
+
+#hint{position:fixed;left:0;right:0;top:calc(env(safe-area-inset-top) + 22px);text-align:center;font-size:13px;letter-spacing:.32em;
+  color:var(--dim);pointer-events:none;opacity:0;transition:opacity 2s ease;padding-left:.32em}
+#doneBtn{position:fixed;left:50%;bottom:calc(env(safe-area-inset-bottom) + 26px);transform:translateX(-50%);
+  font:inherit;font-size:13px;letter-spacing:.3em;padding:11px 22px 11px 26px;border-radius:999px;color:var(--ink);
+  background:rgba(255,255,255,.06);border:1px solid rgba(255,255,255,.16);-webkit-backdrop-filter:blur(10px);backdrop-filter:blur(10px);
+  opacity:0;pointer-events:none;transition:opacity 1.5s ease;cursor:pointer}
+#doneBtn.on{pointer-events:auto}
+
+/* 打开作品 */
+#viewer{position:fixed;inset:0;z-index:20;background:#000;visibility:hidden;
+  clip-path:circle(0px at var(--x,50%) var(--y,50%));transition:clip-path .95s cubic-bezier(.76,0,.2,1)}
+#viewer.open{clip-path:circle(160vmax at var(--x,50%) var(--y,50%))}
+#strip{position:absolute;left:0;right:0;top:0;height:calc(env(safe-area-inset-top) + 50px);padding:env(safe-area-inset-top) 10px 0;
+  display:flex;align-items:center;gap:8px;background:rgba(10,12,16,.92);border-bottom:1px solid rgba(255,255,255,.07)}
+#strip button{font:inherit;font-size:13px;letter-spacing:.06em;color:var(--ink);background:transparent;border:1px solid rgba(255,255,255,.14);
+  border-radius:999px;padding:8px 13px;cursor:pointer;white-space:nowrap}
+#strip .sp{flex:1}
+#strip button.act{background:rgba(255,226,190,.16);border-color:rgba(255,226,190,.5);color:#ffe9cc}
+#frame{position:absolute;left:0;right:0;bottom:0;top:calc(env(safe-area-inset-top) + 50px);width:100%;height:calc(100% - env(safe-area-inset-top) - 50px);border:0;background:#000}
+
+/* 口令、开场、结束 */
+.layer{position:fixed;inset:0;z-index:30;display:flex;align-items:center;justify-content:center;flex-direction:column;
+  text-align:center;padding:0 28px;transition:opacity 1.6s ease}
+.layer.gone{opacity:0;pointer-events:none}
+#lock .t{font-size:12px;letter-spacing:.6em;color:var(--dim);margin-bottom:34px;padding-left:.6em}
+#pw{width:min(260px,80vw);font:inherit;font-size:16px;letter-spacing:.2em;text-align:center;color:var(--ink);background:transparent;
+  border:0;border-bottom:1px solid rgba(255,255,255,.22);padding:10px 4px;outline:none;-webkit-user-select:text;user-select:text}
+#pw::placeholder{color:rgba(232,236,244,.3);letter-spacing:.3em}
+#lockMsg{height:20px;margin-top:18px;font-size:12px;letter-spacing:.2em;color:var(--dim)}
+.shake{animation:shake .45s}
+@keyframes shake{20%{transform:translateX(-8px)}40%{transform:translateX(7px)}60%{transform:translateX(-5px)}80%{transform:translateX(3px)}}
+#intro p{margin:0;font-size:16px;line-height:2.3;letter-spacing:.12em;opacity:0;transform:translateY(6px);transition:opacity 1.6s ease,transform 1.6s ease}
+#intro p.on{opacity:1;transform:none}
+#intro p.s{font-size:13px;color:var(--dim);margin-top:1.4em}
+
+#panel{position:fixed;inset:0;z-index:25;display:flex;align-items:center;justify-content:center;padding:24px;
+  background:rgba(4,5,7,.55);-webkit-backdrop-filter:blur(14px);backdrop-filter:blur(14px);transition:opacity .8s ease}
+#panel .box{width:min(420px,100%);max-height:100%;overflow:auto;padding:26px 22px;border-radius:22px;
+  background:rgba(255,255,255,.05);border:1px solid rgba(255,255,255,.1);text-align:center}
+#panel h2{font-weight:400;font-size:15px;letter-spacing:.2em;margin:0 0 8px}
+#panel .sub{font-size:12.5px;color:var(--dim);line-height:1.8;margin:0 0 18px}
+.chips{display:flex;flex-wrap:wrap;justify-content:center;gap:16px 14px;margin:6px 0 18px;min-height:40px}
+.chip{position:relative;width:44px;height:44px;border:0;padding:0;background:transparent;cursor:pointer}
+.chip .drop{position:absolute;left:50%;top:50%;animation:none;--s:40px}
+.chip .rk{position:absolute;left:50%;top:100%;transform:translateX(-50%);margin-top:4px;font-size:11px;letter-spacing:.1em;color:#ffe2bf;white-space:nowrap}
+#panel textarea{width:100%;height:150px;font:inherit;font-size:13px;line-height:1.7;color:var(--ink);background:rgba(0,0,0,.3);
+  border:1px solid rgba(255,255,255,.12);border-radius:12px;padding:10px;resize:none;-webkit-user-select:text;user-select:text}
+.row{display:flex;gap:10px;justify-content:center;margin-top:14px;flex-wrap:wrap}
+.btn{font:inherit;font-size:13px;letter-spacing:.14em;color:var(--ink);background:rgba(255,255,255,.07);border:1px solid rgba(255,255,255,.18);
+  border-radius:999px;padding:10px 18px;cursor:pointer}
+.hidden{display:none!important}
+@media (prefers-reduced-motion:reduce){.drop{animation:none}#glass{animation:none}}
+</style>
+</head>
+<body>
+<canvas id="sil"></canvas>
+<div id="glass"></div>
+<canvas id="fog"></canvas>
+<div id="field"></div>
+<div id="hint">擦一擦雾 · 点开一个痕迹</div>
+<button id="doneBtn" type="button">选 好 了</button>
+
+<div id="viewer">
+  <div id="strip">
+    <button id="back" type="button">← 回到镜子</button>
+    <span class="sp"></span>
+    <button id="mineBtn" type="button">✋ 可能是我</button>
+    <button id="knownBtn" type="button">像我认识的人</button>
+  </div>
+  <iframe id="frame" title="作品" sandbox="allow-scripts" allow="autoplay"></iframe>
+</div>
+
+<div id="panel" class="hidden">
+  <div class="box">
+    <div id="step1">
+      <h2>你按过手印的</h2>
+      <p class="sub">按"最像你"的顺序点一遍，最多点三个。<br>点错了可以按"重来"。</p>
+      <div class="chips" id="chips"></div>
+      <div id="knownWrap" class="hidden">
+        <p class="sub" style="margin-bottom:8px">你觉得像你认识的人的</p>
+        <div class="chips" id="knownChips"></div>
+      </div>
+      <div class="row">
+        <button class="btn" id="reset" type="button">重来</button>
+        <button class="btn" id="gen" type="button">好了</button>
+        <button class="btn" id="closeP" type="button">再看看</button>
+      </div>
+    </div>
+    <div id="step2" class="hidden">
+      <h2>谢谢你</h2>
+      <p class="sub">复制下面这段，发给邀请你的人。</p>
+      <textarea id="out" readonly></textarea>
+      <div class="row">
+        <button class="btn" id="copy" type="button">复制</button>
+        <button class="btn" id="back2" type="button">回到镜子</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="layer" id="lock">
+  <div class="t">一 面 镜 子</div>
+  <input id="pw" type="password" autocomplete="off" autocapitalize="off" spellcheck="false" placeholder="口令" enterkeyhint="go">
+  <div id="lockMsg"></div>
+</div>
+<div class="layer gone" id="intro">
+  <p>这是一面起了雾的镜子。</p>
+  <p>雾上有很多痕迹，</p>
+  <p>每一个，都是一个人。</p>
+  <p>其中有一些，可能是你。</p>
+  <p class="s">用手指擦一擦雾，点开一个痕迹。<br>觉得像你，就按个手印。</p>
+</div>
+
+<script>
+(() => {
+'use strict';
+const $ = (id) => document.getElementById(id);
+const store = { get(k) { try { return JSON.parse(localStorage.getItem(k)); } catch (e) { return null; } },
+                set(k, v) { try { localStorage.setItem(k, JSON.stringify(v)); } catch (e) {} } };
+const rand = () => crypto.getRandomValues(new Uint32Array(1))[0] / 4294967296;
+const clamp = (x, a, b) => Math.max(a, Math.min(b, x));
+const lerp = (a, b, t) => a + (b - a) * t;
+
+let W = innerWidth, H = innerHeight;
+let works = [], state = { seen: {}, mine: {}, known: {} }, opened = null, running = true;
+
+/* ---------- 口令 ---------- */
+const pw = $('pw'), lockMsg = $('lockMsg');
+let dataBuf = fetch('data.bin').then((r) => { if (!r.ok) throw new Error(); return r.arrayBuffer(); });
+async function unlock() {
+  const word = pw.value.trim();
+  if (!word) return;
+  lockMsg.textContent = '雾在散……';
+  try {
+    const buf = new Uint8Array(await dataBuf);
+    const salt = buf.slice(0, 16), iv = buf.slice(16, 28), ct = buf.slice(28);
+    const base = await crypto.subtle.importKey('raw', new TextEncoder().encode(word), 'PBKDF2', false, ['deriveKey']);
+    const key = await crypto.subtle.deriveKey({ name: 'PBKDF2', salt, iterations: 310000, hash: 'SHA-256' },
+      base, { name: 'AES-GCM', length: 256 }, false, ['decrypt']);
+    const plain = await crypto.subtle.decrypt({ name: 'AES-GCM', iv }, key, ct);
+    works = JSON.parse(new TextDecoder().decode(plain)).works;
+  } catch (e) {
+    lockMsg.textContent = '不对，再试试';
+    pw.classList.remove('shake'); void pw.offsetWidth; pw.classList.add('shake');
+    return;
+  }
+  pw.blur();
+  const saved = store.get('gaf-mirror-v1');
+  if (saved && saved.seen) state = saved;
+  start();
+}
+pw.addEventListener('keydown', (e) => { if (e.key === 'Enter') unlock(); });
+pw.addEventListener('change', unlock);
+
+/* ---------- 开场：先是一片虚无 ---------- */
+function start() {
+  $('lock').classList.add('gone');
+  const intro = $('intro'), ps = intro.querySelectorAll('p');
+  const again = Object.keys(state.seen).length > 0;
+  setTimeout(() => {
+    intro.classList.remove('gone');
+    ps.forEach((p, i) => setTimeout(() => p.classList.add('on'), 900 + i * (again ? 500 : 1700)));
+  }, 1400);
+  const total = again ? 4200 : 9600;
+  setTimeout(() => { intro.classList.add('gone'); }, total);
+  setTimeout(() => {
+    buildField();
+    ['sil', 'glass', 'fog'].forEach((id) => $(id).classList.add('on'));
+    setTimeout(() => { $('field').classList.add('on'); $('hint').classList.add('on'); }, 1600);
+    setTimeout(() => $('hint').classList.remove('on'), 9000);
+    updateDone();
+  }, total - 600);
+}
+
+/* ---------- 痕迹 ---------- */
+const drops = {};
+function shapeRadius() {   // 每个痕迹的形状都不一样，像随手按上去的
+  const r = () => Math.round(38 + rand() * 24) + '%';
+  return `${r()} ${r()} ${r()} ${r()} / ${r()} ${r()} ${r()} ${r()}`;
+}
+function buildField() {
+  const field = $('field');
+  field.innerHTML = '';
+  const order = works.map((w) => w.c);
+  for (let i = order.length - 1; i > 0; i--) { const j = Math.floor(rand() * (i + 1)); [order[i], order[j]] = [order[j], order[i]]; }
+  const top = 86, bottom = 96, side = 22;
+  const aw = W - side * 2, ah = H - top - bottom;
+  const n = order.length, aspect = aw / ah;
+  const cols = Math.max(4, Math.round(Math.sqrt(n * aspect))), rows = Math.ceil(n / cols);
+  const cw = aw / cols, ch = ah / rows;
+  const cells = [];
+  for (let r = 0; r < rows; r++) for (let c = 0; c < cols; c++) cells.push([c, r]);
+  for (let i = cells.length - 1; i > 0; i--) { const j = Math.floor(rand() * (i + 1)); [cells[i], cells[j]] = [cells[j], cells[i]]; }
+  const base = clamp(Math.min(cw, ch) * 0.58, 26, 58);
+  order.forEach((c, i) => {
+    const w = works.find((x) => x.c === c);
+    if (!w.hue) { w.hue = Math.floor(rand() * 360); w.rad = shapeRadius(); }
+    const [cx, cy] = cells[i];
+    const x = side + (cx + 0.5 + (rand() - 0.5) * 0.85) * cw, y = top + (cy + 0.5 + (rand() - 0.5) * 0.85) * ch;
+    const b = document.createElement('button');
+    b.type = 'button'; b.className = 'drop'; b.setAttribute('aria-label', '一个痕迹');
+    b.style.cssText = `left:${x}px;top:${y}px;--s:${(base * (0.75 + rand() * 0.5)).toFixed(0)}px;--h:${w.hue};--r:${w.rad};` +
+      `--d:${(6 + rand() * 7).toFixed(1)}s;--dl:${(-rand() * 8).toFixed(1)}s;--dx:${((rand() - 0.5) * 10).toFixed(1)}px;--dy:${((rand() - 0.5) * 10).toFixed(1)}px`;
+    b.dataset.c = c;
+    field.appendChild(b);
+    drops[c] = b;
+    paintDrop(c);
+  });
+}
+function paintDrop(c) {
+  const b = drops[c]; if (!b) return;
+  b.classList.toggle('seen', !!state.seen[c]);
+  b.classList.toggle('mine', !!state.mine[c]);
+  b.classList.toggle('known', !!state.known[c]);
+}
+
+/* ---------- 镜子后面的人影 ---------- */
+const sil = $('sil'), sctx = sil.getContext('2d');
+const SW = 90, SH = 150; sil.width = SW; sil.height = SH;
+const PALETTE = [[44, 86, 112], [128, 92, 70], [86, 70, 128], [120, 66, 92], [58, 104, 96], [104, 98, 120]];
+const POSES = [ // 肩宽、头大小、整体高度、头偏、肩斜、离屏幕远近
+  [1.0, 1.0, 0.0, 0.0, 0.0, 1.0], [1.15, 1.05, -0.04, -0.12, 0.05, 1.12], [0.9, 0.95, 0.05, 0.16, -0.06, 0.92],
+  [1.05, 1.1, -0.02, 0.06, 0.1, 1.05], [0.95, 0.92, 0.08, -0.05, -0.04, 0.86], [1.2, 1.0, -0.06, 0.1, 0.02, 1.18]];
+let pointer = { x: 0.5, y: 0.5, tx: 0.5, ty: 0.5 };
+function colAt(t) {
+  const k = (t / 11) % PALETTE.length, i = Math.floor(k), f = k - i, a = PALETTE[i], b = PALETTE[(i + 1) % PALETTE.length];
+  const e = f * f * (3 - 2 * f);
+  return a.map((v, j) => lerp(v, b[j], e));
+}
+function poseAt(t) {
+  const k = (t / 9) % POSES.length, i = Math.floor(k), f = k - i, a = POSES[i], b = POSES[(i + 1) % POSES.length];
+  const e = f * f * (3 - 2 * f);
+  return a.map((v, j) => lerp(v, b[j], e));
+}
+function drawSil(t) {
+  const [sw, hs, dy, tilt, sl, near] = poseAt(t);
+  const [r, g, b] = colAt(t);
+  pointer.x += (pointer.tx - pointer.x) * 0.03; pointer.y += (pointer.ty - pointer.y) * 0.03;
+  const breathe = Math.sin(t * 1.25) * 0.012;
+  const cx = SW / 2 + Math.sin(t * 0.23) * 4 + Math.sin(t * 0.071) * 5 + (pointer.x - 0.5) * 10;
+  const sc = near * (1 + breathe) * (1 + (pointer.y - 0.5) * 0.06);
+  sctx.clearRect(0, 0, SW, SH);
+  // 身后屋里的光，像窗户或台灯
+  const lx = SW * (0.78 + Math.sin(t * 0.05) * 0.05), ly = SH * 0.22;
+  const lg = sctx.createRadialGradient(lx, ly, 0, lx, ly, SW * 0.5);
+  lg.addColorStop(0, `rgba(${r + 70},${g + 60},${b + 40},.35)`); lg.addColorStop(1, 'rgba(0,0,0,0)');
+  sctx.fillStyle = lg; sctx.fillRect(0, 0, SW, SH);
+  sctx.save();
+  sctx.translate(cx, SH * (0.62 + dy));
+  sctx.scale(sc, sc);
+  const body = `rgba(${r},${g},${b},.95)`, edge = `rgba(${r + 40},${g + 40},${b + 50},.7)`;
+  // 肩和上身
+  sctx.save(); sctx.rotate(sl);
+  const bw = 30 * sw;
+  const grd = sctx.createLinearGradient(-bw, 0, bw, 0);
+  grd.addColorStop(0, edge); grd.addColorStop(0.5, body); grd.addColorStop(1, `rgba(${r * 0.7},${g * 0.7},${b * 0.8},.95)`);
+  sctx.fillStyle = grd;
+  sctx.beginPath();
+  sctx.moveTo(-bw, 70); sctx.bezierCurveTo(-bw, 18, -bw * 0.7, 6, -10, 2);
+  sctx.lineTo(10, 2); sctx.bezierCurveTo(bw * 0.7, 6, bw, 18, bw, 70); sctx.closePath(); sctx.fill();
+  sctx.restore();
+  // 脖子和头
+  sctx.fillStyle = body;
+  sctx.fillRect(-5.5, -8, 11, 14);
+  sctx.save(); sctx.translate(0, -22); sctx.rotate(tilt);
+  const hg = sctx.createRadialGradient(-4 * hs, -6 * hs, 2, 0, 0, 18 * hs);
+  hg.addColorStop(0, `rgba(${r + 50},${g + 45},${b + 40},.95)`); hg.addColorStop(1, body);
+  sctx.fillStyle = hg;
+  sctx.beginPath(); sctx.ellipse(0, 0, 12.5 * hs, 15.5 * hs, 0, 0, Math.PI * 2); sctx.fill();
+  sctx.restore();
+  sctx.restore();
+  // 屏幕自己的微光
+  const sg = sctx.createLinearGradient(0, SH, 0, SH * 0.55);
+  sg.addColorStop(0, `rgba(${r * 0.4},${g * 0.5},${b * 0.7},.35)`); sg.addColorStop(1, 'rgba(0,0,0,0)');
+  sctx.fillStyle = sg; sctx.fillRect(0, 0, SW, SH);
+}
+
+/* ---------- 雾 ---------- */
+const fog = $('fog'), fctx = fog.getContext('2d');
+const FS = 3;
+let fogTex = null;
+function sizeFog() {
+  W = innerWidth; H = innerHeight;
+  fog.width = Math.ceil(W / FS); fog.height = Math.ceil(H / FS);
+  fogTex = document.createElement('canvas'); fogTex.width = fog.width; fogTex.height = fog.height;
+  const t = fogTex.getContext('2d'), img = t.createImageData(fogTex.width, fogTex.height), d = img.data;
+  for (let i = 0; i < d.length; i += 4) {
+    const v = 150 + Math.random() * 30;
+    d[i] = v - 8; d[i + 1] = v; d[i + 2] = v + 14; d[i + 3] = 62 + Math.random() * 26;
+  }
+  t.putImageData(img, 0, 0);
+  // 几颗凝住的小水珠
+  for (let i = 0; i < fogTex.width * fogTex.height / 160; i++) {
+    const x = Math.random() * fogTex.width, y = Math.random() * fogTex.height, r = Math.random() * 1.6 + 0.4;
+    t.fillStyle = `rgba(235,240,248,${0.15 + Math.random() * 0.25})`;
+    t.beginPath(); t.arc(x, y, r, 0, Math.PI * 2); t.fill();
+  }
+  fctx.globalCompositeOperation = 'source-over';
+  fctx.clearRect(0, 0, fog.width, fog.height);
+  fctx.drawImage(fogTex, 0, 0);
+}
+function wipe(x, y, rad, k) {
+  const gx = x / FS, gy = y / FS, gr = rad / FS;
+  const g = fctx.createRadialGradient(gx, gy, 0, gx, gy, gr);
+  g.addColorStop(0, `rgba(0,0,0,${k})`); g.addColorStop(0.6, `rgba(0,0,0,${k * 0.6})`); g.addColorStop(1, 'rgba(0,0,0,0)');
+  fctx.globalCompositeOperation = 'destination-out';
+  fctx.fillStyle = g; fctx.beginPath(); fctx.arc(gx, gy, gr, 0, Math.PI * 2); fctx.fill();
+  fctx.globalCompositeOperation = 'source-over';
+}
+function refog() {   // 擦掉的地方，会慢慢重新起雾
+  fctx.globalCompositeOperation = 'source-over';
+  fctx.globalAlpha = 0.012;
+  fctx.drawImage(fogTex, 0, 0);
+  fctx.globalAlpha = 1;
+}
+sizeFog();
+
+/* ---------- 手指：拖是擦雾，点是打开 ---------- */
+let down = null;
+addEventListener('pointerdown', (e) => {
+  if (opened || !works.length || e.target.closest('#panel,#doneBtn,#lock,#viewer')) return;
+  down = { x: e.clientX, y: e.clientY, moved: 0, target: e.target.closest('.drop') };
+});
+addEventListener('pointermove', (e) => {
+  pointer.tx = e.clientX / W; pointer.ty = e.clientY / H;
+  if (!down || opened) return;
+  down.moved += Math.hypot(e.clientX - down.x, e.clientY - down.y);
+  wipe(e.clientX, e.clientY, 34, 0.55);
+  down.x = e.clientX; down.y = e.clientY;
+});
+addEventListener('pointerup', (e) => {
+  if (!down) return;
+  const d = down; down = null;
+  if (d.target && d.moved < 14) openWork(d.target.dataset.c);
+});
+addEventListener('pointercancel', () => { down = null; });
+
+/* ---------- 打开 / 关上 ---------- */
+const viewer = $('viewer'), frame = $('frame');
+function openWork(c) {
+  const w = works.find((x) => x.c === c), b = drops[c];
+  if (!w || opened) return;
+  opened = c;
+  const r = b.getBoundingClientRect(), x = r.left + r.width / 2, y = r.top + r.height / 2;
+  b.classList.add('pulse');
+  let k = 0;
+  const grow = setInterval(() => { k++; wipe(x, y, 30 + k * 16, 0.5); if (k > 14) clearInterval(grow); }, 28);
+  viewer.style.setProperty('--x', x + 'px'); viewer.style.setProperty('--y', y + 'px');
+  frame.srcdoc = w.h;
+  syncButtons();
+  setTimeout(() => {
+    viewer.style.visibility = 'visible';
+    requestAnimationFrame(() => viewer.classList.add('open'));
+    b.classList.remove('pulse');
+    state.seen[c] = 1; save(); paintDrop(c);
+  }, 380);
+  setTimeout(() => { running = false; }, 1400);
+}
+function closeWork() {
+  if (!opened) return;
+  const b = drops[opened];
+  const r = b.getBoundingClientRect();
+  viewer.style.setProperty('--x', (r.left + r.width / 2) + 'px'); viewer.style.setProperty('--y', (r.top + r.height / 2) + 'px');
+  running = true; requestAnimationFrame(loop);
+  viewer.classList.remove('open');
+  const c = opened;
+  setTimeout(() => { viewer.style.visibility = 'hidden'; frame.removeAttribute('srcdoc'); frame.src = 'about:blank'; opened = null; paintDrop(c); updateDone(); }, 980);
+}
+$('back').addEventListener('click', closeWork);
+addEventListener('keydown', (e) => { if (e.key === 'Escape') { if (opened) closeWork(); else hidePanel(); } });
+function syncButtons() {
+  $('mineBtn').classList.toggle('act', !!state.mine[opened]);
+  $('mineBtn').textContent = state.mine[opened] ? '✋ 按了手印' : '✋ 可能是我';
+  $('knownBtn').classList.toggle('act', !!state.known[opened]);
+}
+$('mineBtn').addEventListener('click', () => { if (!opened) return; state.mine[opened] ? delete state.mine[opened] : (state.mine[opened] = 1); save(); syncButtons(); });
+$('knownBtn').addEventListener('click', () => { if (!opened) return; state.known[opened] ? delete state.known[opened] : (state.known[opened] = 1); save(); syncButtons(); });
+function save() { store.set('gaf-mirror-v1', state); }
+
+/* ---------- 选好了 ---------- */
+const doneBtn = $('doneBtn'), panel = $('panel');
+function updateDone() { const on = Object.keys(state.seen).length > 0; doneBtn.classList.toggle('on', on); doneBtn.style.opacity = on ? 1 : 0; }
+let rank = [];
+function chip(c, onTap) {
+  const w = works.find((x) => x.c === c);
+  const el = document.createElement('button'); el.type = 'button'; el.className = 'chip';
+  const d = document.createElement('span'); d.className = 'drop seen';
+  d.style.cssText = `--h:${w.hue};--r:${w.rad};position:absolute;left:50%;top:50%`;
+  el.appendChild(d);
+  const rk = document.createElement('span'); rk.className = 'rk'; el.appendChild(rk);
+  el.addEventListener('click', () => onTap(el, rk));
+  return el;
+}
+function showPanel() {
+  $('step1').classList.remove('hidden'); $('step2').classList.add('hidden');
+  rank = [];
+  const chips = $('chips'); chips.innerHTML = '';
+  const mine = Object.keys(state.mine).filter((c) => drops[c]);
+  if (!mine.length) chips.innerHTML = '<p class="sub" style="margin:0">还没有按过手印。<br>觉得哪个像你，打开它，点"可能是我"。</p>';
+  mine.forEach((c) => chips.appendChild(chip(c, (el, rk) => {
+    if (rank.includes(c) || rank.length >= 3) return;
+    rank.push(c); rk.textContent = ['最像', '其次', '再次'][rank.length - 1];
+  })));
+  const known = Object.keys(state.known).filter((c) => drops[c]);
+  $('knownWrap').classList.toggle('hidden', !known.length);
+  const kc = $('knownChips'); kc.innerHTML = '';
+  known.forEach((c) => kc.appendChild(chip(c, () => {})));
+  panel.classList.remove('hidden');
+}
+function hidePanel() { panel.classList.add('hidden'); }
+doneBtn.addEventListener('click', showPanel);
+$('closeP').addEventListener('click', hidePanel);
+$('back2').addEventListener('click', hidePanel);
+$('reset').addEventListener('click', showPanel);
+$('gen').addEventListener('click', () => {
+  const mine = Object.keys(state.mine), known = Object.keys(state.known);
+  const lines = ['GetAFeel · 镜子',
+    '最像我：' + (rank[0] || '—'), '其次：' + (rank[1] || '—'), '再次：' + (rank[2] || '—'),
+    '按过手印的：' + (mine.join(' ') || '—'),
+    '像我认识的人：' + (known.join(' ') || '—'),
+    '看过：' + Object.keys(state.seen).length + ' / ' + works.length];
+  $('out').value = lines.join('\n');
+  $('step1').classList.add('hidden'); $('step2').classList.remove('hidden');
+});
+$('copy').addEventListener('click', async () => {
+  const t = $('out');
+  try { await navigator.clipboard.writeText(t.value); $('copy').textContent = '已复制'; }
+  catch (e) { t.focus(); t.select(); document.execCommand('copy'); $('copy').textContent = '已复制'; }
+});
+
+/* ---------- 尺寸 ---------- */
+let rt = 0;
+addEventListener('resize', () => { clearTimeout(rt); rt = setTimeout(() => { sizeFog(); if (works.length) { buildField(); } }, 200); });
+
+/* ---------- 循环 ---------- */
+const t0 = performance.now();
+function loop(now) {
+  if (!running) return;
+  const t = Math.max(0, (now - t0) / 1000);
+  drawSil(t);
+  refog();
+  requestAnimationFrame(loop);
+}
+requestAnimationFrame(loop);
+setTimeout(() => pw.focus(), 300);
+})();
+</script>
+</body>
+</html>
