@@ -1,0 +1,54 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name="theme-color" content="#121a3d">
+<meta name="robots" content="noindex,nofollow">
+<title>Get A Feel 问卷 · 一问一答</title>
+<link rel="stylesheet" href="common.css">
+<style>
+.top{display:flex;align-items:center;gap:12px;margin-bottom:6px}
+.top .progress{flex:1}
+.top span{font-size:13px;color:var(--dim);font-variant-numeric:tabular-nums;white-space:nowrap}
+.q{animation:in .35s ease both}
+@keyframes in{from{opacity:0;transform:translateX(18px)}to{opacity:1;transform:none}}
+.q h2{font-size:24px;margin:6px 0 10px}
+.nav{display:flex;justify-content:space-between;gap:10px;margin-top:6px}
+</style>
+</head>
+<body>
+<div class="wrap stack" id="app"></div>
+<script src="common.js"></script>
+<script src="ui.js"></script>
+<script>
+(() => {
+const { QUESTIONS, session } = GAF, { el, questionInputs, introCard, doSubmit } = GAFUI;
+const sess = session('one_by_one'), app = document.getElementById('app');
+let i = Math.min(sess.s.cursor || 0, QUESTIONS.length - 1), t0 = 0;
+function leave() { if (t0) { sess.tick(QUESTIONS[i].n, performance.now() - t0); t0 = 0; } sess.s.cursor = i; sess.save(); }
+function show() {
+  app.innerHTML = ''; t0 = performance.now();
+  const q = QUESTIONS[i];
+  const top = el('div', 'top'); const pg = el('div', 'progress', `<i style="width:${(i / QUESTIONS.length) * 100}%"></i>`);
+  top.appendChild(pg); top.appendChild(el('span', null, `第 ${q.n} / 10 题`)); app.appendChild(top);
+  const card = el('section', 'card stack q');
+  card.appendChild(el('div', null, `<div class="qn">${q.g} 组</div><h2>${q.q}</h2>`));
+  const back = el('button', 'btn', '上一题'), next = el('button', 'btn pri', i === QUESTIONS.length - 1 ? '提交' : '下一题');
+  back.type = next.type = 'button'; back.disabled = i === 0;
+  const refresh = () => (next.disabled = !sess.isDone(q.n));
+  const box = questionInputs(q, sess, refresh); card.appendChild(box);
+  const nav = el('div', 'nav'); nav.appendChild(back); nav.appendChild(next); card.appendChild(nav);
+  card.appendChild(el('p', 'err'));
+  app.appendChild(card); refresh();
+  setTimeout(() => box.focusField && box.focusField(), 380);
+  back.onclick = () => { leave(); i--; show(); };
+  next.onclick = () => { leave(); if (i < QUESTIONS.length - 1) { i++; show(); } else doSubmit(sess, card); };
+  card.addEventListener('keydown', (e) => { if (e.key === 'Enter' && e.target.tagName === 'INPUT' && !next.disabled) next.click(); });
+}
+if (sess.s.consent && Object.keys(sess.s.answers).length) show();
+else app.appendChild(introCard(sess, '一次只问一题，答完点"下一题"，', show));
+})();
+</script>
+</body>
+</html>

@@ -1,0 +1,52 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name="theme-color" content="#121a3d">
+<meta name="robots" content="noindex,nofollow">
+<title>Get A Feel 问卷 · 一次性</title>
+<link rel="stylesheet" href="common.css">
+<style>
+.group{font-family:var(--hand);font-size:15px;color:var(--faint);letter-spacing:.2em;margin:16px 0 0}
+.bar{position:sticky;bottom:0;margin:20px -18px 0;padding:22px 18px calc(env(safe-area-inset-bottom) + 14px);background:linear-gradient(rgba(18,26,61,0),rgba(18,26,61,.88) 45%)}
+</style>
+</head>
+<body>
+<div class="wrap stack" id="app"></div>
+<script src="common.js"></script>
+<script src="ui.js"></script>
+<script>
+(() => {
+const { QUESTIONS, session } = GAF, { el, questionInputs, introCard, doSubmit } = GAFUI;
+const sess = session('all_at_once'), app = document.getElementById('app');
+const GROUPS = { A: 'A 组 · 先天', B: 'B 组 · 你愿意展示的', C: 'C 组 · 你平时不展示的' };
+function form() {
+  app.innerHTML = '';
+  const main = el('div', 'stack');
+  main.appendChild(el('div', null, '<p class="eyebrow">一次性 · 一页填完</p><h1>10 个问题</h1>'));
+  let g = '';
+  const count = el('span', 'note'), send = el('button', 'btn pri', '提交');
+  send.type = 'button';
+  const refresh = () => { const n = QUESTIONS.filter((q) => sess.isDone(q.n)).length; count.textContent = `已完成 ${n} / 10`; send.disabled = n < 10; };
+  QUESTIONS.forEach((q) => {
+    if (q.g !== g) { g = q.g; main.appendChild(el('p', 'group', GROUPS[g])); }
+    const c = el('section', 'card stack');
+    c.appendChild(el('div', null, `<div class="qn">第 ${q.n} 题</div><h2>${q.q}</h2>`));
+    let t0 = 0;
+    const box = questionInputs(q, sess, refresh);
+    box.addEventListener('focusin', () => (t0 = performance.now()));
+    box.addEventListener('focusout', () => { if (t0) { sess.tick(q.n, performance.now() - t0); t0 = 0; sess.save(); } });
+    c.appendChild(box); main.appendChild(c);
+  });
+  const bar = el('div', 'bar stack'); const r = el('div', 'row'); r.appendChild(send); r.appendChild(count);
+  bar.appendChild(r); bar.appendChild(el('p', 'err')); main.appendChild(bar);
+  send.onclick = () => doSubmit(sess, main);
+  app.appendChild(main); refresh();
+}
+if (sess.s.consent && Object.keys(sess.s.answers).length) form();
+else app.appendChild(introCard(sess, '10 个问题都在这一页上，从上往下填就好，', form));
+})();
+</script>
+</body>
+</html>

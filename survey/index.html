@@ -1,0 +1,35 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name="theme-color" content="#121a3d">
+<meta name="robots" content="noindex,nofollow">
+<title>Get A Feel 问卷</title>
+<link rel="stylesheet" href="common.css">
+<style>
+.modes{display:grid;gap:14px}
+.mode{display:block;text-decoration:none;color:inherit}
+.mode .card{transition:border-color .2s,transform .2s}
+.mode:hover .card,.mode:focus-visible .card{border-color:var(--warm);transform:translateY(-2px)}
+.mode h2{margin:4px 0 4px}
+.mode p{margin:0;color:var(--dim);font-size:14px}
+.tag{display:inline-block;font-size:12px;color:var(--warm);border:1px solid rgba(246,215,139,.4);border-radius:999px;padding:1px 9px;letter-spacing:.06em}
+</style>
+</head>
+<body>
+<div class="wrap stack">
+  <div>
+    <p class="eyebrow">GET A FEEL · 问卷 DEMO</p>
+    <h1>同样 10 个问题，三种问法</h1>
+    <p class="lead">挑一种试试。三种问法收的是同一套数据，都会存进同一个数据库，之后直接接到作品生成上。</p>
+  </div>
+  <div class="modes">
+    <a class="mode" href="once.html"><div class="card"><span class="tag">一次性</span><h2>一页填完</h2><p>10 个问题按 A、B、C 三组排在一页上，像普通问卷一样从上往下填，最后统一提交。最快，适合想一口气答完的人。</p></div></a>
+    <a class="mode" href="step.html"><div class="card"><span class="tag">一问一答</span><h2>一次只看一题</h2><p>每屏只有一个问题，答完点下一题，顶部有进度。注意力更集中，回答通常更长。</p></div></a>
+    <a class="mode" href="chat.html"><div class="card"><span class="tag">一答一反馈</span><h2>像聊天一样</h2><p>问题一条条发过来，你每回答一句，都会先收到一句回应，再问下一题。还原实验里"一问一答、先回应几句"的体验。目前回应是预先写好的，之后可以换成 AI 实时回应。</p></div></a>
+  </div>
+  <p class="note">这是测试版。提交后数据会进入组织者的数据库，请不要用别人的信息来填写。</p>
+</div>
+</body>
+</html>
