@@ -1,0 +1,469 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
+<meta name="theme-color" content="#e9e5dc">
+<title>拓</title>
+<style>
+  html, body {
+    margin: 0; padding: 0; height: 100%;
+    background: #e9e5dc;
+    overflow: hidden;
+    -webkit-user-select: none; user-select: none;
+    -webkit-touch-callout: none;
+    -webkit-tap-highlight-color: transparent;
+  }
+  body { position: fixed; inset: 0; }
+  canvas { position: absolute; inset: 0; width: 100%; height: 100%; touch-action: none; cursor: crosshair; }
+  .hint, .tool {
+    position: absolute; left: 0; right: 0; text-align: center;
+    font-family: "Songti SC", "STSong", "Noto Serif CJK SC", "Source Han Serif SC", serif;
+    color: rgba(40, 36, 32, .42);
+    font-size: 13px; letter-spacing: .35em;
+    pointer-events: none;
+    transition: opacity 1.6s ease;
+  }
+  .hint { bottom: calc(26px + env(safe-area-inset-bottom)); }
+  .hint.gone { opacity: 0; }
+  .tool { bottom: calc(22px + env(safe-area-inset-bottom)); opacity: 0; display: flex; justify-content: center; gap: 2.6em; }
+  .tool.on { opacity: 1; pointer-events: auto; }
+  .tool button {
+    font: inherit; color: rgba(40, 36, 32, .62); letter-spacing: .35em;
+    background: none; border: 0; padding: 10px 4px; cursor: pointer;
+  }
+  .sheet {
+    position: absolute; left: 0; right: 0; bottom: 0;
+    max-height: 82%;
+    overflow-y: auto;
+    background: #efebe2;
+    box-shadow: 0 -10px 40px rgba(20, 16, 12, .18);
+    transform: translateY(105%);
+    transition: transform .7s cubic-bezier(.2, .8, .2, 1);
+    padding: 34px 30px calc(30px + env(safe-area-inset-bottom));
+    box-sizing: border-box;
+    font-family: "Songti SC", "STSong", "Noto Serif CJK SC", "Source Han Serif SC", serif;
+    color: #2a2622;
+  }
+  .sheet.on { transform: translateY(0); }
+  .sheet .inner { max-width: 420px; margin: 0 auto; }
+  .sheet h2 {
+    font-weight: normal; font-size: 13px; letter-spacing: .5em;
+    color: rgba(42, 38, 34, .5); margin: 0 0 22px;
+  }
+  .sheet p { font-size: 17px; line-height: 2.05; margin: 0 0 14px; letter-spacing: .06em; }
+  .sheet .box {
+    display: inline-block; width: 1em; height: 1em; vertical-align: -0.12em;
+    border: 1px solid rgba(42, 38, 34, .55); box-sizing: border-box; margin-left: .15em;
+  }
+  .sheet .note {
+    margin-top: 26px; padding-top: 16px;
+    border-top: 1px solid rgba(42, 38, 34, .14);
+    font-size: 13.5px; line-height: 2; color: rgba(42, 38, 34, .62); letter-spacing: .08em;
+  }
+  .sheet .close {
+    display: block; margin: 26px auto 0; font: inherit; font-size: 13px;
+    letter-spacing: .4em; color: rgba(42, 38, 34, .5);
+    background: none; border: 0; padding: 10px; cursor: pointer;
+  }
+</style>
+</head>
+<body>
+<canvas id="c"></canvas>
+<div class="hint" id="hint">用手指　轻轻拍</div>
+<div class="tool" id="tool"><button id="openSheet">释文</button><button id="reset">换一张纸</button></div>
+
+<div class="sheet" id="sheet">
+  <div class="inner">
+    <h2>释文</h2>
+    <p>有人在石头上刻字。刻完走了。石头后来裂了。字倒还在。</p>
+    <p>我也想刻点什么。家伙都摆在手边。还没认真动过。铃声关着。不是在躲。是在想。</p>
+    <p>把自己整个摊给机器看了一遍。它也没告诉我该刻什么。</p>
+    <p>没关系。石头还大。不必刻满。末一格先空着。</p>
+    <p>饿了。先去吃饭。<span class="box"></span></p>
+    <div class="note">按：末格石面平整，无凿痕。<br>不是残了。是还没刻。</div>
+    <button class="close" id="closeSheet">收起</button>
+  </div>
+</div>
+
+<script>
+(() => {
+  const TEXT = '有人在石头上刻字刻完走了石头后来裂了字倒还在我也想刻点什么家伙都摆在手边还没认真动过铃声关着不是在躲是在想把自己整个摊给机器看了一遍它也没告诉我该刻什么没关系石头还大不必刻满末一格先空着饿了先去吃饭';
+  const COLS = 10, ROWS = 10;
+  const FONT = '"Songti SC","STSong","STSongti-SC-Bold","Noto Serif CJK SC","Source Han Serif SC","Songti TC",serif';
+
+  const cv = document.getElementById('c');
+  const ctx = cv.getContext('2d');
+  const hint = document.getElementById('hint');
+  const tool = document.getElementById('tool');
+  const sheet = document.getElementById('sheet');
+  if (window.matchMedia && matchMedia('(hover: hover) and (pointer: fine)').matches) hint.textContent = '按住鼠标　来回拍';
+
+  let W, H, DPR, S;          // css size, pixel ratio, device-pixel size helper
+  let paper, recess, carve, grain, accum, work, small;
+  let stone;                 // {x,y,w,h} in device px
+  let cell;                  // {x0,y0,w,h}
+  let dirty = true;
+  let touched = false, revealed = false;
+
+  // seeded random so the stone is the same stone every time
+  function rng(seed) {
+    return function () {
+      seed |= 0; seed = seed + 0x6D2B79F5 | 0;
+      let t = Math.imul(seed ^ seed >>> 15, 1 | seed);
+      t = t + Math.imul(t ^ t >>> 7, 61 | t) ^ t;
+      return ((t ^ t >>> 14) >>> 0) / 4294967296;
+    };
+  }
+
+  function mk(w, h) {
+    const c = document.createElement('canvas');
+    c.width = w; c.height = h;
+    return c;
+  }
+
+  function build() {
+    DPR = Math.min(window.devicePixelRatio || 1, 2);
+    W = window.innerWidth; H = window.innerHeight;
+    const PW = Math.round(W * DPR), PH = Math.round(H * DPR);
+    cv.width = PW; cv.height = PH;
+    S = DPR;
+
+    // ---- layout ----
+    let cw = Math.min((W - 64) / COLS, 46);
+    let ch = cw * 1.2;
+    const maxGridH = H * 0.66;
+    if (ch * ROWS > maxGridH) { ch = maxGridH / ROWS; cw = ch / 1.2; }
+    const gw = cw * COLS, gh = ch * ROWS;
+    const padX = cw * 0.8, padTop = ch * 1.5, padBot = ch * 0.9;
+    const sw = gw + padX * 2, sh = gh + padTop + padBot;
+    const sx = (W - sw) / 2;
+    const sy = Math.max(18, (H - sh) / 2 - H * 0.025);
+    stone = { x: sx * S, y: sy * S, w: sw * S, h: sh * S };
+    cell = { x0: (sx + padX) * S, y0: (sy + padTop) * S, w: cw * S, h: ch * S };
+
+    const R = rng(1717);
+
+    // ---- recess: everything carved into the stone (white = lower than surface) ----
+    recess = mk(PW, PH);
+    const r = recess.getContext('2d');
+    r.fillStyle = '#fff'; r.strokeStyle = '#fff';
+
+    // column rules (界栏)
+    for (let i = 0; i <= COLS; i++) {
+      const x = cell.x0 + i * cell.w;
+      let y = cell.y0 - cell.h * 0.12;
+      const yEnd = cell.y0 + cell.h * ROWS + cell.h * 0.12;
+      r.lineWidth = Math.max(1, 0.9 * S);
+      while (y < yEnd) {
+        const seg = (6 + R() * 40) * S;
+        r.beginPath();
+        r.moveTo(x + (R() - .5) * .8 * S, y);
+        r.lineTo(x + (R() - .5) * .8 * S, Math.min(yEnd, y + seg));
+        r.stroke();
+        y += seg + (R() < .25 ? R() * 5 * S : 0);
+      }
+    }
+
+    // characters: right-to-left columns, top-to-bottom; last cell stays uncarved
+    const fs = Math.min(cell.w * 0.8, cell.h * 0.72);
+    r.font = `900 ${fs}px ${FONT}`;
+    r.textAlign = 'center'; r.textBaseline = 'middle';
+    for (let i = 0; i < TEXT.length; i++) {
+      const col = Math.floor(i / ROWS), row = i % ROWS;
+      const cx = cell.x0 + (COLS - 1 - col + .5) * cell.w;
+      const cy = cell.y0 + (row + .5) * cell.h;
+      r.save();
+      r.translate(cx + (R() - .5) * .06 * cell.w, cy + (R() - .5) * .05 * cell.h);
+      r.rotate((R() - .5) * .03);
+      r.fillText(TEXT[i], 0, 0);
+      // thicken a little, like a chisel cut
+      r.lineWidth = fs * 0.018; r.strokeText(TEXT[i], 0, 0);
+      r.restore();
+    }
+
+    // weathering: eat into strokes
+    r.globalCompositeOperation = 'destination-out';
+    const nWear = Math.round(sw * sh * 0.09);
+    for (let i = 0; i < nWear; i++) {
+      const x = stone.x + R() * stone.w, y = stone.y + R() * stone.h;
+      r.globalAlpha = .35 + R() * .65;
+      r.beginPath(); r.arc(x, y, (.25 + R() * R() * 1.4) * S, 0, 6.283); r.fill();
+    }
+    r.globalAlpha = 1;
+    r.globalCompositeOperation = 'source-over';
+
+    // pits in the stone surface
+    const nPit = Math.round(sw * sh * 0.006);
+    for (let i = 0; i < nPit; i++) {
+      const x = stone.x + R() * stone.w, y = stone.y + R() * stone.h;
+      r.globalAlpha = .3 + R() * .7;
+      r.beginPath(); r.arc(x, y, (.3 + R() * R() * 1.6) * S, 0, 6.283); r.fill();
+    }
+    r.globalAlpha = 1;
+
+    // the crack: from the upper right edge, down across to the left — never reaching the last cell
+    function crack(x0, y0, x1, y1, w0, steps) {
+      let px = x0, py = y0;
+      const pts = [[px, py]];
+      for (let i = 1; i <= steps; i++) {
+        const t = i / steps;
+        const nx = x0 + (x1 - x0) * t + (R() - .5) * cell.w * .35;
+        const ny = y0 + (y1 - y0) * t + (R() - .5) * cell.h * .3;
+        pts.push([nx, ny]);
+      }
+      for (let i = 1; i < pts.length; i++) {
+        const t = i / pts.length;
+        r.lineWidth = Math.max(.8 * S, w0 * (1 - t * .55) * (.6 + R() * .8));
+        r.lineCap = 'round';
+        r.beginPath(); r.moveTo(pts[i - 1][0], pts[i - 1][1]); r.lineTo(pts[i][0], pts[i][1]); r.stroke();
+        // chipped edges along the crack
+        if (R() < .45) {
+          r.beginPath();
+          r.ellipse(pts[i][0] + (R() - .5) * 4 * S, pts[i][1] + (R() - .5) * 4 * S,
+            (1 + R() * 3.5) * S, (1 + R() * 2) * S, R() * 3, 0, 6.283);
+          r.fill();
+        }
+      }
+      return pts;
+    }
+    const cx0 = stone.x + stone.w + 4 * S, cy0 = cell.y0 + cell.h * 2.4;
+    const cx1 = stone.x - 4 * S, cy1 = cell.y0 + cell.h * 6.6;
+    const main = crack(cx0, cy0, cx1, cy1, 3.6 * S, 26);
+    const mid = main[11];
+    crack(mid[0], mid[1], mid[0] - cell.w * 2.2, mid[1] - cell.h * 2.6, 1.8 * S, 9);
+    const mid2 = main[18];
+    crack(mid2[0], mid2[1], mid2[0] - cell.w * .6, mid2[1] + cell.h * 1.6, 1.3 * S, 6);
+
+    // a broken corner, upper left
+    r.beginPath();
+    r.moveTo(stone.x - 2 * S, stone.y - 2 * S);
+    r.lineTo(stone.x + stone.w * .2, stone.y - 2 * S);
+    r.lineTo(stone.x + stone.w * .15, stone.y + stone.h * .025);
+    r.lineTo(stone.x + stone.w * .07, stone.y + stone.h * .045);
+    r.lineTo(stone.x + stone.w * .03, stone.y + stone.h * .085);
+    r.lineTo(stone.x - 2 * S, stone.y + stone.h * .11);
+    r.closePath(); r.fill();
+
+    // ---- carve = recess + everything outside the stone ----
+    carve = mk(PW, PH);
+    const k = carve.getContext('2d');
+    k.drawImage(recess, 0, 0);
+    k.fillStyle = '#fff';
+    k.beginPath();
+    k.rect(0, 0, PW, PH);
+    // irregular stone outline
+    const edge = [];
+    const E = 60;
+    const jit = () => (R() - .5) * 2.4 * S + (R() < .08 ? -R() * 6 * S : 0);
+    for (let i = 0; i < E; i++) edge.push([stone.x + stone.w * i / E, stone.y + jit()]);
+    for (let i = 0; i < E; i++) edge.push([stone.x + stone.w + jit(), stone.y + stone.h * i / E]);
+    for (let i = 0; i < E; i++) edge.push([stone.x + stone.w * (1 - i / E), stone.y + stone.h + jit()]);
+    for (let i = 0; i < E; i++) edge.push([stone.x + jit(), stone.y + stone.h * (1 - i / E)]);
+    k.moveTo(edge[0][0], edge[0][1]);
+    for (const p of edge) k.lineTo(p[0], p[1]);
+    k.closePath();
+    k.fill('evenodd');
+
+    // ---- grain: where the ink does not quite catch ----
+    grain = mk(PW, PH);
+    const g = grain.getContext('2d');
+    g.imageSmoothingEnabled = true;
+    function blotch(div, alpha) {
+      const bw = Math.max(2, Math.round(PW / div)), bh = Math.max(2, Math.round(PH / div));
+      const b = mk(bw, bh), bc = b.getContext('2d');
+      const id = bc.createImageData(bw, bh);
+      for (let i = 0; i < bw * bh; i++) {
+        const v = R();
+        id.data[i * 4] = id.data[i * 4 + 1] = id.data[i * 4 + 2] = 255;
+        id.data[i * 4 + 3] = Math.pow(v, 2.2) * 255;
+      }
+      bc.putImageData(id, 0, 0);
+      g.globalAlpha = alpha;
+      g.drawImage(b, 0, 0, PW, PH);
+    }
+    blotch(70 * S, .45);
+    blotch(22 * S, .38);
+    blotch(6 * S, .3);
+    g.globalAlpha = 1;
+    // fine tooth of the paper
+    const fid = g.getImageData(0, 0, PW, PH);
+    const fd = fid.data;
+    for (let i = 0; i < fd.length; i += 4) {
+      const n = R();
+      fd[i] = fd[i + 1] = fd[i + 2] = 255;
+      fd[i + 3] = Math.min(255, fd[i + 3] + (n > .985 ? 70 * n : n * 22));
+    }
+    g.putImageData(fid, 0, 0);
+    // horizontal fold lines of the paper (it was folded once, maybe twice)
+    g.fillStyle = 'rgba(255,255,255,.55)';
+    for (const fy of [stone.y + stone.h * .37, stone.y + stone.h * .71]) {
+      g.fillRect(0, fy, PW, Math.max(1, 1.1 * S));
+      g.fillStyle = 'rgba(255,255,255,.25)';
+      g.fillRect(0, fy + 1.2 * S, PW, Math.max(1, .8 * S));
+      g.fillStyle = 'rgba(255,255,255,.55)';
+    }
+
+    // ---- paper ----
+    paper = mk(PW, PH);
+    const p = paper.getContext('2d');
+    p.fillStyle = '#ebe7de'; p.fillRect(0, 0, PW, PH);
+    // fibers
+    for (let i = 0; i < W * H * 0.004; i++) {
+      const x = R() * PW, y = R() * PH, len = (6 + R() * 30) * S, a = R() * 6.283;
+      p.strokeStyle = R() < .5 ? 'rgba(120,108,90,.07)' : 'rgba(255,255,250,.4)';
+      p.lineWidth = (.3 + R() * .6) * S;
+      p.beginPath(); p.moveTo(x, y);
+      p.quadraticCurveTo(x + Math.cos(a) * len * .5 + (R() - .5) * 6 * S, y + Math.sin(a) * len * .5 + (R() - .5) * 6 * S,
+        x + Math.cos(a) * len, y + Math.sin(a) * len);
+      p.stroke();
+    }
+    // the paper pressed onto the stone: faint relief of what's underneath
+    const tint = (src, color) => {
+      const t = mk(PW, PH), tc = t.getContext('2d');
+      tc.drawImage(src, 0, 0);
+      tc.globalCompositeOperation = 'source-in';
+      tc.fillStyle = color; tc.fillRect(0, 0, PW, PH);
+      return t;
+    };
+    const dark = tint(recess, '#5a5246'), light = tint(recess, '#ffffff');
+    p.globalAlpha = .028; p.drawImage(dark, .8 * S, 1 * S);
+    p.globalAlpha = .18; p.drawImage(light, -.6 * S, -.7 * S);
+    // stone edge pressed through
+    p.globalAlpha = .06;
+    p.strokeStyle = '#4a4238'; p.lineWidth = 1.5 * S;
+    p.beginPath(); p.moveTo(edge[0][0], edge[0][1]);
+    for (const q of edge) p.lineTo(q[0], q[1]);
+    p.closePath(); p.stroke();
+    p.globalAlpha = 1;
+    // soft light falloff
+    const vg = p.createRadialGradient(PW / 2, PH * .45, Math.min(PW, PH) * .2, PW / 2, PH * .45, Math.max(PW, PH) * .75);
+    vg.addColorStop(0, 'rgba(255,255,255,0)');
+    vg.addColorStop(1, 'rgba(90,80,64,.12)');
+    p.fillStyle = vg; p.fillRect(0, 0, PW, PH);
+
+    // ---- ink ----
+    accum = mk(PW, PH);
+    work = mk(PW, PH);
+    small = mk(48, 48);
+
+    dirty = true;
+  }
+
+  // ---- dabbing ----
+  const inkR = rng(99 * 7);
+  function dab(x, y, rad, strength) {
+    const a = accum.getContext('2d');
+    for (let n = 0; n < 3; n++) {
+      const ox = x + (inkR() - .5) * rad * .5, oy = y + (inkR() - .5) * rad * .5;
+      const rr = rad * (.55 + inkR() * .5);
+      const gr = a.createRadialGradient(ox, oy, 0, ox, oy, rr);
+      const al = strength * (.6 + inkR() * .6);
+      gr.addColorStop(0, `rgba(20,18,17,${al})`);
+      gr.addColorStop(.55, `rgba(20,18,17,${al * .7})`);
+      gr.addColorStop(1, 'rgba(20,18,17,0)');
+      a.fillStyle = gr;
+      a.beginPath(); a.arc(ox, oy, rr, 0, 6.283); a.fill();
+    }
+    dirty = true;
+  }
+
+  let last = null, downAt = 0;
+  const pts = new Map();
+  function pos(e) {
+    const rc = cv.getBoundingClientRect();
+    return [(e.clientX - rc.left) * DPR, (e.clientY - rc.top) * DPR];
+  }
+  cv.addEventListener('pointerdown', e => {
+    if (sheet.classList.contains('on')) { closeSheet(); return; }
+    try { cv.setPointerCapture(e.pointerId); } catch (_) {}
+    const p = pos(e);
+    pts.set(e.pointerId, p);
+    dab(p[0], p[1], 30 * DPR, .32);
+    if (!touched) { touched = true; hint.classList.add('gone'); }
+    e.preventDefault();
+  });
+  cv.addEventListener('pointermove', e => {
+    if (!pts.has(e.pointerId)) return;
+    const p = pos(e), q = pts.get(e.pointerId);
+    const dx = p[0] - q[0], dy = p[1] - q[1];
+    const d = Math.hypot(dx, dy);
+    const step = 7 * DPR;
+    if (d < step) return;
+    const n = Math.floor(d / step);
+    for (let i = 1; i <= n; i++) {
+      dab(q[0] + dx * i / n, q[1] + dy * i / n, 24 * DPR, .085);
+    }
+    pts.set(e.pointerId, p);
+    e.preventDefault();
+  });
+  const up = e => { pts.delete(e.pointerId); };
+  cv.addEventListener('pointerup', up);
+  cv.addEventListener('pointercancel', up);
+  document.addEventListener('touchmove', e => e.preventDefault(), { passive: false });
+
+  // ---- how much of the stone has been rubbed ----
+  function coverage() {
+    const sc = small.getContext('2d');
+    sc.clearRect(0, 0, 48, 48);
+    sc.drawImage(accum, stone.x, stone.y, stone.w, stone.h, 0, 0, 48, 48);
+    const d = sc.getImageData(0, 0, 48, 48).data;
+    let c = 0;
+    for (let i = 3; i < d.length; i += 4) if (d[i] > 150) c++;
+    return c / (48 * 48);
+  }
+  setInterval(() => {
+    if (!touched || revealed) return;
+    if (coverage() > .5) {
+      revealed = true;
+      setTimeout(() => tool.classList.add('on'), 900);
+    }
+  }, 600);
+
+  function render() {
+    if (dirty) {
+      dirty = false;
+      const w = work.getContext('2d');
+      w.globalCompositeOperation = 'copy';
+      w.drawImage(accum, 0, 0);
+      w.globalCompositeOperation = 'destination-out';
+      w.drawImage(carve, 0, 0);
+      w.drawImage(grain, 0, 0);
+      w.globalCompositeOperation = 'source-over';
+      ctx.globalCompositeOperation = 'copy';
+      ctx.drawImage(paper, 0, 0);
+      ctx.globalCompositeOperation = 'source-over';
+      ctx.drawImage(work, 0, 0);
+    }
+    requestAnimationFrame(render);
+  }
+
+  function closeSheet() { sheet.classList.remove('on'); }
+  document.getElementById('openSheet').addEventListener('click', () => sheet.classList.add('on'));
+  document.getElementById('closeSheet').addEventListener('click', closeSheet);
+  document.getElementById('reset').addEventListener('click', () => {
+    accum.getContext('2d').clearRect(0, 0, accum.width, accum.height);
+    dirty = true; revealed = false; tool.classList.remove('on');
+  });
+
+  let lastW = 0, lastH = 0;
+  function maybeRebuild() {
+    const w = window.innerWidth, h = window.innerHeight;
+    if (Math.abs(w - lastW) > 2 || Math.abs(h - lastH) > 120) {
+      lastW = w; lastH = h;
+      const keep = accum;
+      build();
+      if (keep && keep.width === accum.width && keep.height === accum.height) {
+        accum.getContext('2d').drawImage(keep, 0, 0);
+      } else { revealed = false; tool.classList.remove('on'); }
+    }
+  }
+  window.addEventListener('resize', maybeRebuild);
+
+  const start = () => { maybeRebuild(); requestAnimationFrame(render); };
+  if (document.fonts && document.fonts.ready) document.fonts.ready.then(start); else start();
+
+})();
+</script>
+</body>
+</html>

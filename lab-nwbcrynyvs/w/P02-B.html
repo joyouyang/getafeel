@@ -1,0 +1,338 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no,viewport-fit=cover">
+<meta name="theme-color" content="#f5eedb">
+<title>没有，</title>
+<style>
+  html,body{margin:0;height:100%;background:#f5eedb;overflow:hidden;
+    -webkit-tap-highlight-color:transparent;-webkit-user-select:none;user-select:none;touch-action:manipulation}
+  #paint,#fig{position:fixed;inset:0;width:100%;height:100%;display:block}
+  #line{position:fixed;left:0;right:0;top:calc(env(safe-area-inset-top,0px) + 34px);
+    text-align:center;pointer-events:none;
+    font-family:"Songti SC","STSong","Noto Serif SC","Source Han Serif SC",serif;
+    font-size:19px;letter-spacing:.12em;color:#1d1a17;
+    text-shadow:0 0 6px #f5eedb,0 0 12px #f5eedb,0 0 2px #f5eedb;
+    transition:opacity .5s ease}
+  #line .tail{display:inline-block;color:#c4245e;margin-left:.35em;
+    transform:rotate(-8deg) scale(0);transform-origin:20% 80%;
+    transition:transform .35s cubic-bezier(.3,1.8,.5,1)}
+  #line .tail.on{transform:rotate(-8deg) scale(1)}
+  #hint{position:fixed;left:0;right:0;bottom:calc(env(safe-area-inset-bottom,0px) + 26px);
+    text-align:center;pointer-events:none;color:#9a8f7c;font-size:13px;letter-spacing:.1em;
+    font-family:"Songti SC","STSong",serif;opacity:0;transition:opacity 1.2s ease}
+</style>
+</head>
+<body>
+<canvas id="paint"></canvas>
+<canvas id="fig"></canvas>
+<div id="line">没有</div>
+<div id="hint">（点哪里都行）</div>
+<script>
+(function(){
+"use strict";
+var paint=document.getElementById('paint'),fig=document.getElementById('fig');
+var pc=paint.getContext('2d'),fc=fig.getContext('2d');
+var lineEl=document.getElementById('line'),hintEl=document.getElementById('hint');
+var W=0,H=0,DPR=1,U=1;
+
+function rng(seed){return function(){seed|=0;seed=seed+0x6D2B79F5|0;var t=Math.imul(seed^seed>>>15,1|seed);
+  t=t+Math.imul(t^t>>>7,61|t)^t;return((t^t>>>14)>>>0)/4294967296;};}
+var R=rng((Date.now()&0xffffff)^0x5eed);
+function rr(a,b){return a+(b-a)*R();}
+function pick(a){return a[Math.floor(R()*a.length)];}
+
+var STROKE=['#4a6bd1','#5b7fe0','#7d97e3','#3f5fc4','#e78ab2','#f0b2c9','#c4245e','#a98bd9','#c9a23c','#4b9cc6','#8fb4ea','#d96a9c'];
+var STROKE_W=[5,4,3,3,3,2,1.4,2,1.4,1.4,2,1.6];
+var TOPS=['#e5582a','#3f5fc4','#7d97e3','#c4245e','#4b9cc6','#c9a23c','#a98bd9','#e9e3d4','#7a6a9a','#d96a9c'];
+var PANTS=['#1f2a4a','#22201f','#c9a23c','#8a8a95','#3f5fc4','#7a2240','#e8e2d6','#6a5a7a'];
+var SKIN=['#e9c3a1','#d9a47e','#b97e58','#8d5a3b','#f0d2b6','#c48f69'];
+var HAIR=['#2b211c','#5a3b26','#c9a23c','#8a4a2a','#1a1716','#d8b46a'];
+
+var JOYS=[
+'剥壳的时候整片下来了','打开是双黄的','鞋里倒出好多沙子，倒了很久','电梯里没人，偷偷跳了一下',
+'打了一个特别完整的喷嚏','对着小孩吐舌头，小孩也吐回来','购物车里的东西自己降价了',
+'一首歌的高潮来得比想象中早','旧外套口袋里摸出钱','快递胶带一次撕到底','写错的字涂成了一朵花',
+'风把头发吹成了刚好的样子','一整天没人找你','话说到一半忘了，对面帮你接上了，还接对了',
+'写了很长一段，删掉，舒服了','下雨之前那个味道','一路都踩在砖的正中间','有只鸽子跟着你走了一段',
+'最后一口刚好是最好吃的那口','说再看一下就睡，真的睡了','给人指路，指对了','司机等了你一下',
+'那天镜子里的自己挺顺眼','以为很严重的事，结果没事','打哈欠，对面的人也打了','云长得像一个认识的人',
+'汤圆咬开没烫到','被子踢出一个洞，脚伸出去，刚好','一个字看久了突然不认识了','笑点很低地笑了很久',
+'在很远的地方吃到家里的味道','靠窗的位置还空着','半路下起太阳雨','换上那件最舒服的，凉凉滑滑的',
+'别人认真拍照，你在后面做鬼脸','什么都没计划，结果玩得最好','沙发缝里找到了正想找的东西',
+'一个人走了很远，没迷路','陌生人问你衣服哪儿买的','故事早忘光了，喜欢还在'
+];
+var bag=[];
+function nextJoy(){if(!bag.length){bag=JOYS.slice();for(var i=bag.length-1;i>0;i--){var j=Math.floor(R()*(i+1));var t=bag[i];bag[i]=bag[j];bag[j]=t;}}return bag.pop();}
+
+var STAGES=[[0,'没有'],[2,'没有，'],[5,'没有，就是'],[8,'没有，就是有一点'],[12,'没有，就是有一点，很多个'],[17,'都很小，长得都挺怪'],[24,'都给你']];
+var stage=0;
+
+var strokes=[],figs=[],says=[],taps=0,started=false;
+var POSES=['stand','walk','hip','wave','hop','lie','hand','lean','look','sitflip'];
+var lastPose='';
+
+function resize(){
+  DPR=Math.min(window.devicePixelRatio||1,2);
+  W=window.innerWidth;H=window.innerHeight;
+  U=Math.max(.8,Math.min(W,560)/390);
+  [paint,fig].forEach(function(c){c.width=Math.round(W*DPR);c.height=Math.round(H*DPR);});
+  pc.setTransform(DPR,0,0,DPR,0,0);fc.setTransform(DPR,0,0,DPR,0,0);
+  drawGround();
+  for(var i=0;i<strokes.length;i++){strokes[i].prog=0;strokes[i].built=null;}
+  for(i=0;i<strokes.length;i++){var s=strokes[i];if(s.done){paintStroke(s,0,1);s.prog=1;}}
+}
+
+// 画布底子：一点点织纹
+function drawGround(){
+  pc.fillStyle='#f5eedb';pc.fillRect(0,0,W,H);
+  var g=rng(77);
+  pc.globalAlpha=.05;pc.fillStyle='#8a7a5a';
+  for(var y=0;y<H;y+=3){for(var x=(y%6?0:1.5);x<W;x+=3){if(g()<.55)pc.fillRect(x,y,1,1);}}
+  pc.globalAlpha=1;
+}
+
+function buildStroke(s){
+  var g=rng(s.seed),L=s.len*U,T=s.th*U,x0=s.x*W,y0=s.y*H;
+  var n=Math.max(7,Math.round(T*1.0)),br=[];
+  for(var i=0;i<n;i++){
+    var off=(i/(n-1)-.5)*T+(g()-.5)*1.2;
+    var edge=Math.abs(off)/(T/2);
+    var t0=g()*.06+edge*edge*g()*.08,t1=1-g()*.05-edge*edge*g()*.1;
+    var pts=[],steps=Math.max(8,Math.round(L/4));
+    var jit=g()*1000;
+    for(var k=0;k<=steps;k++){
+      var t=k/steps;if(t<t0||t>t1)continue;
+      var taper=Math.min(1,Math.min(t,1-t)*7)*.35+.65;
+      var px=x0+t*L,py=y0+off*taper+s.bow*U*Math.sin(Math.PI*t)+s.tilt*L*(t-.5)+Math.sin(jit+t*9)*.5;
+      pts.push([px,py,t,g()]);
+    }
+    br.push({pts:pts,w:(1.3+g()*1.4)*Math.min(1.25,U),a:.28+g()*.5,light:g()<.3?g()*.45:0});
+  }
+  s.built=br;
+}
+function mix(hex,amt){var r=parseInt(hex.slice(1,3),16),g=parseInt(hex.slice(3,5),16),b=parseInt(hex.slice(5,7),16);
+  r=Math.round(r+(255-r)*amt);g=Math.round(g+(250-g)*amt);b=Math.round(b+(240-b)*amt);return'rgb('+r+','+g+','+b+')';}
+function paintStroke(s,from,to){
+  if(!s.built)buildStroke(s);
+  pc.lineCap='round';pc.lineJoin='round';
+  for(var i=0;i<s.built.length;i++){
+    var b=s.built[i],open=false;pc.strokeStyle=b.light?mix(s.color,b.light):s.color;pc.lineWidth=b.w;pc.globalAlpha=b.a;
+    pc.beginPath();
+    for(var k=1;k<b.pts.length;k++){
+      var p=b.pts[k-1],q=b.pts[k];
+      if(q[2]<=from||q[2]>to||q[3]<.07){open=false;continue;} // 干刷的空隙，露出布纹
+      if(!open){pc.moveTo(p[0],p[1]);open=true;}
+      pc.lineTo(q[0],q[1]);
+    }
+    pc.stroke();
+  }
+  pc.globalAlpha=1;
+}
+function makeCluster(tx,ty,now){
+  var n=2+Math.floor(R()*3),th=rr(9,13),gap=th*1.35*U,top=null;
+  var base=ty-(n-1)*gap*.5;
+  for(var i=0;i<n;i++){
+    var len=rr(.28,.62)*Math.min(W,560)/U;
+    var lenPx=len*U,startX=tx-lenPx*rr(.2,.8);
+    if(i===0){startX=tx-lenPx*rr(.3,.7);}
+    var y=base+i*gap+rr(-2,2);
+    var s={x:startX/W,y:y/H,len:len,th:rr(.85,1.15)*th,
+      color:(function(){var tot=0,k;for(k=0;k<STROKE_W.length;k++)tot+=STROKE_W[k];var r=R()*tot;for(k=0;k<STROKE.length;k++){r-=STROKE_W[k];if(r<=0)return STROKE[k];}return STROKE[0];})(),
+      bow:rr(-6,-1),tilt:rr(-.03,.03),seed:Math.floor(R()*1e9),born:now+i*90,dur:rr(320,520)*(len/200),prog:0,done:false};
+    strokes.push(s);
+    if(i===0)top=s;
+  }
+  return top;
+}
+
+function makeFig(s,tx,now,isHer){
+  var pose;
+  if(isHer)pose='stand';else{do{pose=pick(POSES);}while(pose===lastPose);}
+  lastPose=pose;
+  var L=s.len*U,sx=s.x*W;
+  var fx=Math.max(sx+L*.08,Math.min(sx+L*.92,tx));
+  var t=(fx-sx)/L;
+  var fy=s.y*H+s.bow*U*Math.sin(Math.PI*t)+s.tilt*L*(t-.5)-s.th*U*.32;
+  var f={nx:fx/W,ny:fy/H,h:rr(31,39),pose:pose,born:now+260,phase:R()*6.28,
+    top:isHer?'#1c1a1a':pick(TOPS),pants:isHer?'#141313':pick(PANTS),flare:isHer?1:(R()<.25?.6:0),
+    skin:pick(SKIN),hair:isHer?'#2b211c':pick(HAIR),longHair:R()<.5,her:!!isHer,
+    react:-99,tongue:-99,joy:isHer?'':nextJoy(),dir:R()<.5?-1:1};
+  if(isHer){f.h=36;f.longHair=true;}
+  figs.push(f);
+  if(figs.length>46){var old=figs[0];if(!old.fade)old.fade=now;}
+  return f;
+}
+
+function say(f,text,now,pink){
+  for(var i=0;i<says.length;i++){if(says[i].end>now+250)says[i].end=now+250;}
+  says.push({f:f,text:text,start:now,end:now+(pink?1600:3400),pink:!!pink});
+}
+
+function hitFig(x,y){
+  for(var i=figs.length-1;i>=0;i--){var f=figs[i];if(f.fade)continue;
+    var fx=f.nx*W,fy=f.ny*H,h=f.h*U;
+    var cy=(f.pose==='lie')?fy-h*.1:fy-h*.5;
+    var rx=(f.pose==='lie')?h*.6:h*.38,ry=(f.pose==='lie')?h*.3:h*.62;
+    if(Math.abs(x-fx)<rx+6&&Math.abs(y-cy)<ry+6)return f;}
+  return null;
+}
+
+// 很轻的刷子声
+var AC=null,noise=null;
+function swish(){
+  try{
+    if(!AC){var C=window.AudioContext||window.webkitAudioContext;if(!C)return;AC=new C();
+      noise=AC.createBuffer(1,AC.sampleRate*.6,AC.sampleRate);var d=noise.getChannelData(0);for(var i=0;i<d.length;i++)d[i]=Math.random()*2-1;}
+    if(AC.state==='suspended')AC.resume();
+    var src=AC.createBufferSource();src.buffer=noise;
+    var bp=AC.createBiquadFilter();bp.type='bandpass';bp.frequency.value=rr(1400,2600);bp.Q.value=.8;
+    var g=AC.createGain(),t=AC.currentTime;
+    g.gain.setValueAtTime(0,t);g.gain.linearRampToValueAtTime(.035,t+.06);g.gain.exponentialRampToValueAtTime(.0005,t+.45);
+    bp.frequency.linearRampToValueAtTime(bp.frequency.value*1.4,t+.4);
+    src.connect(bp);bp.connect(g);g.connect(AC.destination);src.start(t);src.stop(t+.5);
+  }catch(e){}
+}
+
+function setLine(text,tail){
+  lineEl.style.opacity=0;
+  setTimeout(function(){
+    lineEl.textContent=text;
+    if(tail){var sp=document.createElement('span');sp.className='tail';sp.textContent='略';lineEl.appendChild(sp);
+      setTimeout(function(){sp.classList.add('on');},1100);}
+    lineEl.style.opacity=1;
+  },420);
+}
+
+function onTap(e){
+  var x=e.clientX,y=e.clientY,now=performance.now();
+  if(!started){started=true;hintEl.style.opacity=0;}
+  var f=hitFig(x,y);
+  if(f){
+    f.react=now;
+    if(f.her){f.tongue=now;say(f,'略',now,true);}
+    else say(f,f.joy,now);
+    return;
+  }
+  taps++;
+  var minY=lineEl.getBoundingClientRect().bottom+44;
+  var ty=Math.max(minY,Math.min(H-30,y));
+  var top=makeCluster(x,ty,now);
+  var nf=makeFig(top,x,now,taps===1);
+  if(!nf.her)setTimeout(function(){say(nf,nf.joy,performance.now());},520);
+  else setTimeout(function(){nf.tongue=performance.now();},1300);
+  swish();
+  while(stage+1<STAGES.length&&taps>=STAGES[stage+1][0]){stage++;setLine(STAGES[stage][1],stage===STAGES.length-1);}
+}
+fig.addEventListener('pointerdown',function(e){e.preventDefault();onTap(e);});
+
+// ——小人——
+function limb(ctx,x1,y1,x2,y2,w,c){ctx.strokeStyle=c;ctx.lineWidth=w;ctx.beginPath();ctx.moveTo(x1,y1);ctx.lineTo(x2,y2);ctx.stroke();}
+function leg(ctx,hx,hy,fx,fy,w,flare,c){
+  var dx=fx-hx,dy=fy-hy,l=Math.hypot(dx,dy),nx=-dy/l,ny=dx/l;
+  var w1=w*.5,w2=w*(.5+flare*.55),kx=hx+dx*.55,ky=hy+dy*.55;
+  ctx.fillStyle=c;ctx.beginPath();
+  ctx.moveTo(hx+nx*w1,hy+ny*w1);ctx.lineTo(kx+nx*w*.42,ky+ny*w*.42);ctx.lineTo(fx+nx*w2,fy+ny*w2);
+  ctx.lineTo(fx-nx*w2,fy-ny*w2);ctx.lineTo(kx-nx*w*.42,ky-ny*w*.42);ctx.lineTo(hx-nx*w1,hy-ny*w1);ctx.closePath();ctx.fill();
+}
+function drawFig(ctx,f,now){
+  var age=now-f.born;if(age<0)return;
+  var h=f.h*U,t=now/1000+f.phase,ap=Math.min(1,age/420);
+  var alpha=ap;if(f.fade){alpha*=Math.max(0,1-(now-f.fade)/1500);if(alpha<=0)return;}
+  var rk=(now-f.react)/1000,react=rk>=0&&rk<.9?rk/.9:-1;
+  var hop=0,rot=0,ox=0;
+  var spread=.07,aL=.18,aR=-.18,headTilt=0,lift=0;
+  switch(f.pose){
+    case'stand':rot=Math.sin(t*1.1)*.025;break;
+    case'walk':spread=.07+Math.sin(t*3.2)*.06;aL=.18-Math.sin(t*3.2)*.35;aR=-.18-Math.sin(t*3.2)*.35;ox=Math.sin(t*.5)*h*.25;break;
+    case'hip':aL=1.1;aR=-.12;rot=-.06+Math.sin(t)*.02;break;
+    case'wave':aR=-2.6+Math.sin(t*5)*.35;aL=.15;break;
+    case'hop':var ph=(t*.55)%1;hop=ph<.18?Math.sin(ph/.18*Math.PI)*h*.22:0;aL=hop?1.2:.2;aR=hop?-1.2:-.2;break;
+    case'lie':rot=-Math.PI/2;lift=h*.1;aL=.5;aR=-2.7+Math.sin(t*1.3)*.15;spread=.03+Math.max(0,Math.sin(t*1.6))*.05;break;
+    case'hand':rot=Math.PI+Math.sin(t*1.7)*.05;aL=Math.PI-.15;aR=-Math.PI+.15;spread=.09+Math.sin(t*2.1)*.04;break;
+    case'lean':rot=.22;aL=.1;aR=-.5;break;
+    case'look':aR=-2.3;aL=.25;headTilt=-.25;rot=-.03;break;
+    case'sitflip':spread=.13;aL=2.2+Math.sin(t*2)*.2;aR=-2.2-Math.sin(t*2)*.2;break;
+  }
+  if(react>=0){hop+=Math.sin(react*Math.PI)*h*.3;rot+=Math.sin(react*Math.PI*2)*.12*f.dir;}
+  var fx=f.nx*W+ox,fy=f.ny*H;
+  ctx.save();ctx.globalAlpha=alpha;
+  ctx.translate(fx,fy-hop-lift-(1-ap)*h*.15);
+  if(f.pose==='hand')ctx.translate(0,-h*1.08);
+  ctx.rotate(rot);
+  ctx.lineCap='round';ctx.lineJoin='round';
+  var hipY=-.46*h,shY=-.8*h,hr=.085*h,hw=.038*h,lw=.075*h;
+  // 腿
+  leg(ctx,-hw,hipY,-spread*h,-.01*h,lw,f.flare,f.pants);
+  leg(ctx,hw,hipY,spread*h,-.01*h,lw,f.flare,f.pants);
+  ctx.fillStyle='#2a2220';
+  ctx.beginPath();ctx.ellipse(-spread*h-.02*h,0,.035*h,.016*h,0,0,7);ctx.fill();
+  ctx.beginPath();ctx.ellipse(spread*h+.02*h,0,.035*h,.016*h,0,0,7);ctx.fill();
+  // 身子
+  limb(ctx,0,shY+.06*h,0,hipY+.02*h,.17*h,f.top);
+  ctx.globalAlpha=alpha*.35;limb(ctx,.015*h,shY+.07*h,.01*h,hipY,.12*h,mix(f.top,.25));ctx.globalAlpha=alpha;
+  // 手臂
+  var sx=.085*h,sy=shY+.04*h,al=.33*h;
+  [[-sx,aL],[sx,aR]].forEach(function(a){
+    var ang=a[1],ex=a[0]-Math.sin(ang)*al,ey=sy+Math.cos(ang)*al;
+    limb(ctx,a[0],sy,ex,ey,.055*h,f.top);
+    ctx.fillStyle=f.skin;ctx.beginPath();ctx.arc(ex,ey,.028*h,0,7);ctx.fill();
+  });
+  // 头
+  ctx.save();ctx.translate(0,shY-.02*h);ctx.rotate(headTilt);
+  var hy=-.075*h;
+  if(f.longHair){ctx.fillStyle=f.hair;ctx.beginPath();ctx.moveTo(-hr*1.05,hy-hr*.2);ctx.lineTo(-hr*1.15,hy+hr*1.5);ctx.lineTo(-hr*.55,hy+hr*1.4);ctx.lineTo(-hr*.6,hy);ctx.closePath();ctx.fill();
+    ctx.beginPath();ctx.moveTo(hr*1.05,hy-hr*.2);ctx.lineTo(hr*1.15,hy+hr*1.5);ctx.lineTo(hr*.55,hy+hr*1.4);ctx.lineTo(hr*.6,hy);ctx.closePath();ctx.fill();}
+  ctx.fillStyle=f.skin;ctx.beginPath();ctx.arc(0,hy,hr,0,7);ctx.fill();
+  ctx.fillStyle=f.hair;ctx.beginPath();ctx.arc(0,hy-.012*h,hr*1.04,Math.PI*1.02,Math.PI*1.98);ctx.fill();
+  var tg=(now-f.tongue)/1000;
+  if(tg>=0&&tg<1.5){var k=Math.min(1,tg/.15)*Math.min(1,(1.5-tg)/.2);
+    ctx.fillStyle='#e0577f';ctx.beginPath();ctx.ellipse(.01*h,hy+hr*.62+k*.018*h,.024*h,.022*h*k+.002,0,0,7);ctx.fill();
+    ctx.strokeStyle='#2a2220';ctx.lineWidth=Math.max(.8,.012*h);
+    ctx.beginPath();ctx.moveTo(-.04*h,hy-.005*h);ctx.lineTo(-.015*h,hy-.005*h);ctx.moveTo(.015*h,hy-.005*h);ctx.lineTo(.04*h,hy-.005*h);ctx.stroke();
+  }
+  ctx.restore();
+  ctx.restore();
+}
+
+function drawSay(ctx,s,now){
+  var f=s.f,a=Math.min(1,(now-s.start)/260)*Math.min(1,Math.max(0,(s.end-now)/400));
+  if(a<=0)return;
+  var fs=(s.pink?17:13.5)*Math.min(1.15,U);
+  ctx.font=(s.pink?'600 ':'')+fs+'px "Songti SC","STSong","Noto Serif SC",serif';
+  var w=ctx.measureText(s.text).width,h=f.h*U;
+  var fx=f.nx*W,fy=f.ny*H;
+  var x=fx-w/2,y=fy-h*(f.pose==='lie'?.55:1.18)-(f.pose==='hand'?h*.1:0)-(1-a)*4;
+  if(f.pose==='hop')y-=h*.2;
+  if(s.pink){x=fx+h*.22;y=fy-h*1.05;}
+  x=Math.max(10,Math.min(W-w-10,x));
+  var topLimit=lineEl.getBoundingClientRect().bottom+fs+4;
+  if(y<topLimit)y=fy+fs+8;
+  ctx.globalAlpha=a;ctx.lineJoin='round';
+  ctx.strokeStyle='rgba(245,238,219,.92)';ctx.lineWidth=5;ctx.strokeText(s.text,x,y);
+  ctx.fillStyle=s.pink?'#c4245e':'#24201c';ctx.fillText(s.text,x,y);
+  ctx.globalAlpha=1;
+}
+
+function frame(now){
+  for(var i=0;i<strokes.length;i++){var s=strokes[i];if(s.done)continue;
+    var p=(now-s.born)/s.dur;if(p<=0)continue;p=Math.min(1,p);
+    var e=1-Math.pow(1-p,2.2);paintStroke(s,s.prog,e);s.prog=e;if(p>=1)s.done=true;}
+  fc.clearRect(0,0,W,H);
+  for(i=0;i<figs.length;i++)drawFig(fc,figs[i],now);
+  figs=figs.filter(function(f){return!(f.fade&&now-f.fade>1600);});
+  for(i=0;i<says.length;i++)drawSay(fc,says[i],now);
+  says=says.filter(function(s){return s.end>now;});
+  requestAnimationFrame(frame);
+}
+
+window.addEventListener('resize',resize);
+resize();
+setTimeout(function(){if(!started)hintEl.style.opacity=1;},2200);
+requestAnimationFrame(frame);
+
+})();
+</script>
+</body>
+</html>

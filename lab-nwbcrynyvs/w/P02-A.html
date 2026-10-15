@@ -1,0 +1,523 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
+<meta name="theme-color" content="#0b1430">
+<title>那天晚上</title>
+<style>
+  html, body {
+    margin: 0; padding: 0; height: 100%; overflow: hidden;
+    background: #0b1430;
+    -webkit-user-select: none; user-select: none;
+    -webkit-touch-callout: none;
+    -webkit-tap-highlight-color: transparent;
+  }
+  canvas { position: fixed; inset: 0; width: 100%; height: 100%; display: block; touch-action: none; }
+  #line {
+    position: fixed; left: 0; right: 0;
+    top: calc(env(safe-area-inset-top, 0px) + 13vh);
+    padding: 0 9vw;
+    text-align: center;
+    font-family: "Songti SC", "STSong", "Noto Serif SC", "Noto Serif CJK SC", "Source Han Serif SC", serif;
+    font-size: clamp(16px, 4.4vw, 22px);
+    line-height: 1.9;
+    letter-spacing: 0.12em;
+    color: rgba(246, 240, 228, 0.92);
+    text-shadow: 0 0 18px rgba(10, 16, 40, 0.55);
+    opacity: 0;
+    transition: opacity 2.2s ease;
+    white-space: pre-line;
+    pointer-events: none;
+  }
+  #hint {
+    position: fixed; left: 0; right: 0;
+    bottom: calc(env(safe-area-inset-bottom, 0px) + 7vh);
+    text-align: center;
+    font-family: "PingFang SC", "Hiragino Sans GB", "Noto Sans SC", sans-serif;
+    font-size: clamp(12px, 3.3vw, 14px);
+    letter-spacing: 0.3em;
+    color: rgba(230, 232, 245, 0.55);
+    opacity: 0;
+    transition: opacity 2s ease;
+    pointer-events: none;
+  }
+  #snd {
+    position: fixed;
+    top: calc(env(safe-area-inset-top, 0px) + 14px);
+    right: calc(env(safe-area-inset-right, 0px) + 14px);
+    width: 40px; height: 40px;
+    border: 0; background: transparent; padding: 0;
+    color: rgba(235, 238, 250, 0.38);
+    font-size: 15px; cursor: pointer;
+    font-family: "PingFang SC", sans-serif;
+    opacity: 0; transition: opacity 2s ease;
+  }
+  #snd.on { opacity: 1; }
+  #snd.muted span { text-decoration: line-through; }
+  @media (min-aspect-ratio: 1/1) {
+    #line { top: 10vh; font-size: clamp(16px, 2.2vw, 22px); }
+    #hint { bottom: 6vh; }
+  }
+</style>
+</head>
+<body>
+<canvas id="c"></canvas>
+<div id="line"></div>
+<div id="hint">用手指遮住月亮</div>
+<button id="snd" aria-label="声音"><span>声</span></button>
+<script>
+(() => {
+  const cv = document.getElementById('c');
+  const ctx = cv.getContext('2d');
+  const lineEl = document.getElementById('line');
+  const hintEl = document.getElementById('hint');
+  const sndBtn = document.getElementById('snd');
+
+  let W = 0, H = 0, DPR = 1, HOR = 0;
+  // ---------- helpers ----------
+  const clamp = (x, a, b) => Math.max(a, Math.min(b, x));
+  const lerp = (a, b, t) => a + (b - a) * t;
+  const smooth = (e0, e1, x) => { const t = clamp((x - e0) / (e1 - e0), 0, 1); return t * t * (3 - 2 * t); };
+  const hex = h => [parseInt(h.slice(1, 3), 16), parseInt(h.slice(3, 5), 16), parseInt(h.slice(5, 7), 16)];
+  const mixc = (a, b, t) => [lerp(a[0], b[0], t), lerp(a[1], b[1], t), lerp(a[2], b[2], t)];
+  const rgb = (c, a = 1) => `rgba(${c[0] | 0},${c[1] | 0},${c[2] | 0},${a})`;
+  let seed = 7;
+  const rnd = () => { seed = (seed * 16807) % 2147483647; return (seed - 1) / 2147483646; };
+
+  // ---------- sky palette: dusk (looking east, the pink band above the earth's shadow) -> night ----------
+  const SKY = {
+    dusk:  ['#5d6b98', '#9a92b4', '#e4b0ad', '#d9a7a9', '#8a8fab', '#9497ae'],
+    night: ['#060b1f', '#0b1533', '#121f45', '#16244c', '#1b2a53', '#243560'],
+  };
+  const SKYS = [0, 0.45, 0.70, 0.78, 0.90, 1];
+  const duskC = SKY.dusk.map(hex), nightC = SKY.night.map(hex);
+
+  // ---------- scene objects ----------
+  let stars = [], glitter = [], islands = [];
+  function build() {
+    seed = 7;
+    stars = [];
+    const n = Math.round(clamp(W * H / 4200, 90, 260));
+    for (let i = 0; i < n; i++) {
+      const y = Math.pow(rnd(), 1.25) * HOR * 0.97;
+      stars.push({
+        x: rnd() * W, y,
+        r: (rnd() < 0.08 ? 1.25 : 0.55 + rnd() * 0.5) * DPR,
+        a: 0.25 + rnd() * 0.75,
+        tw: 0.6 + rnd() * 2.2, ph: rnd() * 6.28,
+        haze: 1 - smooth(HOR * 0.55, HOR, y) * 0.75,
+        warm: rnd() < 0.2,
+      });
+    }
+    glitter = [];
+    for (let i = 0; i < 340; i++) {
+      const u = Math.pow(rnd(), 1.6);           // 0 at horizon, 1 at bottom
+      const g = (rnd() + rnd() + rnd() - 1.5) / 1.5;
+      glitter.push({ u, g, ph: rnd() * 6.28, sp: 0.8 + rnd() * 2.6, len: 0.4 + rnd() * 1.2 });
+    }
+    // low, hazy islands sitting on the horizon (x, width, height, layers)
+    islands = [
+      { x: -0.04, w: 0.32, h: 0.017, far: 0.35, bumps: [0.2, 0.55, 0.8] },
+      { x: 0.20,  w: 0.13, h: 0.011, far: 0.75, bumps: [0.5] },
+      { x: 0.80,  w: 0.26, h: 0.013, far: 0.6,  bumps: [0.35, 0.7] },
+      { x: 0.70,  w: 0.08, h: 0.007, far: 0.9,  bumps: [0.5] },
+    ];
+  }
+
+  function resize() {
+    DPR = Math.min(window.devicePixelRatio || 1, 2.5);
+    W = Math.round(window.innerWidth * DPR);
+    H = Math.round(window.innerHeight * DPR);
+    cv.width = W; cv.height = H;
+    HOR = Math.round(H * (W < H ? 0.64 : 0.68));
+    build();
+  }
+  window.addEventListener('resize', resize);
+  resize();
+
+  // ---------- state ----------
+  const Q = new URLSearchParams(location.search);
+  const t0 = performance.now();
+  let T = 0, last = t0;
+  let cover = 0;               // 0 = moon uncovered, 1 = fully covered (eased)
+  let covering = false;
+  const pointers = new Map();
+  let seen = 0;
+  let meteors = [];
+  let nextMeteor = 9;
+
+  function moonState() {
+    const k = clamp((T - 2) / 95, 0, 1);
+    const rise = 1 - (1 - k) * (1 - k);          // slow rise out of the sea, easing off
+    const r = clamp(Math.min(W, H) * 0.052, 17 * DPR, 40 * DPR);
+    const x = W * (W < H ? 0.6 : 0.57) + rise * W * 0.05;
+    const y = HOR + r * 1.15 - rise * (HOR * 0.40);
+    const alt = clamp((HOR - y) / (HOR * 0.40), 0, 1);  // 0 at horizon
+    return { x, y, r, alt, up: y < HOR - r * 0.2 };
+  }
+
+  // ---------- drawing ----------
+  function drawSky(p, m) {
+    const g = ctx.createLinearGradient(0, 0, 0, HOR);
+    const belt = 1 - smooth(0.0, 0.55, p);       // pink band fades as the shadow climbs
+    for (let i = 0; i < SKYS.length; i++) {
+      let c = mixc(duskC[i], nightC[i], smooth(0, 1, p));
+      if (i === 2 || i === 3) c = mixc(c, mixc(duskC[i], nightC[i], 0.35), belt * 0.0);
+      c = mixc(c, [3, 6, 18], cover * 0.22);
+      // the band and the shadow line slowly lift upwards
+      const s = i === 0 || i === SKYS.length - 1 ? SKYS[i] : clamp(SKYS[i] - p * 0.18, 0.05, 0.99);
+      g.addColorStop(s, rgb(c));
+    }
+    ctx.fillStyle = g;
+    ctx.fillRect(0, 0, W, HOR + 2);
+
+    // moonlit glow in the sky (the glare that hides things)
+    const glare = (1 - cover) * (0.25 + 0.75 * smooth(0.15, 0.8, p)) * (m.up ? 1 : 0.4);
+    if (glare > 0.01) {
+      const R = m.r * 14;
+      const gg = ctx.createRadialGradient(m.x, m.y, m.r * 0.8, m.x, m.y, R);
+      const warm = mixc(hex('#f2b77c'), hex('#c9d4f0'), m.alt);
+      gg.addColorStop(0, rgb(warm, 0.42 * glare));
+      gg.addColorStop(0.18, rgb(warm, 0.17 * glare));
+      gg.addColorStop(0.5, rgb(warm, 0.05 * glare));
+      gg.addColorStop(1, rgb(warm, 0));
+      ctx.fillStyle = gg;
+      ctx.fillRect(0, 0, W, HOR + 2);
+    }
+    // humid haze along the horizon
+    const hz = ctx.createLinearGradient(0, HOR - H * 0.09, 0, HOR);
+    const hc = mixc(hex('#b9a7b5'), hex('#2e3d68'), smooth(0, 1, p));
+    hz.addColorStop(0, rgb(hc, 0));
+    hz.addColorStop(1, rgb(hc, 0.55));
+    ctx.fillStyle = hz;
+    ctx.fillRect(0, HOR - H * 0.09, W, H * 0.09 + 1);
+  }
+
+  function drawStars(p, m) {
+    const dark = smooth(0.25, 0.85, p);
+    if (dark <= 0) return;
+    const vis = lerp(0.22, 1, cover) * dark;
+    for (const s of stars) {
+      const dm = Math.hypot(s.x - m.x, s.y - m.y) / (m.r * 10);
+      const near = (1 - cover) * clamp(1 - dm, 0, 1);
+      const tw = 0.75 + 0.25 * Math.sin(T * s.tw + s.ph);
+      const a = s.a * vis * s.haze * tw * (1 - near);
+      if (a < 0.02) continue;
+      ctx.fillStyle = s.warm ? `rgba(255,236,214,${a})` : `rgba(232,238,255,${a})`;
+      ctx.beginPath(); ctx.arc(s.x, s.y, s.r, 0, 6.283); ctx.fill();
+    }
+  }
+
+  function drawMoon(m) {
+    if (m.y - m.r > HOR + 2) return;
+    const col = mixc(hex('#e9965a'), hex('#fff7e6'), smooth(0, 0.75, m.alt));
+    const dim = lerp(1, 0.12, cover);
+    const flat = lerp(0.84, 1, smooth(0, 0.35, m.alt));
+    ctx.save();
+    ctx.beginPath(); ctx.rect(0, 0, W, HOR); ctx.clip();
+    ctx.translate(m.x, m.y); ctx.scale(1, flat);
+    // halo
+    const h = ctx.createRadialGradient(0, 0, m.r * 0.9, 0, 0, m.r * 2.6);
+    h.addColorStop(0, rgb(col, 0.35 * dim)); h.addColorStop(1, rgb(col, 0));
+    ctx.fillStyle = h; ctx.beginPath(); ctx.arc(0, 0, m.r * 2.6, 0, 6.283); ctx.fill();
+    // disc
+    const d = ctx.createRadialGradient(-m.r * 0.25, -m.r * 0.25, m.r * 0.1, 0, 0, m.r);
+    d.addColorStop(0, rgb(mixc(col, [255, 255, 255], 0.35), dim));
+    d.addColorStop(1, rgb(col, dim));
+    ctx.fillStyle = d; ctx.beginPath(); ctx.arc(0, 0, m.r, 0, 6.283); ctx.fill();
+    // faint maria
+    ctx.fillStyle = '#8a8698';
+    const maria = [[-0.30, -0.30, 0.30, 0.24, 0.5, 0.07], [0.12, -0.32, 0.20, 0.17, 0, 0.06], [0.30, -0.02, 0.22, 0.20, 0.3, 0.06],
+                   [0.52, 0.18, 0.14, 0.12, 0, 0.05], [-0.48, 0.10, 0.24, 0.38, 0.2, 0.05], [-0.12, 0.42, 0.20, 0.14, 0.4, 0.045]];
+    for (const [mx, my, rx, ry, rot, al] of maria) {
+      ctx.globalAlpha = al * dim;
+      ctx.beginPath(); ctx.ellipse(mx * m.r, my * m.r, rx * m.r, ry * m.r, rot, 0, 6.283); ctx.fill();
+    }
+    ctx.globalAlpha = 1;
+    ctx.restore();
+  }
+
+  function drawIslands(p) {
+    for (const is of islands) {
+      const base = mixc(hex('#7f7f9c'), hex('#0d1530'), smooth(0, 1, p));
+      const c = mixc(base, mixc(hex('#a99ab2'), hex('#26355f'), smooth(0, 1, p)), is.far * 0.7);
+      ctx.fillStyle = rgb(c);
+      const x0 = is.x * W, w = is.w * W, h = is.h * H;
+      ctx.beginPath();
+      ctx.moveTo(x0, HOR + 1);
+      const N = 40;
+      for (let i = 0; i <= N; i++) {
+        const u = i / N;
+        let y = 0;
+        for (const b of is.bumps) y = Math.max(y, Math.exp(-Math.pow((u - b) / 0.2, 2)));
+        y = y * (0.86 + 0.14 * Math.sin(u * 37 + is.x * 50) * Math.sin(u * 13 + is.w * 90));
+        y *= Math.pow(Math.sin(Math.PI * u), 0.45);
+        ctx.lineTo(x0 + u * w, HOR - y * h);
+      }
+      ctx.lineTo(x0 + w, HOR + 1);
+      ctx.closePath(); ctx.fill();
+    }
+  }
+
+  function drawSea(p, m) {
+    const g = ctx.createLinearGradient(0, HOR, 0, H);
+    const top = mixc(hex('#7b7f9e'), hex('#141f42'), smooth(0, 1, p));
+    const bot = mixc(hex('#3e4466'), hex('#03071a'), smooth(0, 1, p));
+    g.addColorStop(0, rgb(mixc(top, [3, 6, 18], cover * 0.2)));
+    g.addColorStop(1, rgb(mixc(bot, [0, 0, 6], cover * 0.2)));
+    ctx.fillStyle = g;
+    ctx.fillRect(0, HOR, W, H - HOR);
+    // horizon line
+    ctx.fillStyle = `rgba(220,215,230,${0.06 + 0.04 * (1 - p)})`;
+    ctx.fillRect(0, HOR, W, Math.max(1, DPR * 0.7));
+
+    // moon path on the water
+    if (!m.up) return;
+    const strength = smooth(0, 0.18, m.alt) * lerp(1, 0.18, cover) * (0.45 + 0.55 * smooth(0.1, 0.7, p));
+    const col = mixc(hex('#f0a868'), hex('#fff3dc'), smooth(0, 0.8, m.alt));
+    ctx.save();
+    ctx.beginPath(); ctx.rect(0, HOR, W, H - HOR); ctx.clip();
+    ctx.translate(m.x, HOR); ctx.scale(m.r * 3.2 / (H - HOR), 1);
+    const sh = ctx.createRadialGradient(0, 0, 0, 0, 0, (H - HOR) * 1.05);
+    sh.addColorStop(0, rgb(col, 0.20 * strength));
+    sh.addColorStop(0.5, rgb(col, 0.07 * strength));
+    sh.addColorStop(1, rgb(col, 0));
+    ctx.fillStyle = sh;
+    ctx.fillRect(-(H - HOR) * 1.1, 0, (H - HOR) * 2.2, H - HOR);
+    ctx.restore();
+    for (const q of glitter) {
+      const y = HOR + q.u * (H - HOR);
+      const spread = m.r * (0.6 + q.u * 4.2);
+      const x = m.x + q.g * spread + Math.sin(T * 0.6 + q.ph) * m.r * 0.15;
+      const f = Math.sin(T * q.sp + q.ph);
+      if (f < 0.2) continue;
+      const a = strength * (f - 0.2) * (1 - Math.abs(q.g) * 0.6) * 0.9;
+      const len = (2 + q.u * 9) * q.len * DPR;
+      ctx.fillStyle = rgb(col, a);
+      ctx.fillRect(x - len / 2, y, len, Math.max(1, DPR * (0.6 + q.u * 0.9)));
+    }
+  }
+
+  // ---------- meteors ----------
+  function spawnMeteor() {
+    const graze = rnd() < 0.55;
+    let x, y, ang, len, dur;
+    if (graze) {
+      // early in the evening the radiant sits low on the left (north-east): long, slow, skimming streaks
+      x = W * (-0.08 + rnd() * 0.45);
+      y = HOR - HOR * (0.04 + rnd() * 0.32);
+      ang = -(0.10 + rnd() * 0.42);
+      len = Math.max(W, H * 0.6) * (0.35 + rnd() * 0.4);
+      dur = 1.5 + rnd() * 1.2;
+    } else {
+      const rx = -W * 0.25, ry = HOR * 0.95;
+      x = W * (0.1 + rnd() * 0.85);
+      y = HOR * (0.05 + rnd() * 0.65);
+      ang = Math.atan2(y - ry, x - rx) + (rnd() - 0.5) * 0.2;
+      len = Math.max(W, H * 0.6) * (0.12 + rnd() * 0.18);
+      dur = 0.55 + rnd() * 0.45;
+    }
+    const mt = { x, y, dx: Math.cos(ang), dy: Math.sin(ang), len, dur, t: 0, graze, visSum: 0, n: 0, bright: 0.65 + rnd() * 0.35 };
+    meteors.push(mt);
+    chime(mt);
+  }
+
+  function meteorVis(p) { return lerp(0.09, 1, cover) * smooth(0.2, 0.7, p); }
+
+  function drawMeteors(dt, p) {
+    const vis = meteorVis(p);
+    for (const mt of meteors) {
+      mt.t += dt / mt.dur;
+      mt.visSum += vis; mt.n++;
+      const t = clamp(mt.t, 0, 1);
+      const env = Math.sin(Math.PI * Math.pow(t, 0.8));
+      const travel = mt.len;
+      const hx = mt.x + mt.dx * travel * t, hy = mt.y + mt.dy * travel * t;
+      const tail = mt.len * (mt.graze ? 0.55 : 0.4) * Math.min(1, t * 2.2);
+      const tx = hx - mt.dx * tail, ty = hy - mt.dy * tail;
+      const a = env * vis * mt.bright;
+      if (a < 0.01 || hy > HOR) continue;
+      const g = ctx.createLinearGradient(hx, hy, tx, ty);
+      g.addColorStop(0, `rgba(240,255,246,${a})`);
+      g.addColorStop(0.25, `rgba(200,236,255,${a * 0.45})`);
+      g.addColorStop(1, 'rgba(180,210,255,0)');
+      ctx.strokeStyle = g;
+      ctx.lineCap = 'round';
+      ctx.lineWidth = (mt.graze ? 1.5 : 1.2) * DPR;
+      ctx.beginPath(); ctx.moveTo(tx, ty); ctx.lineTo(hx, hy); ctx.stroke();
+      const hg = ctx.createRadialGradient(hx, hy, 0, hx, hy, 5 * DPR);
+      hg.addColorStop(0, `rgba(250,255,248,${a})`); hg.addColorStop(1, 'rgba(250,255,248,0)');
+      ctx.fillStyle = hg; ctx.beginPath(); ctx.arc(hx, hy, 5 * DPR, 0, 6.283); ctx.fill();
+    }
+    meteors = meteors.filter(mt => {
+      if (mt.t < 1.15) return true;
+      if (mt.visSum / mt.n > 0.55) { seen++; onSeen(); }
+      return false;
+    });
+  }
+
+  // ---------- sound: sea hush + a small jade-like ring per meteor, with a long tail ----------
+  let AC = null, master = null, muted = false;
+  const NOTES = [1046.5, 1174.7, 1318.5, 1568.0, 1760.0, 2093.0, 2349.3];
+  function startAudio() {
+    if (AC) { if (AC.state === 'suspended') AC.resume(); return; }
+    const C = window.AudioContext || window.webkitAudioContext;
+    if (!C) return;
+    AC = new C();
+    master = AC.createGain(); master.gain.value = muted ? 0 : 1; master.connect(AC.destination);
+    // sea
+    const len = AC.sampleRate * 6;
+    const buf = AC.createBuffer(2, len, AC.sampleRate);
+    for (let ch = 0; ch < 2; ch++) {
+      const d = buf.getChannelData(ch); let b = 0;
+      for (let i = 0; i < len; i++) { b = (b + 0.02 * (Math.random() * 2 - 1)) / 1.02; d[i] = b * 3.2; }
+      // seamless loop
+      for (let i = 0; i < 2000; i++) { const k = i / 2000; d[i] = d[i] * k + d[len - 2000 + i] * (1 - k); }
+    }
+    const src = AC.createBufferSource(); src.buffer = buf; src.loop = true;
+    const lp = AC.createBiquadFilter(); lp.type = 'lowpass'; lp.frequency.value = 420;
+    const sg = AC.createGain(); sg.gain.value = 0;
+    const lfo = AC.createOscillator(); lfo.frequency.value = 0.085;
+    const lg = AC.createGain(); lg.gain.value = 0.035;
+    lfo.connect(lg); lg.connect(sg.gain);
+    src.connect(lp); lp.connect(sg); sg.connect(master);
+    sg.gain.setValueAtTime(0, AC.currentTime);
+    sg.gain.linearRampToValueAtTime(0.06, AC.currentTime + 4);
+    src.start(); lfo.start();
+    sndBtn.classList.add('on');
+  }
+  function chime(mt) {
+    if (!AC || muted) return;
+    const v = meteorVis(smooth(0, 75, T));
+    if (v < 0.04) return;
+    const now = AC.currentTime + (mt.graze ? 0.25 : 0.08);
+    const f = NOTES[(rnd() * NOTES.length) | 0] * (mt.graze ? 0.5 : 1);
+    const vol = 0.11 * v * mt.bright;
+    const out = AC.createGain(); out.gain.value = 1;
+    let node = out;
+    if (AC.createStereoPanner) {
+      const pn = AC.createStereoPanner(); pn.pan.value = clamp((mt.x / W) * 1.4 - 0.7, -0.8, 0.8);
+      out.connect(pn); node = pn;
+    }
+    node.connect(master);
+    const parts = [[1, 1, mt.graze ? 7 : 5], [2.756, 0.28, 1.6], [5.404, 0.08, 0.6], [1.002, 0.5, 6]];
+    for (const [ratio, amp, dec] of parts) {
+      const o = AC.createOscillator(); o.type = 'sine'; o.frequency.value = f * ratio;
+      const g = AC.createGain();
+      g.gain.setValueAtTime(0.0001, now);
+      g.gain.exponentialRampToValueAtTime(vol * amp, now + 0.012);
+      g.gain.exponentialRampToValueAtTime(0.0001, now + dec);
+      o.connect(g); g.connect(out);
+      o.start(now); o.stop(now + dec + 0.1);
+    }
+  }
+  sndBtn.addEventListener('pointerdown', e => { e.stopPropagation(); });
+  sndBtn.addEventListener('click', e => {
+    e.stopPropagation();
+    muted = !muted;
+    sndBtn.classList.toggle('muted', muted);
+    if (AC) master.gain.setTargetAtTime(muted ? 0 : 1, AC.currentTime, 0.2);
+  });
+
+  // ---------- touch / cover the moon ----------
+  function overMoon(px, py) {
+    const m = moonState();
+    if (!m.up) return false;
+    const R = Math.max(m.r * 2.4, 46 * DPR);
+    return Math.hypot(px * DPR - m.x, py * DPR - m.y) < R;
+  }
+  function updateCovering() {
+    covering = false;
+    for (const v of pointers.values()) if (v) covering = true;
+    cv.style.cursor = covering ? 'grabbing' : '';
+  }
+  cv.addEventListener('pointerdown', e => {
+    e.preventDefault();
+    startAudio();
+    try { cv.setPointerCapture(e.pointerId); } catch (_) {}
+    pointers.set(e.pointerId, overMoon(e.clientX, e.clientY));
+    updateCovering();
+  });
+  cv.addEventListener('pointermove', e => {
+    if (pointers.has(e.pointerId)) {
+      pointers.set(e.pointerId, overMoon(e.clientX, e.clientY));
+      updateCovering();
+    } else if (e.pointerType === 'mouse') {
+      cv.style.cursor = overMoon(e.clientX, e.clientY) ? 'pointer' : '';
+    }
+  });
+  const up = e => { pointers.delete(e.pointerId); updateCovering(); };
+  cv.addEventListener('pointerup', up);
+  cv.addEventListener('pointercancel', up);
+  cv.addEventListener('lostpointercapture', up);
+  document.addEventListener('contextmenu', e => e.preventDefault());
+  document.addEventListener('touchmove', e => e.preventDefault(), { passive: false });
+
+  // ---------- words ----------
+  let lineTimer = null, lineUntil = Infinity, lineVisible = false;
+  function say(text, hold) {
+    const delay = lineVisible ? 2300 : 0;
+    lineEl.style.opacity = 0;
+    clearTimeout(lineTimer);
+    const show = () => { lineEl.textContent = text; lineEl.style.opacity = 1; };
+    if (SIM) show(); else lineTimer = setTimeout(show, delay);
+    lineVisible = true;
+    lineUntil = hold ? T + delay / 1000 + hold : Infinity;
+  }
+  const script = [
+    { at: 6.5,  text: '天还没黑透，\n月亮从海面上出来了，是圆的。', hold: 8.5 },
+    { at: 17,   text: '同一个晚上，本来有很多流星。', hold: 6.5 },
+    { at: 27,   text: '月光太亮了，几乎没人看见。', hold: 7 },
+  ];
+  let si = 0, hintDone = false, stage = 0, stageAt = 0, coverHeld = 0;
+  function onSeen() {
+    if (stage === 0 && seen >= 3 && cover > 0.5) stage = 1;
+  }
+  function words(dt) {
+    if (si < script.length && T >= script[si].at) { say(script[si].text, script[si].hold); si++; }
+    if (lineVisible && T > lineUntil) { lineEl.style.opacity = 0; lineVisible = false; }
+    coverHeld = covering ? coverHeld + dt : Math.max(0, coverHeld - dt * 0.25);
+    if (coverHeld > 1.2) hintDone = true;
+    hintEl.style.opacity = (!hintDone && T > 37 && !covering) ? 1 : 0;
+    if (stage === 1) { say('一颗都没少。', 6); stage = 2; stageAt = T; }
+    else if (stage === 2 && T - stageAt > 11) { say('那时立秋刚过，\n还热着，没人觉得秋天已经到了。', 8.5); stage = 3; stageAt = T; }
+    else if (stage === 3 && T - stageAt > 14) { say('你是那天晚上来的。', 0); stage = 4; }
+  }
+
+  // ---------- loop ----------
+  function frame(now) {
+    const dt = Math.min(0.05, (now - last) / 1000); last = now;
+    T = (now - t0) / 1000;
+    const target = covering ? 1 : 0;
+    cover += (target - cover) * (1 - Math.exp(-dt * (covering ? 3.2 : 2.2)));
+    const p = smooth(0, 75, T);
+    const m = moonState();
+
+    if (T > nextMeteor) {
+      spawnMeteor();
+      nextMeteor = T + 1.1 + rnd() * 2.6;
+    }
+
+    drawSky(p, m);
+    drawStars(p, m);
+    drawMeteors(dt, p);
+    drawMoon(m);
+    drawIslands(p);
+    drawSea(p, m);
+    words(dt);
+    if (!SIM) requestAnimationFrame(frame);
+  }
+  const SIM = Q.has('sim');
+  if (SIM) {
+    lineEl.style.transition = 'none'; hintEl.style.transition = 'none';
+    const end = parseFloat(Q.get('sim'));
+    for (let k = 1; k <= end * 60; k++) {
+      if (Q.has('cover') && k / 60 > parseFloat(Q.get('cover'))) covering = true;
+      frame(t0 + k * 1000 / 60);
+    }
+  } else requestAnimationFrame(frame);
+})();
+</script>
+</body>
+</html>

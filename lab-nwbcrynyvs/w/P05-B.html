@@ -1,0 +1,714 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
+<title>一张明信片</title>
+<style>
+  :root{
+    --W: 360px; --H: 540px;
+    --paper: #f4ede0;
+    --ink: #24365a;
+    --hand: "Kaiti SC","STKaiti","KaiTi","楷体","LXGW WenKai","Songti SC","STSong","Noto Serif CJK SC","Source Han Serif SC",serif;
+  }
+  *{box-sizing:border-box;margin:0;padding:0}
+  html,body{height:100%;overflow:hidden}
+  body{
+    background:
+      radial-gradient(120% 80% at 50% 38%, #3a332d 0%, #26211d 55%, #181512 100%);
+    color:#fff;
+    font-family: -apple-system, "PingFang SC", "Helvetica Neue", "Microsoft YaHei", sans-serif;
+    touch-action:none;
+    -webkit-user-select:none; user-select:none;
+    -webkit-tap-highlight-color: transparent;
+  }
+  #stage{
+    position:fixed; inset:0;
+    display:flex; flex-direction:column; align-items:center; justify-content:center;
+    perspective: 1400px;
+  }
+  #card{
+    position:relative; width:var(--W); height:var(--H);
+    transform-style:preserve-3d; -webkit-transform-style:preserve-3d;
+    transition: transform 1.05s cubic-bezier(.45,.05,.25,1);
+    cursor:pointer;
+  }
+  #card.flipped{ transform: rotateY(180deg); }
+  #card.jolt{ animation: jolt .32s ease-out; }
+  #card.flipped.jolt{ animation: joltF .32s ease-out; }
+  @keyframes jolt{ 0%{transform:translateY(0)} 30%{transform:translateY(3px) scale(.995)} 100%{transform:translateY(0)} }
+  @keyframes joltF{ 0%{transform:rotateY(180deg)} 30%{transform:rotateY(180deg) translateY(3px) scale(.995)} 100%{transform:rotateY(180deg)} }
+
+  .face{
+    position:absolute; inset:0;
+    backface-visibility:hidden; -webkit-backface-visibility:hidden;
+    border-radius: 6px;
+    box-shadow: 0 18px 40px rgba(0,0,0,.45), 0 2px 6px rgba(0,0,0,.35);
+  }
+  .front{
+    background: var(--paper);
+    padding: calc(var(--W) * .03);
+    overflow:hidden;
+  }
+  .front canvas{ width:100%; height:100%; display:block; border-radius:2px; }
+
+  .back{
+    transform: rotateY(180deg);
+    background-color: var(--paper);
+    background-image:
+      url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='160' height='160'><filter id='n'><feTurbulence type='fractalNoise' baseFrequency='.85' numOctaves='3' stitchTiles='stitch'/><feColorMatrix values='0 0 0 0 .45  0 0 0 0 .38  0 0 0 0 .28  0 0 0 .09 0'/></filter><rect width='100%' height='100%' filter='url(%23n)'/></svg>"),
+      radial-gradient(140% 100% at 50% 40%, rgba(255,255,255,.35), rgba(160,130,90,.12));
+    padding: calc(var(--W) * .065) calc(var(--W) * .065) calc(var(--W) * .055);
+    display:flex; flex-direction:column;
+    color: var(--ink);
+  }
+  .head{ display:flex; justify-content:space-between; align-items:flex-start; flex:0 0 auto; }
+  .label{
+    font-size: calc(var(--W) * .03);
+    letter-spacing: .6em; color: rgba(60,70,90,.55);
+    padding-top: .3em;
+  }
+  .stamp{ position:relative; width: calc(var(--W) * .17); height: calc(var(--W) * .205); flex:0 0 auto; transform: rotate(2.5deg); }
+  .stamp svg{ width:100%; height:100%; display:block; filter: drop-shadow(0 1px 1px rgba(80,60,30,.25)); }
+  .postmark{
+    position:absolute; left: -62%; top: 18%;
+    width: 150%; height:auto; pointer-events:none;
+    opacity:0; transform: scale(1.5) rotate(-14deg);
+    mix-blend-mode: multiply;
+  }
+  .postmark.on{ animation: thump .38s cubic-bezier(.2,.9,.3,1.2) forwards; }
+  @keyframes thump{ 0%{opacity:0; transform:scale(1.5) rotate(-14deg)} 60%{opacity:.85; transform:scale(.97) rotate(-11deg)} 100%{opacity:.78; transform:scale(1) rotate(-11deg)} }
+
+  .msg{
+    flex: 1 1 0; min-height:0; position:relative; margin-top: .5em; overflow:visible;
+    font-family: var(--hand);
+    font-size: 16px; line-height: var(--lh, 30px);
+    background-image: repeating-linear-gradient(to bottom,
+      transparent 0, transparent calc(var(--lh, 30px) - 1px),
+      rgba(70,90,130,.16) calc(var(--lh, 30px) - 1px), rgba(70,90,130,.16) var(--lh, 30px));
+  }
+  .ln{ display:block; }
+  .c{
+    display:inline-block; position:relative;
+    opacity:0;
+    transform: translateY(var(--dy,0px)) rotate(var(--r,0deg));
+    will-change: transform, opacity;
+  }
+  .c.sp{ width:.55em; }
+  .c.on{ opacity:1; transition: opacity .3s ease-out; }
+  .c.gone{ visibility:hidden; }
+
+  .foot{ flex:0 0 auto; font-family: var(--hand); padding-top: .6em; }
+  .to{ display:flex; align-items:baseline; gap:.8em; border-bottom:1px solid rgba(70,90,130,.25); padding-bottom:.25em; }
+  .to .k{ font-family: -apple-system,"PingFang SC",sans-serif; font-size: calc(var(--W)*.03); color: rgba(60,70,90,.5); letter-spacing:.3em; }
+  .to .v{ font-size: calc(var(--W)*.046); transform: rotate(-1deg); display:inline-block; }
+  .sign{ display:flex; justify-content:flex-end; margin-top: 1.1em; }
+  .sign span{ display:block; width: 38%; border-bottom:1px solid rgba(70,90,130,.25); height:1.2em; }
+
+  #hint{
+    margin-top: 22px; min-height: 1.4em;
+    font-size: 13px; letter-spacing: .25em; color: rgba(255,255,255,.55);
+    transition: opacity .6s; opacity:0; text-align:center;
+    pointer-events:none;
+  }
+  #hint.on{ opacity:1; }
+  #hint.pulse{ animation: pulse 2.4s ease-in-out infinite; }
+  @keyframes pulse{ 0%,100%{opacity:.25} 50%{opacity:.7} }
+  #again{
+    position:fixed; right:16px; bottom: calc(14px + env(safe-area-inset-bottom));
+    font-size:12px; letter-spacing:.2em; color: rgba(255,255,255,.32);
+    background:none; border:none; padding:10px; cursor:pointer;
+    opacity:0; pointer-events:none; transition: opacity .8s;
+    font-family: inherit;
+  }
+  #again.on{ opacity:1; pointer-events:auto; }
+</style>
+</head>
+<body>
+<div id="stage">
+  <div id="card">
+    <div class="face front"><canvas id="sky"></canvas></div>
+    <div class="face back">
+      <div class="head">
+        <div class="label">明信片</div>
+        <div class="stamp">
+          <svg viewBox="0 0 60 72" aria-hidden="true">
+            <defs>
+              <clipPath id="inner"><rect x="6" y="6" width="48" height="60" rx="1"/></clipPath>
+              <linearGradient id="sk" x1="0" y1="0" x2="0" y2="1">
+                <stop offset="0" stop-color="#7fa7d6"/><stop offset=".7" stop-color="#cfdbe6"/><stop offset="1" stop-color="#efe3cf"/>
+              </linearGradient>
+              <radialGradient id="meat" cx=".4" cy=".35" r=".7">
+                <stop offset="0" stop-color="#b8683a"/><stop offset=".55" stop-color="#7c3a1d"/><stop offset="1" stop-color="#4f2210"/>
+              </radialGradient>
+            </defs>
+            <rect x="0" y="0" width="60" height="72" fill="#fbf8f1"/>
+            <g fill="#f4ede0">
+              <!-- 齿孔 -->
+              <circle cx="0" cy="4" r="2.2"/><circle cx="0" cy="12" r="2.2"/><circle cx="0" cy="20" r="2.2"/><circle cx="0" cy="28" r="2.2"/><circle cx="0" cy="36" r="2.2"/><circle cx="0" cy="44" r="2.2"/><circle cx="0" cy="52" r="2.2"/><circle cx="0" cy="60" r="2.2"/><circle cx="0" cy="68" r="2.2"/>
+              <circle cx="60" cy="4" r="2.2"/><circle cx="60" cy="12" r="2.2"/><circle cx="60" cy="20" r="2.2"/><circle cx="60" cy="28" r="2.2"/><circle cx="60" cy="36" r="2.2"/><circle cx="60" cy="44" r="2.2"/><circle cx="60" cy="52" r="2.2"/><circle cx="60" cy="60" r="2.2"/><circle cx="60" cy="68" r="2.2"/>
+              <circle cx="6" cy="0" r="2.2"/><circle cx="14" cy="0" r="2.2"/><circle cx="22" cy="0" r="2.2"/><circle cx="30" cy="0" r="2.2"/><circle cx="38" cy="0" r="2.2"/><circle cx="46" cy="0" r="2.2"/><circle cx="54" cy="0" r="2.2"/>
+              <circle cx="6" cy="72" r="2.2"/><circle cx="14" cy="72" r="2.2"/><circle cx="22" cy="72" r="2.2"/><circle cx="30" cy="72" r="2.2"/><circle cx="38" cy="72" r="2.2"/><circle cx="46" cy="72" r="2.2"/><circle cx="54" cy="72" r="2.2"/>
+            </g>
+            <g clip-path="url(#inner)">
+              <rect x="6" y="6" width="48" height="60" fill="url(#sk)"/>
+              <!-- 热气 -->
+              <g fill="none" stroke="#fff" stroke-width="1.6" stroke-linecap="round" opacity=".9">
+                <path d="M24 34 C21 29, 27 26, 24 21 S 26 14, 24 11"/>
+                <path d="M31 33 C28 28, 34 25, 31 20 S 33 13, 31 9"/>
+                <path d="M38 34 C35 29, 41 26, 38 21"/>
+              </g>
+              <!-- 桌面 -->
+              <rect x="6" y="58" width="48" height="8" fill="#c99a62"/>
+              <!-- 米饭 -->
+              <ellipse cx="30" cy="45" rx="17" ry="7.5" fill="#fffdf6"/>
+              <!-- 肉 -->
+              <ellipse cx="31" cy="41.5" rx="10.5" ry="6.2" fill="url(#meat)"/>
+              <ellipse cx="28" cy="39.4" rx="4" ry="1.4" fill="#e7a874" opacity=".7"/>
+              <path d="M21 44.5 q 4 3 9 2 t 11 -1" fill="none" stroke="#6b3014" stroke-width="1.6" opacity=".55"/>
+              <!-- 青菜 -->
+              <path d="M16 44 q 3 -4 7 -1 q -3 3 -7 1z" fill="#6f9a52"/>
+              <path d="M40 45 q 3 -5 7 -2 q -3 4 -7 2z" fill="#7aa85a"/>
+              <!-- 碗 -->
+              <path d="M11 45 Q 12 58 30 59 Q 48 58 49 45 Z" fill="#f7f4ee"/>
+              <path d="M11 45 Q 30 48.5 49 45" fill="none" stroke="#2f5a9a" stroke-width="1.6"/>
+              <path d="M15 51 Q 30 54.5 45 51" fill="none" stroke="#2f5a9a" stroke-width=".9" opacity=".75"/>
+              <rect x="24" y="58" width="12" height="2.4" rx="1" fill="#d8d2c6"/>
+            </g>
+            <rect x="6" y="6" width="48" height="60" fill="none" stroke="rgba(0,0,0,.08)" stroke-width=".6"/>
+          </svg>
+          <svg class="postmark" viewBox="0 0 120 70" aria-hidden="true">
+            <g fill="none" stroke="#2c3550" stroke-width="1.6">
+              <circle cx="40" cy="35" r="27"/>
+              <circle cx="40" cy="35" r="20" stroke-width="1"/>
+              <path d="M70 22 q 6 -4 12 0 t 12 0 t 12 0 t 12 0" />
+              <path d="M70 31 q 6 -4 12 0 t 12 0 t 12 0 t 12 0" />
+              <path d="M70 40 q 6 -4 12 0 t 12 0 t 12 0 t 12 0" />
+              <path d="M70 49 q 6 -4 12 0 t 12 0 t 12 0 t 12 0" />
+            </g>
+            <text x="40" y="40.5" text-anchor="middle" font-size="14" fill="#2c3550" font-family="Songti SC, STSong, serif" letter-spacing="2">途中</text>
+          </svg>
+        </div>
+      </div>
+      <div class="msg" id="msg"></div>
+      <div class="foot">
+        <div class="to"><span class="k">寄给</span><span class="v">回去以后的自己</span></div>
+        <div class="sign"><span></span></div>
+      </div>
+    </div>
+  </div>
+  <div id="hint">轻点 翻面</div>
+</div>
+<button id="again">再写一张</button>
+
+<script>
+(() => {
+"use strict";
+
+/* ───────── 文字：[ ] 里的是风吹不走的 ───────── */
+const LINES = [
+  "[到了] 开了一整天 路直得像尺子画的",
+  "[天很大] 大到不知道先看哪边 看着看着鼻子有点酸",
+  "风一直没停 [头发乱了] 想理一下 后来[算了]",
+  "路上想起好些人 有的一直都在 有的走着走着就在哪个路口拐了 也没谁做错什么",
+  "有些事急不来 那就[慢慢来] 反正我等得起",
+  "[回去先吃碗热乎的] 肉炖得烂烂的 汁浇满 再换上最松的那条裤子 瘫着",
+  "本来想写好多 写不下了 [剩下的看正面]"
+];
+
+/* ───────── 小工具 ───────── */
+function mulberry(a){ return function(){ a|=0; a=a+0x6D2B79F5|0; let t=Math.imul(a^a>>>15,1|a); t=t+Math.imul(t^t>>>7,61|t)^t; return ((t^t>>>14)>>>0)/4294967296; }; }
+let R = mulberry(20240611);
+const rr = (a,b)=> a + (b-a)*R();
+function gauss(){ let u=0,v=0; while(!u)u=R(); while(!v)v=R(); return Math.sqrt(-2*Math.log(u))*Math.cos(2*Math.PI*v); }
+const clamp=(x,a,b)=>Math.max(a,Math.min(b,x));
+const $ = s=>document.querySelector(s);
+
+const card=$("#card"), msg=$("#msg"), hint=$("#hint"), again=$("#again"), sky=$("#sky");
+const postmark = document.querySelector(".postmark");
+
+/* ───────── 尺寸 ───────── */
+let W=360,H=540;
+function layout(){
+  const vw=window.innerWidth, vh=window.innerHeight;
+  W = Math.min(vw*0.9, 430);
+  H = W*1.5;
+  const maxH = vh - 90;
+  if(H>maxH){ H=maxH; W=H/1.5; }
+  document.documentElement.style.setProperty("--W", W+"px");
+  document.documentElement.style.setProperty("--H", H+"px");
+}
+
+/* ───────── 背面：逐字 ───────── */
+const chars=[];      // {el, kept, ln, blown, fly, wob, wv, base}
+const fragments=[];  // 被吹走的短句，最后漂在天上
+function buildText(){
+  msg.innerHTML="";
+  chars.length=0; fragments.length=0;
+  LINES.forEach((line,li)=>{
+    const ln=document.createElement("span"); ln.className="ln";
+    let kept=false, run="";
+    const flush=()=>{ run.split(" ").forEach(p=>{ p=p.trim(); if(p) fragments.push(p); }); run=""; };
+    for(const ch of line){
+      if(ch==="["){ kept=true; flush(); continue; }
+      if(ch==="]"){ kept=false; continue; }
+      if(!kept) run+=ch;
+      const el=document.createElement("span");
+      el.className="c"+(ch===" "?" sp":"");
+      el.textContent = ch===" " ? " " : ch;
+      const r = rr(-3.2,3.2), dy = rr(-1.3,1.3);
+      el.style.setProperty("--r", r.toFixed(2)+"deg");
+      el.style.setProperty("--dy", dy.toFixed(2)+"px");
+      const shade = rr(0,1);
+      el.style.color = `rgb(${(34+shade*14)|0},${(52+shade*12)|0},${(88+shade*14)|0})`;
+      ln.appendChild(el);
+      chars.push({el, ch, kept: kept && ch!==" ", sp: ch===" ", ln:li, blown:false, fly:null, wob:0, wv:0, r, dy, cx:0, cy:0, col: el.style.color});
+    }
+    flush();
+    msg.appendChild(ln);
+  });
+}
+function fitText(){
+  let fs = W*0.052;
+  const apply=()=>{ msg.style.fontSize=fs+"px"; msg.style.setProperty("--lh", (fs*1.9).toFixed(2)+"px"); };
+  apply();
+  let guard=60;
+  while(msg.scrollHeight > msg.clientHeight+1 && fs>10 && guard--){ fs-=0.4; apply(); }
+}
+
+/* ───────── 正面：水彩天空 ───────── */
+let skyCtx, SW, SH, DPR, baseLayer, cloudLayer, landLayer, grainPat, horizon;
+function poly(cx,cy,rx,ry,n){ const p=[]; for(let i=0;i<n;i++){ const a=i/n*Math.PI*2; p.push([cx+Math.cos(a)*rx, cy+Math.sin(a)*ry, rr(.6,1.4)]); } return p; }
+function deform(pts,depth,vari){
+  for(let d=0; d<depth; d++){
+    const out=[];
+    for(let i=0;i<pts.length;i++){
+      const a=pts[i], b=pts[(i+1)%pts.length];
+      out.push(a);
+      const len=Math.hypot(b[0]-a[0],b[1]-a[1]);
+      const ang=R()*Math.PI*2, m=gauss()*len*vari*a[2]*0.5;
+      out.push([(a[0]+b[0])/2+Math.cos(ang)*m, (a[1]+b[1])/2+Math.sin(ang)*m, (a[2]+b[2])/2*rr(.8,1.2)]);
+    }
+    pts=out;
+  }
+  return pts;
+}
+function fillPoly(ctx,p){ ctx.beginPath(); ctx.moveTo(p[0][0],p[0][1]); for(let i=1;i<p.length;i++) ctx.lineTo(p[i][0],p[i][1]); ctx.closePath(); ctx.fill(); }
+function wash(ctx, base, color, layers, alpha, vari=.55){
+  ctx.fillStyle=color; ctx.globalAlpha=alpha;
+  for(let i=0;i<layers;i++) fillPoly(ctx, deform(base,2,vari));
+  ctx.globalAlpha=1;
+}
+function mk(w,h){ const c=document.createElement("canvas"); c.width=w; c.height=h; return c; }
+
+function paintSky(){
+  R = mulberry(77031);
+  DPR = Math.min(window.devicePixelRatio||1, 2);
+  const rect = sky.getBoundingClientRect();
+  const cw = (W - 2*W*.03), ch = (H - 2*W*.03);
+  SW = Math.round(cw*DPR); SH = Math.round(ch*DPR);
+  sky.width=SW; sky.height=SH;
+  skyCtx = sky.getContext("2d");
+  horizon = SH*0.775;
+
+  /* 底色 */
+  baseLayer = mk(SW,SH); let c=baseLayer.getContext("2d");
+  const g=c.createLinearGradient(0,0,0,horizon);
+  g.addColorStop(0,"#3f78c2"); g.addColorStop(.38,"#6d9bd6"); g.addColorStop(.72,"#a9c6e6"); g.addColorStop(1,"#e8e6e0");
+  c.fillStyle=g; c.fillRect(0,0,SW,SH);
+  for(let i=0;i<9;i++){ const b=deform(poly(rr(0,SW),rr(0,horizon*.7),rr(SW*.2,SW*.45),rr(SH*.06,SH*.14),10),3,.6); wash(c,b,R()<.5?"#3a6fb8":"#5a90d4",8,.022); }
+  for(let i=0;i<6;i++){ const b=deform(poly(rr(0,SW),rr(horizon*.6,horizon),rr(SW*.25,SW*.5),rr(SH*.04,SH*.08),10),3,.6); wash(c,b,R()<.5?"#f3d9c4":"#d9cfe8",8,.04); }
+
+  /* 云：可以无缝平移的一条长画布 */
+  const CW = SW*2;
+  cloudLayer = mk(CW, Math.round(horizon)); c=cloudLayer.getContext("2d");
+  const clouds = [];
+  const nC = 9;
+  for(let i=0;i<nC;i++){
+    const y = (i%3===0) ? rr(horizon*.08,horizon*.3) : rr(horizon*.28, horizon*.86);
+    const s = (y/horizon)*0.7+0.45;  // 越低越扁越小，有一点透视
+    clouds.push({x: i/nC*CW + rr(-CW*.03,CW*.03), y, s});
+  }
+  for(const cl of clouds){
+    const parts=[], n=Math.round(rr(5,9));
+    const width = SW*rr(.28,.5)*cl.s, hgt = SH*rr(.035,.06)*cl.s;
+    for(let k=0;k<n;k++){
+      const px = cl.x + (k/(n-1)-.5)*width + rr(-8,8)*DPR;
+      const mid = 1-Math.abs(k/(n-1)-.5)*2;
+      parts.push({px, py: cl.y - mid*hgt*rr(.6,1.2), rx: width*rr(.13,.22), ry: hgt*rr(.7,1.15)});
+    }
+    for(const off of [0,-CW,CW]){
+      if(cl.x+off < -SW*.6 || cl.x+off > CW+SW*.6) continue;
+      for(const p of parts){ const b=deform(poly(p.px+off,p.py+p.ry*.55,p.rx*1.05,p.ry*.8,10),3,.5); wash(c,b,"#a99bd0",6,.05); }
+      for(const p of parts){ const b=deform(poly(p.px+off,p.py+p.ry*.3,p.rx,p.ry*.85,10),3,.5); wash(c,b,"#f3cfb6",5,.05); }
+      for(const p of parts){ const b=deform(poly(p.px+off,p.py-p.ry*.08,p.rx*.95,p.ry,10),3,.5); wash(c,b,"#ffffff",12,.07); }
+      c.globalCompositeOperation="source-over";
+    }
+  }
+  cloudLayer.CW = CW;
+
+  /* 地：远山、雪、土地、一条直路 */
+  landLayer = mk(SW,SH); c=landLayer.getContext("2d");
+  const hz = horizon;
+  // 雪山脊：控制点之间做中点位移，得到不规则的山脊
+  const peaks=[[0,.025],[.1,.045],[.22,.032],[.34,.07],[.45,.095],[.53,.08],[.62,.058],[.75,.085],[.86,.05],[1,.068]];
+  let ridgePts = peaks.map(([x,h])=>[x*SW, hz-h*SH]);
+  for(let d=0; d<5; d++){
+    const out=[];
+    for(let i=0;i<ridgePts.length-1;i++){
+      const a=ridgePts[i], b=ridgePts[i+1];
+      out.push(a);
+      const len=b[0]-a[0];
+      out.push([(a[0]+b[0])/2 + rr(-.08,.08)*len, (a[1]+b[1])/2 + gauss()*len*.12]);
+    }
+    out.push(ridgePts[ridgePts.length-1]);
+    ridgePts=out;
+  }
+  const rb = ridgePts.concat([[SW,hz+SH*.02],[0,hz+SH*.02]]).map(p=>[p[0],p[1],.3]);
+  wash(c, rb, "#f4f7fb", 1, .95, 0);
+  wash(c, rb, "#ffffff", 6, .08, .02);
+  // 山体阴影：顺着每个峰的右坡往下，淡淡的蓝灰
+  for(let i=1;i<peaks.length-1;i++){
+    const [x,h]=peaks[i];
+    const px=x*SW, py=hz-h*SH;
+    for(let k=0;k<3;k++){
+      const sh=[[px,py,1],[px+SW*rr(.03,.06),py+SH*h*rr(.35,.6),1],[px+SW*rr(.06,.1),hz+SH*.005,1],[px+SW*rr(-.005,.02),hz+SH*.005,1],[px+SW*rr(-.01,.01),py+SH*h*.5,1]];
+      wash(c, deform(sh,3,.35), k? "#b7c3d6":"#8e9fbb", 6, .045, .35);
+    }
+  }
+  // 雪线下露出的岩石
+  for(let i=0;i<14;i++){
+    const x=rr(.05,.95)*SW, y=hz-rr(.0,.02)*SH;
+    const b=deform(poly(x,y,rr(.02,.05)*SW,rr(.003,.008)*SH,6),3,.6);
+    wash(c,b,"#7d7672",4,.03);
+  }
+  // 深色山脚
+  const foot=[[0,hz+SH*.005,1]];
+  for(let i=0;i<=12;i++) foot.push([i/12*SW, hz - rr(0,.012)*SH,1]);
+  foot.push([SW,hz+SH*.03,1],[0,hz+SH*.03,1]);
+  wash(c, deform(foot,2,.05), "#5a4a42", 10, .09, .05);
+  // 左侧一座暗褐色的坡
+  const hill=[[-SW*.05,hz+SH*.03,1],[-SW*.02,hz-SH*.075,1],[SW*.06,hz-SH*.06,1],[SW*.2,hz-SH*.015,1],[SW*.3,hz+SH*.03,1]];
+  wash(c, deform(hill,2,.12), "#4c3a32", 12, .085, .1);
+  // 冰湖一条
+  const lake=[[SW*.32,hz+SH*.012,1],[SW*.7,hz+SH*.008,1],[SW*.72,hz+SH*.02,1],[SW*.3,hz+SH*.022,1]];
+  wash(c, deform(lake,2,.04), "#9cc7dd", 8, .12, .04);
+  // 土地
+  const ground=[[0,hz+SH*.02,1],[SW,hz+SH*.018,1],[SW,SH,1],[0,SH,1]];
+  const gg=c.createLinearGradient(0,hz,0,SH);
+  gg.addColorStop(0,"#9a7553"); gg.addColorStop(.5,"#b08154"); gg.addColorStop(1,"#7c5a3e");
+  c.fillStyle=gg; c.globalAlpha=.85; fillPoly(c,ground); c.globalAlpha=1;
+  for(let i=0;i<10;i++){ const b=deform(poly(rr(0,SW),rr(hz+SH*.04,SH),rr(SW*.1,SW*.3),rr(SH*.01,SH*.04),8),3,.5); wash(c,b,R()<.5?"#c99a5f":"#6e5038",6,.05); }
+  // 路
+  const vx=SW*.555, vy=hz+SH*.022;
+  const road=[[vx-SW*.006,vy,1],[vx+SW*.006,vy,1],[SW*.86,SH,1],[SW*.16,SH,1]];
+  wash(c, deform(road,1,.01), "#4d5258", 10, .1, .01);
+  c.strokeStyle="rgba(255,255,255,.75)"; c.lineWidth=1.1*DPR;
+  c.beginPath(); c.moveTo(vx-SW*.004,vy); c.lineTo(SW*.2,SH); c.moveTo(vx+SW*.004,vy); c.lineTo(SW*.82,SH); c.stroke();
+  // 前面远远的一辆车
+  c.fillStyle="rgba(255,255,255,.95)";
+  const carY = vy + SH*.016, carX = vx + SW*.004;
+  c.beginPath(); c.ellipse(carX, carY, 2.4*DPR, 1.6*DPR, 0, 0, Math.PI*2); c.fill();
+  // 护栏短桩
+  c.fillStyle="#e2c24a";
+  for(let i=0;i<6;i++){ const t=.15+i*.15; const x=vx+(SW*.13-vx)*t, y=vy+(SH-vy)*t; c.fillRect(x-1*DPR*t*2, y-6*DPR*t*2, 1.6*DPR*t*2, 6*DPR*t*2); }
+  for(let i=0;i<6;i++){ const t=.15+i*.15; const x=vx+(SW*.89-vx)*t, y=vy+(SH-vy)*t; c.fillRect(x-1*DPR*t*2, y-6*DPR*t*2, 1.6*DPR*t*2, 6*DPR*t*2); }
+
+  /* 纸纹 */
+  const gc = mk(128,128), gx=gc.getContext("2d"), id=gx.createImageData(128,128);
+  for(let i=0;i<id.data.length;i+=4){ const v=R()*255|0; id.data[i]=id.data[i+1]=id.data[i+2]=v; id.data[i+3]=R()*22|0; }
+  gx.putImageData(id,0,0);
+  grainPat = skyCtx.createPattern(gc,"repeat");
+}
+
+/* 漂在天上的字 */
+let floaters=[], floatStart=0, windSign=1;
+function setupFloaters(){
+  floaters = [];
+  const L = 7;
+  const order = fragments.map((f,i)=>i).sort(()=>R()-.5);
+  const fam = getComputedStyle(document.documentElement).getPropertyValue("--hand");
+  const lanes = Array.from({length:L},(_,i)=>({
+    y: horizon*(.1 + .74*(i+.5)/L),
+    v: rr(6,12)*DPR*(R()<.5?1:.8),
+    off: 0, items: [], span: 0
+  }));
+  order.forEach((fi,k)=>{
+    const lane = lanes[k%L];
+    const size = rr(12,15.5)*DPR*(W/360);
+    skyCtx.font = `${size}px ${fam}`;
+    lane.items.push({ t: fragments[fi], size, font: `${size}px ${fam}`, w: skyCtx.measureText(fragments[fi]).width,
+      a: rr(.65,.92), ph: R()*6.28, dy: rr(-5,5)*DPR, delay: k*.45 });
+  });
+  for(const ln of lanes){
+    let pos = rr(0, SW*.6);
+    let maxW = 0;
+    for(const it of ln.items){ it.pos = pos; pos += it.w + SW*rr(.45,.75); maxW=Math.max(maxW,it.w); }
+    ln.pad = maxW + 10*DPR;
+    ln.span = Math.max(pos, SW + ln.pad*2);
+    floaters.push(ln);
+  }
+}
+
+let cloudOff=0, lastT=0;
+function drawSky(now){
+  if(!skyCtx) return;
+  const dt = lastT? Math.min(64, now-lastT) : 16; lastT=now;
+  const c=skyCtx;
+  c.globalAlpha=1; c.globalCompositeOperation="source-over";
+  c.drawImage(baseLayer,0,0);
+  cloudOff = (cloudOff + dt*0.006*DPR) % cloudLayer.CW;
+  c.drawImage(cloudLayer, -cloudOff, 0);
+  c.drawImage(cloudLayer, -cloudOff + cloudLayer.CW, 0);
+  if(floaters.length){
+    const t = (now - floatStart)/1000;
+    c.save();
+    c.textBaseline="middle";
+    c.shadowColor = "rgba(30,60,110,.45)"; c.shadowBlur = 6*DPR;
+    c.fillStyle = "#fffdf8";
+    for(const ln of floaters){
+      ln.off += windSign * ln.v * dt/1000;
+      for(const f of ln.items){
+        const vis = clamp((t - f.delay)/2.4, 0, 1);
+        if(vis<=0) continue;
+        const p = (((f.pos + ln.off) % ln.span) + ln.span) % ln.span;
+        const x = p - ln.pad;
+        if(x > SW || x + f.w < 0) continue;
+        const y = ln.y + f.dy + Math.sin(t*.5 + f.ph)*3*DPR;
+        c.font = f.font;
+        c.globalAlpha = f.a*vis*(.78 + .22*Math.sin(t*.7 + f.ph));
+        c.fillText(f.t, x, y);
+      }
+    }
+    c.restore();
+  }
+  c.drawImage(landLayer,0,0);
+  c.globalCompositeOperation="multiply";
+  c.fillStyle=grainPat; c.fillRect(0,0,SW,SH);
+  c.globalCompositeOperation="source-over";
+}
+
+/* ───────── 流程 ───────── */
+let phase="front0", flipped=false, writeTimer=null, writeIdx=0;
+let lastWindAt=0, windStarted=false, everSwiped=false, demoDone=false;
+let flying=[];
+
+function showHint(text, pulse=false){
+  hint.textContent=text; hint.classList.add("on"); hint.classList.toggle("pulse", pulse);
+}
+function hideHint(){ hint.classList.remove("on","pulse"); }
+
+function flip(to){
+  flipped = to===undefined ? !flipped : to;
+  card.classList.toggle("flipped", flipped);
+}
+
+function startWriting(){
+  phase="writing"; writeIdx=0;
+  const step=()=>{
+    if(phase!=="writing") return;
+    if(writeIdx>=chars.length){ endWriting(); return; }
+    const ch=chars[writeIdx++];
+    ch.el.classList.add("on");
+    let d = ch.sp ? rr(110,170) : rr(32,62);
+    const next = chars[writeIdx];
+    if(next && next.ln!==ch.ln) d += 380;
+    writeTimer=setTimeout(step,d);
+  };
+  writeTimer=setTimeout(step, 450);
+}
+function endWriting(){
+  clearTimeout(writeTimer);
+  chars.forEach(c=>c.el.classList.add("on"));
+  phase="pause";
+  setTimeout(()=>{
+    phase="wind"; measure(); lastWindAt=performance.now();
+    showHint("划一下 起风了", true);
+  }, 900);
+}
+function measure(){
+  for(const c of chars){
+    if(c.blown) continue;
+    const r=c.el.getBoundingClientRect();
+    c.cx=r.left+r.width/2; c.cy=r.top+r.height/2;
+  }
+}
+function segDist(px,py,ax,ay,bx,by){
+  const dx=bx-ax, dy=by-ay, l2=dx*dx+dy*dy;
+  let t = l2? ((px-ax)*dx+(py-ay)*dy)/l2 : 0; t=clamp(t,0,1);
+  return Math.hypot(px-(ax+dx*t), py-(ay+dy*t));
+}
+function launch(c, dx, dy, sp){
+  c.blown=true;
+  sp = clamp(sp, .3, 2.6);
+  c.fly = {
+    x:0, y:0,
+    vx: dx*sp*rr(.35,.6) + rr(-.04,.04),
+    vy: dy*sp*rr(.25,.45) - rr(.03,.09),
+    vr: rr(-.35,.35)*(sp+.4),
+    rot:0, life:1, decay: 1/rr(1300,2100), ph: R()*6.28, sc:0
+  };
+  flying.push(c);
+}
+function windAt(x0,y0,x1,y1,dt){
+  const dx=x1-x0, dy=y1-y0, dist=Math.hypot(dx,dy);
+  if(dist<2) return;
+  const sp = dist/Math.max(dt,8);
+  if(sp<.22) return;
+  const ux=dx/dist, uy=dy/dist;
+  const rad = clamp(24+sp*16, 24, 64)*(W/360);
+  everSwiped=true; lastWindAt=performance.now();
+  windSign = ux>=0 ? 1 : -1;
+  hint.classList.remove("pulse"); hideHint();
+  for(const c of chars){
+    if(c.blown) continue;
+    const d=segDist(c.cx,c.cy,x0,y0,x1,y1);
+    if(d>rad) continue;
+    if(c.kept){ c.wv += (ux>=0?1:-1)*clamp(sp,0,2)*1.4*(1-d/rad); continue; }
+    if(R()<.88) launch(c, ux, uy, sp*(1-d/rad*.5));
+  }
+}
+function gust(list, dir=1, spread=900){
+  list.forEach((c,i)=>{
+    const delay = (c.cx - (dir>0?0:window.innerWidth))*dir / window.innerWidth * spread + rr(0,180);
+    setTimeout(()=>{ if(!c.blown) launch(c, dir, rr(-.25,.1), rr(.9,1.5)); }, Math.max(0,delay));
+  });
+  // 吹过留下来的字也晃一下
+  chars.forEach(c=>{ if(c.kept) setTimeout(()=>{ c.wv += dir*rr(.8,1.6); }, Math.max(0,(c.cx*dir)/window.innerWidth*spread)); });
+}
+function remaining(){ return chars.filter(c=>!c.kept && !c.sp && !c.blown); }
+function unkeptTotal(){ return chars.filter(c=>!c.kept && !c.sp).length; }
+
+function finale(){
+  phase="done";
+  chars.forEach(c=>{ if(c.sp && !c.blown){ c.blown=true; c.el.classList.add("gone"); } });
+  setTimeout(()=>{
+    postmark.classList.add("on");
+    setTimeout(()=>{ card.classList.add("jolt"); setTimeout(()=>card.classList.remove("jolt"),340); }, 140);
+  }, 900);
+  setTimeout(()=>{ showHint("轻点 翻到正面"); }, 2300);
+}
+
+function tick(now){
+  const dt = Math.min(48, now - (tick.l||now)); tick.l=now;
+  // 飞字
+  for(let i=flying.length-1;i>=0;i--){
+    const c=flying[i], f=c.fly;
+    f.vx *= (1-.0007*dt);
+    f.vy = f.vy*(1-.0007*dt) - .000035*dt;
+    f.x += f.vx*dt; f.y += f.vy*dt + Math.sin(now*.005+f.ph)*.25*dt/16;
+    f.rot += f.vr*dt;
+    f.life -= f.decay*dt;
+    const k = 1-f.life;
+    c.el.style.transform = `translate(${f.x.toFixed(1)}px,${(f.y+c.dy).toFixed(1)}px) rotate(${(c.r+f.rot).toFixed(1)}deg) scale(${(1+k*.35).toFixed(3)})`;
+    c.el.style.opacity = clamp(f.life*1.15,0,1).toFixed(3);
+    const m = clamp(k*1.6,0,1);
+    c.el.style.color = `rgb(${(36+(225-36)*m)|0},${(54+(236-54)*m)|0},${(90+(250-90)*m)|0})`;
+    if(f.life<=0){ c.el.classList.add("gone"); c.el.style.opacity=""; flying.splice(i,1); }
+  }
+  // 留下来的字晃
+  for(const c of chars){
+    if(!c.kept) continue;
+    if(Math.abs(c.wob)<.01 && Math.abs(c.wv)<.01){ if(c.wob!==0){c.wob=0; c.el.style.transform="";} continue; }
+    const s=dt/16;
+    c.wv += (-c.wob*.09 - c.wv*.12)*s;
+    c.wob = clamp(c.wob + c.wv*s, -16, 16);
+    c.el.style.transform = `translateY(${c.dy}px) rotate(${(c.r+c.wob).toFixed(2)}deg)`;
+  }
+  // 节奏
+  if(phase==="wind"){
+    const idle = now - lastWindAt;
+    const left = remaining(), total = unkeptTotal();
+    const ratio = 1 - left.length/total;
+    if(!everSwiped && !demoDone && idle>7000){
+      demoDone=true;
+      const some = left.filter(c=>c.cx > card.getBoundingClientRect().left + W*.55).slice(0,5);
+      gust(some, 1, 400);
+      lastWindAt = now;
+    }
+    if(left.length && ratio>.7 && idle>2200){ gust(left, windSign, 1000); lastWindAt=now+5000; }
+    if(everSwiped && left.length && ratio<=.7 && idle>6000 && !hint.classList.contains("on")) showHint("再划一下", true);
+    if(!left.length && !flying.length) finale();
+  }
+  if(!flipped || card.classList.contains("turning")) drawSky(now);
+  requestAnimationFrame(tick);
+}
+
+/* ───────── 交互 ───────── */
+let down=null, last=null;
+function onTap(){
+  if(phase==="front0"){
+    hideHint(); flip(true);
+    setTimeout(startWriting, 900);
+  } else if(phase==="writing"){
+    endWriting();
+  } else if(phase==="done"){
+    if(!floaters.length){ setupFloaters(); floatStart=performance.now()+700; }
+    hideHint(); flip();
+  }
+}
+window.addEventListener("pointerdown", e=>{
+  if(e.target===again) return;
+  down={x:e.clientX,y:e.clientY,t:performance.now()};
+  last={x:e.clientX,y:e.clientY,t:performance.now()};
+});
+window.addEventListener("pointermove", e=>{
+  const now=performance.now();
+  if(last && phase==="wind"){
+    windAt(last.x,last.y,e.clientX,e.clientY, now-last.t);
+  }
+  last={x:e.clientX,y:e.clientY,t:now};
+});
+window.addEventListener("pointerup", e=>{
+  if(e.target===again) return;
+  if(down){
+    const moved=Math.hypot(e.clientX-down.x,e.clientY-down.y), dur=performance.now()-down.t;
+    if(moved<12 && dur<500) onTap();
+  }
+  down=null;
+  if(e.pointerType!=="mouse") last=null;
+});
+window.addEventListener("pointercancel", ()=>{ down=null; last=null; });
+card.addEventListener("transitionstart", ()=>card.classList.add("turning"));
+card.addEventListener("transitionend", ()=>card.classList.remove("turning"));
+
+again.addEventListener("click", e=>{
+  e.stopPropagation();
+  reset();
+});
+
+function reset(){
+  clearTimeout(writeTimer);
+  again.classList.remove("on");
+  postmark.classList.remove("on");
+  flying=[]; floaters=[]; everSwiped=false; demoDone=false;
+  R = mulberry(20240611);
+  buildText(); fitText();
+  if(flipped){ phase="writing-wait"; setTimeout(startWriting, 300); }
+  else { phase="front0"; showHint("轻点 翻面"); }
+  if(flipped) hideHint();
+}
+
+/* 完成后才出现“再写一张” */
+const obs = new MutationObserver(()=>{ if(phase==="done" && hint.classList.contains("on")) setTimeout(()=>again.classList.add("on"),1800); });
+obs.observe(hint,{attributes:true, attributeFilter:["class"]});
+
+let rzT=null;
+window.addEventListener("resize", ()=>{
+  clearTimeout(rzT);
+  rzT=setTimeout(()=>{ layout(); fitText(); paintSky(); if(floaters.length){ setupFloaters(); floatStart=performance.now()-30000; } if(phase==="wind") measure(); }, 150);
+});
+
+/* 启动 */
+layout();
+buildText();
+fitText();
+paintSky();
+showHint("轻点 翻面");
+requestAnimationFrame(tick);
+// 风阶段内滚动/尺寸变化后重新量
+setInterval(()=>{ if(phase==="wind") measure(); }, 1200);
+})();
+</script>
+</body>
+</html>

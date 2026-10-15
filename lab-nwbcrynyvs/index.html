@@ -1,0 +1,87 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<meta name="robots" content="noindex,nofollow">
+<title>Get A Feel 作品总览</title>
+<style>
+/* 布局：6 位朋友 × 7 个信息组合的矩阵，每格一件作品；电脑优先，窄屏横向滚动 */
+:root{
+  --bg:#eef0f3; --panel:#ffffff; --fg:#1f2430; --muted:#667085; --line:#d8dce3; --accent:#3a55c4;
+  --me:#1f8a4c; --deny:#8a5cc4; --no:#b54848; --none:#98a2b3; --star:#c98a12;
+  --sans:-apple-system,BlinkMacSystemFont,"PingFang SC","Hiragino Sans GB","Noto Sans CJK SC","Microsoft YaHei",sans-serif;
+  --serif:"Songti SC","STSong","Noto Serif CJK SC","Source Han Serif SC",serif;
+  color-scheme:light;
+}
+@media (prefers-color-scheme: dark){:root{--bg:#12151c;--panel:#1b1f29;--fg:#e8eaf0;--muted:#98a2b3;--line:#2b3140;--accent:#8ea2ff;--me:#4cc283;--deny:#b493ee;--no:#e07a7a;--none:#667085;--star:#e8b54a;color-scheme:dark}}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--fg);font-family:var(--sans);line-height:1.55}
+.wrap{max-width:1500px;margin:0 auto;padding:28px max(16px,env(safe-area-inset-left,0px)) 60px}
+h1{font-family:var(--serif);font-weight:600;font-size:1.8rem;margin:0 0 6px}
+.lead{color:var(--muted);margin:0 0 14px;max-width:80ch}
+.lead a{color:var(--accent)}
+.legend{display:flex;flex-wrap:wrap;gap:8px 16px;font-size:.82rem;color:var(--muted);margin:0 0 18px}
+.legend span{display:inline-flex;align-items:center;gap:6px}
+.dot{width:9px;height:9px;border-radius:50%;display:inline-block}
+.scroller{overflow-x:auto;border-radius:14px}
+table{border-collapse:separate;border-spacing:10px;min-width:1240px;width:100%;table-layout:fixed}
+th{font-weight:600;font-size:.9rem;color:var(--muted);text-align:center;padding:4px}
+th.combo{font-family:var(--serif);font-size:1.05rem;color:var(--fg)}
+th.combo small{display:block;font-family:var(--sans);font-size:.72rem;color:var(--muted);font-weight:400}
+th.who{text-align:left;vertical-align:top;width:120px;padding-top:10px}
+th.who b{display:block;font-family:var(--serif);font-size:1.25rem;color:var(--fg)}
+th.who span{display:block;font-weight:400;font-size:.76rem;line-height:1.5}
+td{vertical-align:top;padding:0}
+.card{display:flex;flex-direction:column;gap:6px;background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:8px;text-decoration:none;color:inherit;transition:transform .15s,border-color .15s;height:100%}
+.card:hover,.card:focus-visible{transform:translateY(-2px);border-color:var(--accent);outline:none}
+.card img{width:100%;aspect-ratio:390/844;object-fit:cover;border-radius:8px;background:var(--line);display:block}
+.t{font-weight:600;font-size:.92rem;display:flex;justify-content:space-between;gap:6px;align-items:baseline}
+.t em{font-style:normal;font-size:.7rem;color:var(--muted);font-weight:400;white-space:nowrap}
+.tags{display:flex;flex-wrap:wrap;gap:4px}
+.tag{font-size:.7rem;padding:1px 7px;border-radius:999px;border:1px solid currentColor;white-space:nowrap}
+.tag.me{color:var(--me)}.tag.deny{color:var(--deny)}.tag.no{color:var(--no)}.tag.none{color:var(--none)}.tag.rate{color:var(--star)}.tag.claim{color:var(--accent)}
+@media (prefers-reduced-motion: reduce){.card{transition:none}}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <h1>Get A Feel 作品总览</h1>
+  <p class="lead">42 件作品按"朋友 × 信息组合"排开：A 是第 1–3 题（先天信息），B 是第 4–7 题（社交展示和偏好），C 是第 8–10 题（首屏截图、随口一句、随机数）。点任意一格，在新标签页打开那件作品。GIF 是自动操作录下的片段，有些作品要亲手点或按住才能看到完整效果。朋友用的画廊在 <a href="../" target="_blank" rel="noopener">这里</a>；完整的实验报告和数据图表见 <a href="report.html">实验报告</a>。</p>
+  <div class="legend">
+    <span><i class="dot" style="background:var(--me)"></i>本人当时标了 Me!</span>
+    <span><i class="dot" style="background:var(--deny)"></i>本人标了"可以不承认"</span>
+    <span><i class="dot" style="background:var(--no)"></i>本人标了"不是我"</span>
+    <span><i class="dot" style="background:var(--none)"></i>本人没标（可能没看到）</span>
+    <span><i class="dot" style="background:var(--star)"></i>揭晓后本人打的分（1–5）</span>
+    <span><i class="dot" style="background:var(--accent)"></i>被别人标成 Me! 或"不承认"的次数</span>
+  </div>
+  <div class="scroller"><table id="m"></table></div>
+</div>
+<script>
+const D = {"people": {"P01": {"seen": 13, "min": 18, "me": 3, "hit": 1}, "P04": {"seen": 42, "min": 31, "me": 1, "hit": 1}, "P05": {"seen": 36, "min": 21, "me": 4, "hit": 4}, "P06": {"seen": 25, "min": 15, "me": 9, "hit": 2}, "P03": {"seen": 19, "min": 19, "me": 5, "hit": 1}}, "works": [{"code": "dnesa", "p": "P01", "c": "A", "title": "到点", "own": "none", "rate": 5, "claims": 0, "bestBy": []}, {"code": "bafay", "p": "P01", "c": "B", "title": "一整天", "own": "none", "rate": 3, "claims": 0, "bestBy": []}, {"code": "mjbcj", "p": "P01", "c": "C", "title": "随便", "own": "none", "rate": 4, "claims": 1, "bestBy": []}, {"code": "naztj", "p": "P01", "c": "AB", "title": "低头", "own": "none", "rate": 2, "claims": 1, "bestBy": []}, {"code": "gczpy", "p": "P01", "c": "AC", "title": "随便", "own": "none", "rate": 1, "claims": 0, "bestBy": []}, {"code": "xxjwr", "p": "P01", "c": "BC", "title": "按住", "own": "none", "rate": 5, "claims": 0, "bestBy": []}, {"code": "spcbq", "p": "P01", "c": "ABC", "title": "脚下", "own": "me", "rate": 4, "claims": 0, "bestBy": ["P01"]}, {"code": "ucedx", "p": "P02", "c": "A", "title": "那天晚上", "own": null, "rate": null, "claims": 0, "bestBy": []}, {"code": "cxhmj", "p": "P02", "c": "B", "title": "没有，", "own": null, "rate": null, "claims": 1, "bestBy": []}, {"code": "kggjk", "p": "P02", "c": "C", "title": "顺路", "own": null, "rate": null, "claims": 0, "bestBy": []}, {"code": "cazes", "p": "P02", "c": "AB", "title": "吃什么呢", "own": null, "rate": null, "claims": 1, "bestBy": []}, {"code": "baqzb", "p": "P02", "c": "AC", "title": "今天要做的事", "own": null, "rate": null, "claims": 1, "bestBy": []}, {"code": "qengt", "p": "P02", "c": "BC", "title": "今晚的计划", "own": null, "rate": null, "claims": 0, "bestBy": []}, {"code": "rrxjz", "p": "P02", "c": "ABC", "title": "关于今晚", "own": null, "rate": null, "claims": 1, "bestBy": []}, {"code": "wfetr", "p": "P03", "c": "A", "title": "同一张钟面", "own": "none", "rate": 4, "claims": 1, "bestBy": []}, {"code": "wbczm", "p": "P03", "c": "B", "title": "别找", "own": "me", "rate": 5, "claims": 2, "bestBy": []}, {"code": "wwwhs", "p": "P03", "c": "C", "title": "今天也很稳定", "own": "no", "rate": 2, "claims": 0, "bestBy": []}, {"code": "hdbte", "p": "P03", "c": "AB", "title": "别盯着看", "own": "none", "rate": 5, "claims": 1, "bestBy": []}, {"code": "hqawd", "p": "P03", "c": "AC", "title": "今日事", "own": "no", "rate": 3, "claims": 1, "bestBy": []}, {"code": "bmyzb", "p": "P03", "c": "BC", "title": "往下", "own": "none", "rate": 3, "claims": 0, "bestBy": []}, {"code": "ngxjh", "p": "P03", "c": "ABC", "title": "按住就能飞", "own": "none", "rate": 5, "claims": 1, "bestBy": []}, {"code": "hnubt", "p": "P04", "c": "A", "title": "，", "own": "no", "rate": 3, "claims": 0, "bestBy": []}, {"code": "kxgzy", "p": "P04", "c": "B", "title": "走着就好", "own": "no", "rate": 4, "claims": 0, "bestBy": []}, {"code": "urrkc", "p": "P04", "c": "C", "title": "走平", "own": "no", "rate": 3, "claims": 0, "bestBy": []}, {"code": "agztg", "p": "P04", "c": "AB", "title": "走路的速度", "own": "me", "rate": 1, "claims": 1, "bestBy": ["P04"]}, {"code": "tfqga", "p": "P04", "c": "AC", "title": "，", "own": "no", "rate": 1, "claims": 0, "bestBy": []}, {"code": "ffvcd", "p": "P04", "c": "BC", "title": "下一拍", "own": "no", "rate": 5, "claims": 1, "bestBy": []}, {"code": "ywnxv", "p": "P04", "c": "ABC", "title": "节拍", "own": "no", "rate": 2, "claims": 1, "bestBy": []}, {"code": "bnbmk", "p": "P05", "c": "A", "title": "问", "own": "me", "rate": null, "claims": 1, "bestBy": ["P05", "P06"]}, {"code": "vurvv", "p": "P05", "c": "B", "title": "一张明信片", "own": "me", "rate": null, "claims": 1, "bestBy": ["P03"]}, {"code": "qapfz", "p": "P05", "c": "C", "title": "寄过去", "own": "me", "rate": null, "claims": 0, "bestBy": []}, {"code": "awupn", "p": "P05", "c": "AB", "title": "一张明信片", "own": "no", "rate": null, "claims": 1, "bestBy": []}, {"code": "banqr", "p": "P05", "c": "AC", "title": "抽支签", "own": "me", "rate": null, "claims": 2, "bestBy": []}, {"code": "mrmrn", "p": "P05", "c": "BC", "title": "静音，表还开着", "own": "no", "rate": null, "claims": 1, "bestBy": []}, {"code": "gyueg", "p": "P05", "c": "ABC", "title": "此刻", "own": "none", "rate": null, "claims": 0, "bestBy": []}, {"code": "bwtzc", "p": "P06", "c": "A", "title": "一汪", "own": "no", "rate": 4, "claims": 0, "bestBy": []}, {"code": "egfpa", "p": "P06", "c": "B", "title": "拓", "own": "none", "rate": 3, "claims": 0, "bestBy": []}, {"code": "pyccn", "p": "P06", "c": "C", "title": "拓", "own": "me", "rate": 4, "claims": 0, "bestBy": []}, {"code": "yupya", "p": "P06", "c": "AB", "title": "拓", "own": "me", "rate": 5, "claims": 0, "bestBy": []}, {"code": "ydtrg", "p": "P06", "c": "AC", "title": "拓", "own": "none", "rate": 5, "claims": 0, "bestBy": []}, {"code": "bgkaq", "p": "P06", "c": "BC", "title": "拓", "own": "none", "rate": 2, "claims": 0, "bestBy": []}, {"code": "mfxyg", "p": "P06", "c": "ABC", "title": "拓", "own": "none", "rate": 4, "claims": 1, "bestBy": []}]};
+const COMBOS = [["A","第 1–3 题"],["B","第 4–7 题"],["C","第 8–10 题"],["AB","A＋B"],["AC","A＋C"],["BC","B＋C"],["ABC","全部"]];
+const OWN = {me:["me","本人 Me!"],deny:["deny","本人：不承认"],no:["no","本人：不是我"],none:["none","本人没标"]};
+const esc = (s) => String(s).replace(/[&<>"]/g, (c) => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]));
+const t = document.getElementById("m");
+let h = "<thead><tr><th></th>" + COMBOS.map(([c, d]) => `<th class="combo">${c}<small>${d}</small></th>`).join("") + "</tr></thead><tbody>";
+for (const p of ["P01","P02","P03","P04","P05","P06"]) {
+  const s = D.people[p];
+  h += `<tr><th class="who"><b>${p}</b>` + (s ? `<span>看了 ${s.seen} 件 · ${s.min} 分钟</span><span>Me! ${s.me} 次，认出本人 ${s.hit} 件</span>` : `<span>还没提交结果</span>`) + "</th>";
+  for (const [c] of COMBOS) {
+    const w = D.works.find((x) => x.p === p && x.c === c);
+    const tags = [];
+    if (s) { const o = OWN[w.own] || OWN.none; tags.push(`<span class="tag ${o[0]}">${o[1]}</span>`); }
+    if (w.rate) tags.push(`<span class="tag rate">揭晓后 ${w.rate} 分</span>`);
+    if (w.claims) tags.push(`<span class="tag claim">他人认领 ×${w.claims}</span>`);
+    if (w.bestBy.length) tags.push(`<span class="tag claim">被 ${w.bestBy.join("、")} 挑为最像自己</span>`);
+    h += `<td><a class="card" href="w/${p}-${c}.html" target="_blank" rel="noopener" title="打开 ${p}·${c}《${esc(w.title)}》">
+      <img src="g/${p}_${c}.gif" alt="${p}·${c}《${esc(w.title)}》的动图" loading="lazy">
+      <div class="t">《${esc(w.title)}》<em>${p}·${c}</em></div><div class="tags">${tags.join("")}</div></a></td>`;
+  }
+  h += "</tr>";
+}
+t.innerHTML = h + "</tbody>";
+</script>
+</body>
+</html>

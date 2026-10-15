@@ -1,0 +1,435 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>一张明信片</title>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  html, body { height: 100%; }
+  body {
+    background: #e7e2d9;
+    background-image:
+      radial-gradient(ellipse at 30% 20%, rgba(255,255,255,.55), transparent 60%),
+      radial-gradient(ellipse at 80% 90%, rgba(120,100,80,.10), transparent 55%);
+    display: flex; flex-direction: column; align-items: center; justify-content: center;
+    min-height: 100vh; min-height: 100dvh;
+    overflow: hidden;
+    -webkit-tap-highlight-color: transparent;
+    user-select: none; -webkit-user-select: none;
+    font-family: -apple-system, "PingFang SC", "Hiragino Sans GB", "Noto Sans CJK SC", sans-serif;
+  }
+  .stage {
+    --w: min(86vw, 46vh, 46dvh, 430px);
+    width: var(--w); height: calc(var(--w) * 1.5);
+    perspective: 1600px;
+    cursor: pointer;
+    transform: rotate(-1.6deg);
+    animation: arrive 1.1s cubic-bezier(.2,.8,.2,1) both;
+  }
+  @keyframes arrive {
+    from { transform: translateY(40px) rotate(-5deg); opacity: 0; }
+    to   { transform: translateY(0) rotate(-1.6deg); opacity: 1; }
+  }
+  .card {
+    position: relative; width: 100%; height: 100%;
+    transform-style: preserve-3d;
+    transition: transform 1s cubic-bezier(.45,.05,.2,1);
+  }
+  .card.flipped { transform: rotateY(180deg); }
+  .face {
+    position: absolute; inset: 0;
+    backface-visibility: hidden; -webkit-backface-visibility: hidden;
+    border-radius: 3px;
+    background: #f7f2e8;
+    box-shadow: 0 1px 1px rgba(0,0,0,.08), 0 10px 30px rgba(70,55,40,.22), 0 30px 60px rgba(70,55,40,.10);
+    overflow: hidden;
+  }
+  .front { padding: calc(var(--w) * .035); }
+  .front canvas { width: 100%; height: 100%; display: block; }
+  .back { transform: rotateY(180deg); }
+  .back canvas.paper { position: absolute; inset: 0; width: 100%; height: 100%; }
+
+  .hint {
+    margin-top: 26px; font-size: 13px; letter-spacing: .25em; color: #9a8f80;
+    transition: opacity .6s;
+  }
+
+  /* ---------- back ---------- */
+  .b {
+    position: absolute; inset: 0;
+    padding: calc(var(--w) * .06) calc(var(--w) * .065);
+    font-size: calc(var(--w) * .0365);
+    color: #4a4237;
+  }
+  .zip { display: flex; gap: calc(var(--w) * .012); }
+  .zip i {
+    display: block; width: calc(var(--w) * .058); height: calc(var(--w) * .07);
+    border: 1px solid #c9504a; opacity: .75;
+  }
+  .label {
+    position: absolute; top: calc(var(--w) * .07); left: calc(var(--w) * .065);
+    margin-top: calc(var(--w) * .1);
+    font-size: calc(var(--w) * .028); letter-spacing: .4em; color: #c9504a; opacity: .7;
+  }
+  .stamp {
+    position: absolute; top: calc(var(--w) * .05); right: calc(var(--w) * .06);
+    width: calc(var(--w) * .2); height: calc(var(--w) * .25);
+    transform: rotate(2.2deg);
+    filter: drop-shadow(0 1px 1px rgba(0,0,0,.15));
+  }
+  .stamp svg { width: 100%; height: 100%; display: block; }
+  .postmark {
+    position: absolute; top: calc(var(--w) * .13); right: calc(var(--w) * .17);
+    width: calc(var(--w) * .27); height: calc(var(--w) * .27);
+    transform: rotate(-14deg);
+    opacity: .62; mix-blend-mode: multiply; pointer-events: none;
+  }
+  .note {
+    position: absolute;
+    top: calc(var(--w) * .34); left: calc(var(--w) * .075); right: calc(var(--w) * .07);
+    font-family: "Kaiti SC", "STKaiti", "KaiTi", "楷体", "BiauKai", "Songti SC", "STSong", "Noto Serif CJK SC", serif;
+    color: #233a6b;
+    line-height: 1.62;
+    font-size: calc(var(--w) * .041);
+  }
+  .note p { margin-bottom: .48em; }
+  .note p span { display: inline; }
+  .note .ps { margin-top: .6em; font-size: .9em; color: #2f4677; }
+  .note .sign { margin-top: .5em; text-align: right; padding-right: .6em; }
+  .addr {
+    position: absolute; left: calc(var(--w) * .065); right: calc(var(--w) * .065);
+    bottom: calc(var(--w) * .055);
+  }
+  .addr .row {
+    display: flex; align-items: flex-end; gap: .6em;
+    border-bottom: 1px solid rgba(201,80,74,.45);
+    height: calc(var(--w) * .075);
+    padding-bottom: .2em;
+  }
+  .addr .row + .row { margin-top: calc(var(--w) * .01); }
+  .addr .k { font-size: calc(var(--w) * .028); letter-spacing: .3em; color: #c9504a; opacity: .75; white-space: nowrap; }
+  .addr .v {
+    font-family: "Kaiti SC", "STKaiti", "KaiTi", "楷体", "BiauKai", "Songti SC", "STSong", serif;
+    color: #233a6b; font-size: calc(var(--w) * .05); line-height: 1;
+    transform: rotate(-1.5deg) translateY(.05em);
+  }
+  .ink { opacity: 0; transition: opacity .9s ease; }
+  .card.flipped .ink { opacity: 1; }
+</style>
+</head>
+<body>
+
+<div class="stage" id="stage" role="button" aria-label="明信片，轻点翻面">
+  <div class="card" id="card">
+    <div class="face front"><canvas id="paint"></canvas></div>
+    <div class="face back">
+      <canvas class="paper" id="paper"></canvas>
+      <div class="b">
+        <div class="zip"><i></i><i></i><i></i><i></i><i></i><i></i></div>
+      </div>
+
+      <div class="stamp">
+        <svg viewBox="0 0 100 125">
+          <defs>
+            <mask id="perf">
+              <rect width="100" height="125" fill="#fff"/>
+              <g id="holes" fill="#000"></g>
+            </mask>
+            <filter id="wc" x="-10%" y="-10%" width="120%" height="120%">
+              <feTurbulence type="fractalNoise" baseFrequency=".9" numOctaves="2" seed="4"/>
+              <feDisplacementMap in="SourceGraphic" scale="2.4"/>
+            </filter>
+            <radialGradient id="meat" cx="40%" cy="35%" r="70%">
+              <stop offset="0" stop-color="#c2723e"/>
+              <stop offset=".55" stop-color="#8e3f1f"/>
+              <stop offset="1" stop-color="#5e2612"/>
+            </radialGradient>
+          </defs>
+          <g mask="url(#perf)">
+            <rect width="100" height="125" fill="#fbf7ee"/>
+            <rect x="7" y="7" width="86" height="111" fill="#e9dcc4"/>
+            <g filter="url(#wc)">
+              <!-- steam -->
+              <path d="M38 30 q-5 -7 0 -13 q5 -6 0 -12" stroke="#b9a98f" stroke-width="1.6" fill="none" opacity=".55"/>
+              <path d="M52 32 q-5 -8 0 -15 q5 -6 0 -13" stroke="#b9a98f" stroke-width="1.6" fill="none" opacity=".5"/>
+              <path d="M65 30 q-4 -6 0 -11 q4 -5 0 -10" stroke="#b9a98f" stroke-width="1.6" fill="none" opacity=".45"/>
+              <!-- rice -->
+              <ellipse cx="50" cy="66" rx="34" ry="12" fill="#fffaf0"/>
+              <!-- sauce soaking in -->
+              <ellipse cx="52" cy="66" rx="24" ry="8" fill="#b77a45" opacity=".45"/>
+              <!-- knuckle -->
+              <path d="M30 62 q4 -20 24 -20 q18 0 20 14 q2 10 -10 13 q-20 4 -34 -7z" fill="url(#meat)"/>
+              <path d="M38 50 q10 -6 22 -3" stroke="#e8a46a" stroke-width="2.4" fill="none" opacity=".7" stroke-linecap="round"/>
+              <!-- greens -->
+              <path d="M70 62 q6 -4 10 1 q-5 4 -10 -1z" fill="#6e9a4a"/>
+              <path d="M24 66 q4 -5 9 -2 q-4 5 -9 2z" fill="#7aa553"/>
+              <!-- bowl -->
+              <path d="M14 66 q36 6 72 0 q-3 26 -36 30 q-33 -4 -36 -30z" fill="#3f6fa8"/>
+              <path d="M14 66 q36 6 72 0" stroke="#2c5285" stroke-width="1.2" fill="none"/>
+              <path d="M24 80 q26 7 52 0" stroke="#e9f0f7" stroke-width="1.4" fill="none" opacity=".75" stroke-dasharray="3 3"/>
+              <rect x="38" y="95" width="24" height="5" rx="1.5" fill="#2c5285"/>
+            </g>
+            <text x="50" y="112" text-anchor="middle" font-size="7.5" fill="#8a3a2a" font-family="Songti SC, STSong, serif" letter-spacing="1.5">家 常 饭</text>
+          </g>
+        </svg>
+      </div>
+
+      <svg class="postmark" viewBox="0 0 120 120">
+        <defs>
+          <filter id="smudge"><feGaussianBlur stdDeviation="1.6"/></filter>
+          <filter id="rough">
+            <feTurbulence type="fractalNoise" baseFrequency="1.4" numOctaves="2" seed="9"/>
+            <feColorMatrix values="0 0 0 0 0  0 0 0 0 0  0 0 0 0 0  0 0 0 -2.2 1.35"/>
+            <feComposite in="SourceGraphic" operator="in"/>
+          </filter>
+        </defs>
+        <g filter="url(#rough)" fill="none" stroke="#2d3340">
+          <circle cx="60" cy="60" r="44" stroke-width="2.2"/>
+          <circle cx="60" cy="60" r="30" stroke-width="1.3"/>
+          <path d="M18 54 h84 M18 66 h84" stroke-width="1"/>
+          <!-- date that nobody can read -->
+          <g filter="url(#smudge)" stroke-width="3" stroke-linecap="round">
+            <path d="M34 60 l6 0 M44 57 l2 6 M50 58 q3 -3 5 1 q-2 4 -5 2 M60 57 v6 M65 58 l7 0 l-4 5 M76 57 q4 2 0 6 M82 60 h4"/>
+          </g>
+          <!-- top/bottom arcs, worn away -->
+          <path d="M30 40 q30 -22 60 0" stroke-width="2.6" stroke-dasharray="4 3 1 5 6 2" filter="url(#smudge)"/>
+          <path d="M34 82 q26 18 52 0" stroke-width="2.6" stroke-dasharray="2 4 5 3 1 6" filter="url(#smudge)"/>
+        </g>
+      </svg>
+
+      <div class="label">邮 政 编 码</div>
+
+      <div class="note ink" id="note">
+        <p>到了。风大得站不稳，头发全乱了，懒得管，就这么拍了一张。</p>
+        <p>路一直往雪山那边去，开了好久，山还是那么远。前面就一辆车，后面没人，挺好。</p>
+        <p>这边什么都好看，就是吃不上口热乎的。想那种炖到一碰就脱骨的，汤汁拌饭。回去第一顿就它，不商量。</p>
+        <p>裤子还是那条松紧腰的，最舒服。</p>
+        <p class="ps">另：那几部看过好多遍的片子又看了一遍，还在老地方哭。</p>
+        <p class="sign">名字就不写了。哪儿的人，你知道。</p>
+      </div>
+
+      <div class="addr">
+        <div class="row"><span class="k">收件人</span><span class="v ink">家里</span></div>
+        <div class="row"><span class="k">寄件人</span><span class="v ink"></span></div>
+      </div>
+    </div>
+  </div>
+</div>
+<div class="hint" id="hint">轻 点 翻 面</div>
+
+<script>
+(() => {
+  // ---------- seeded random ----------
+  let seed = 20231;
+  const rnd = () => { seed = (seed * 16807) % 2147483647; return (seed - 1) / 2147483646; };
+  const gauss = () => { let u = 0, v = 0; while (!u) u = rnd(); while (!v) v = rnd(); return Math.sqrt(-2 * Math.log(u)) * Math.cos(2 * Math.PI * v); };
+
+  // ---------- watercolor helpers ----------
+  function deform(pts, depth, variance) {
+    if (depth <= 0) return pts;
+    const out = [];
+    for (let i = 0; i < pts.length; i++) {
+      const a = pts[i], b = pts[(i + 1) % pts.length];
+      const v = a[2] ?? variance;
+      out.push(a);
+      const len = Math.hypot(b[0] - a[0], b[1] - a[1]);
+      const mx = (a[0] + b[0]) / 2 + gauss() * len * v * 0.5;
+      const my = (a[1] + b[1]) / 2 + gauss() * len * v * 0.5;
+      out.push([mx, my, v * (0.6 + rnd() * 0.6)]);
+    }
+    return deform(out, depth - 1, variance);
+  }
+  function poly(ctx, pts) {
+    ctx.beginPath();
+    pts.forEach((p, i) => i ? ctx.lineTo(p[0], p[1]) : ctx.moveTo(p[0], p[1]));
+    ctx.closePath(); ctx.fill();
+  }
+  // returns a list of draw thunks (layers) so we can animate the wash
+  function wash(ctx, shape, color, opt = {}) {
+    const { layers = 26, alpha = 0.045, v = 0.9, base = 2, depth = 4, comp = 'multiply' } = opt;
+    const dense = [];
+    const seg = ctx.canvas.width * 0.05;
+    shape.forEach((a, i) => {
+      const b = shape[(i + 1) % shape.length];
+      const n = Math.max(1, Math.ceil(Math.hypot(b[0] - a[0], b[1] - a[1]) / seg));
+      for (let k = 0; k < n; k++) dense.push([a[0] + (b[0] - a[0]) * k / n, a[1] + (b[1] - a[1]) * k / n, a[2] ?? v]);
+    });
+    const basePoly = deform(dense, base, v);
+    const steps = [];
+    for (let i = 0; i < layers; i++) {
+      steps.push(() => {
+        ctx.globalCompositeOperation = comp;
+        ctx.fillStyle = color;
+        ctx.globalAlpha = alpha;
+        poly(ctx, deform(basePoly, depth - base + 2, v * 0.8));
+        ctx.globalAlpha = 1;
+      });
+    }
+    return steps;
+  }
+
+  // ---------- paper ----------
+  function paper(ctx, W, H, tone) {
+    ctx.fillStyle = tone; ctx.fillRect(0, 0, W, H);
+    const img = ctx.getImageData(0, 0, W, H), d = img.data;
+    for (let i = 0; i < d.length; i += 4) {
+      const n = (rnd() - 0.5) * 14;
+      d[i] += n; d[i + 1] += n; d[i + 2] += n;
+    }
+    ctx.putImageData(img, 0, 0);
+    // fibres
+    ctx.globalAlpha = 0.05; ctx.strokeStyle = '#8a7a60'; ctx.lineWidth = 0.6;
+    for (let i = 0; i < W * H / 900; i++) {
+      const x = rnd() * W, y = rnd() * H, a = rnd() * Math.PI, l = 3 + rnd() * 9;
+      ctx.beginPath(); ctx.moveTo(x, y); ctx.lineTo(x + Math.cos(a) * l, y + Math.sin(a) * l); ctx.stroke();
+    }
+    ctx.globalAlpha = 1;
+  }
+
+  // ---------- the painting ----------
+  const cv = document.getElementById('paint');
+  const pv = document.getElementById('paper');
+
+  function setup() {
+    const r = cv.getBoundingClientRect();
+    const dpr = Math.min(window.devicePixelRatio || 1, 2.5);
+    cv.width = Math.round(r.width * dpr); cv.height = Math.round(r.height * dpr);
+    const pr = pv.getBoundingClientRect();
+    pv.width = Math.round(pr.width * dpr); pv.height = Math.round(pr.height * dpr);
+    seed = 777;
+    paper(pv.getContext('2d'), pv.width, pv.height, '#f6f0e3');
+    paint();
+  }
+
+  let raf = null;
+  function paint() {
+    if (raf) clearTimeout(raf);
+    seed = 20231;
+    const ctx = cv.getContext('2d');
+    const W = cv.width, H = cv.height;
+    paper(ctx, W, H, '#f8f3e8');
+    ctx.globalCompositeOperation = 'multiply';
+
+    const X = f => f * W, Y = f => f * H;
+    const S = [];   // ordered list of stages, each an array of steps
+
+    // the ridge line: sky is painted down to it, the snow is simply the paper left alone
+    const ridge = [[-.05,.49],[.06,.47],[.16,.45],[.24,.44],[.3,.425],[.36,.4],[.41,.385],[.45,.37],[.49,.372],[.53,.39],[.58,.41],[.66,.42],[.74,.432],[.8,.44],[.86,.425],[.92,.41],[.97,.415],[1.05,.43]];
+    const above = (dy) => ridge.slice().reverse().map(([x, y]) => [X(x), Y(y - dy), .12]);
+    S.push(wash(ctx, [[X(-.1),Y(-.1), .6],[X(1.1),Y(-.1), .6], ...above(.006)], '#5f98d8', {layers: 26, alpha: .032, v: .6}));
+    S.push(wash(ctx, [[X(-.1),Y(-.1)],[X(1.1),Y(-.1)],[X(1.1),Y(.22)],[X(.5),Y(.27)],[X(-.1),Y(.24)]], '#4a84c8', {layers: 18, alpha: .022, v: 1.2}));
+    // a few loose clouds hugging the peaks
+    S.push(wash(ctx, [[X(.66),Y(.3)],[X(.76),Y(.285)],[X(.82),Y(.305)],[X(.72),Y(.32)]], '#ffffff', {layers: 6, alpha: .35, v: .8}));
+    S.push(wash(ctx, [[X(-.05),Y(.43)],[X(.18),Y(.41)],[X(.28),Y(.425)],[X(.1),Y(.45)],[X(-.05),Y(.46)]], '#ffffff', {layers: 6, alpha: .3, v: 1}));
+    S.push(wash(ctx, [[X(.7),Y(.405)],[X(.92),Y(.39)],[X(1.05),Y(.405)],[X(.9),Y(.42)],[X(.72),Y(.425)]], '#ffffff', {layers: 6, alpha: .3, v: 1}));
+
+    // snow: only the shadow sides get paint
+    S.push(wash(ctx, [[X(.49),Y(.375)],[X(.53),Y(.392)],[X(.58),Y(.412)],[X(.64),Y(.48)],[X(.56),Y(.5)],[X(.5),Y(.44)]], '#9fb5d2', {layers: 14, alpha: .04, v: .3}));
+    S.push(wash(ctx, [[X(.86),Y(.428)],[X(.92),Y(.412)],[X(1.05),Y(.432)],[X(1.05),Y(.49)],[X(.9),Y(.48)]], '#a6bad4', {layers: 10, alpha: .04, v: .4}));
+    S.push(wash(ctx, [[X(.0),Y(.49)],[X(1.02),Y(.46)],[X(1.02),Y(.55)],[X(.0),Y(.56)]], '#d6e0ec', {layers: 10, alpha: .03, v: .4}));
+    // gullies
+    [[.38,.43,.33,.53],[.44,.41,.42,.52],[.6,.44,.66,.53],[.7,.45,.74,.53],[.25,.46,.2,.53],[.82,.46,.86,.52]].forEach(([x0,y0,x1,y1]) => {
+      S.push(wash(ctx, [[X(x0),Y(y0)],[X(x0+.012),Y(y0)],[X(x1+.02),Y(y1)],[X(x1-.01),Y(y1)]], '#8fa4c0', {layers: 6, alpha: .06, v: .3}));
+    });
+    // rock showing through below the snowline
+    S.push(wash(ctx, [[X(.24),Y(.585),.9],[X(.32),Y(.56),.9],[X(.4),Y(.575),.9],[X(.48),Y(.55),.9],[X(.56),Y(.57),.9],[X(.66),Y(.548),.9],[X(.76),Y(.565),.9],[X(.86),Y(.54),.9],[X(.95),Y(.53),.9],[X(1.05),Y(.52),.4],[X(1.05),Y(.665),.3],[X(.24),Y(.665),.3]], '#6a5d59', {layers: 18, alpha: .045, v: .5}));
+    S.push(wash(ctx, [[X(.92),Y(.45)],[X(.97),Y(.44)],[X(1.05),Y(.455)],[X(1.05),Y(.54)],[X(.94),Y(.5)]], '#5a4c49', {layers: 10, alpha: .05, v: .4}));
+    S.push(wash(ctx, [[X(.5),Y(.6)],[X(.8),Y(.59)],[X(1.05),Y(.6)],[X(1.05),Y(.665)],[X(.5),Y(.665)]], '#5e4a40', {layers: 12, alpha: .04, v: .5}));
+    // dark hill on the left
+    S.push(wash(ctx, [[X(-.05),Y(.5)],[X(.04),Y(.51)],[X(.14),Y(.56)],[X(.26),Y(.6)],[X(.36),Y(.65)],[X(.4),Y(.685)],[X(-.05),Y(.69)]], '#7a5444', {layers: 24, alpha: .045, v: .3}));
+    S.push(wash(ctx, [[X(-.05),Y(.53)],[X(.05),Y(.55)],[X(.14),Y(.62)],[X(.1),Y(.68)],[X(-.05),Y(.68)]], '#4e3329', {layers: 12, alpha: .04, v: .5}));
+    // glacial lagoon
+    S.push(wash(ctx, [[X(.36),Y(.655)],[X(.62),Y(.65)],[X(.66),Y(.668)],[X(.38),Y(.672)]], '#62b0c8', {layers: 12, alpha: .07, v: .3}));
+    // ochre plain, all the way down
+    S.push(wash(ctx, [[X(-.05),Y(.668)],[X(.4),Y(.672)],[X(.7),Y(.668)],[X(1.05),Y(.664)],[X(1.05),Y(1.05)],[X(-.05),Y(1.05)]], '#caa169', {layers: 22, alpha: .04, v: .25}));
+    S.push(wash(ctx, [[X(.55),Y(.672)],[X(1.05),Y(.668)],[X(1.05),Y(.73)],[X(.64),Y(.715)]], '#94704c', {layers: 12, alpha: .04, v: .5}));
+    S.push(wash(ctx, [[X(-.05),Y(.72)],[X(.3),Y(.705)],[X(.46),Y(.72)],[X(.3),Y(.77)],[X(-.05),Y(.78)]], '#a07a50', {layers: 12, alpha: .035, v: .6}));
+    S.push(wash(ctx, [[X(-.05),Y(.84)],[X(1.05),Y(.83)],[X(1.05),Y(1.05)],[X(-.05),Y(1.05)]], '#7d6650', {layers: 14, alpha: .035, v: .4}));
+    // the road — the point everything leads to
+    const vx = X(.62), vy = Y(.68);
+    S.push(wash(ctx, [[vx - X(.012), vy],[vx + X(.018), vy],[X(.98),Y(1.04)],[X(.22),Y(1.04)]], '#5c5e66', {comp: 'source-over', layers: 20, alpha: .07, v: .04, base: 1, depth: 3}));
+
+    // fine marks, drawn once at the end
+    const marks = () => {
+      ctx.globalCompositeOperation = 'source-over';
+      const lw = W / 420;
+      // centre & edge lines
+      ctx.strokeStyle = 'rgba(245,240,228,.85)';
+      ctx.lineWidth = lw * 1.4; ctx.lineCap = 'round';
+      const line = (x0, y0, x1, y1, dash) => {
+        ctx.setLineDash(dash || []); ctx.beginPath(); ctx.moveTo(x0, y0);
+        const n = 20;
+        for (let i = 1; i <= n; i++) {
+          const t = i / n;
+          ctx.lineTo(x0 + (x1 - x0) * t + gauss() * lw * .3, y0 + (y1 - y0) * t);
+        }
+        ctx.stroke(); ctx.setLineDash([]);
+      };
+      line(vx - X(.006), vy + Y(.004), X(.27), Y(1.02));
+      line(vx + X(.012), vy + Y(.004), X(.92), Y(1.02));
+      ctx.lineWidth = lw;
+      line(vx + X(.003), vy + Y(.01), X(.58), Y(1.02), [lw * 10, lw * 14]);
+      // guardrails
+      ctx.strokeStyle = 'rgba(205,205,200,.9)'; ctx.lineWidth = lw * 1.6;
+      line(X(.53), Y(.78), X(.38), Y(.88));
+      line(X(.7), Y(.78), X(.84), Y(.88));
+      // little yellow-black posts
+      const post = (x, y, h) => {
+        ctx.fillStyle = '#e2b53a'; ctx.fillRect(x, y, lw * 2.2, h);
+        ctx.fillStyle = '#26221f'; ctx.fillRect(x, y + h * .35, lw * 2.2, h * .25);
+      };
+      post(X(.395), Y(.85), Y(.03)); post(X(.47), Y(.8), Y(.022)); post(X(.8), Y(.84), Y(.028)); post(X(.73), Y(.8), Y(.02));
+      // one car ahead, nobody behind
+      const cx = X(.637), cy = Y(.73);
+      ctx.fillStyle = 'rgba(30,30,34,.35)'; ctx.fillRect(cx - lw * 3.2, cy + lw * 3.1, lw * 6.4, lw * 1.1);
+      ctx.fillStyle = '#f4f2ee'; ctx.beginPath();
+      ctx.ellipse(cx, cy + lw, lw * 3.6, lw * 2.7, 0, 0, Math.PI * 2); ctx.fill();
+      ctx.fillStyle = '#9fb0c2'; ctx.fillRect(cx - lw * 2, cy - lw * .2, lw * 4, lw * 1.1);
+      // a far-off pole or two
+      ctx.strokeStyle = 'rgba(60,55,50,.6)'; ctx.lineWidth = lw * .8;
+      line(X(.78), Y(.7), X(.78), Y(.75)); line(X(.47), Y(.7), X(.47), Y(.735));
+      // soft vignette of unpainted edge
+      ctx.globalCompositeOperation = 'source-over';
+    };
+
+    // play stages
+    const all = S.flat();
+    let i = 0;
+    const perFrame = Math.max(3, Math.ceil(all.length / 90));
+    const tick = () => {
+      for (let k = 0; k < perFrame && i < all.length; k++, i++) all[i]();
+      if (i < all.length) raf = setTimeout(tick, 16);
+      else { marks(); raf = null; }
+    };
+    tick();
+  }
+
+  // perforated stamp edge
+  const holes = document.getElementById('holes');
+  const ns = 'http://www.w3.org/2000/svg';
+  const hole = (x, y) => { const c = document.createElementNS(ns, 'circle'); c.setAttribute('cx', x); c.setAttribute('cy', y); c.setAttribute('r', 2.6); holes.appendChild(c); };
+  for (let x = 0; x <= 100; x += 7.14) { hole(x, 0); hole(x, 125); }
+  for (let y = 0; y <= 125; y += 7.35) { hole(0, y); hole(100, y); }
+
+  // ---------- flip ----------
+  const stage = document.getElementById('stage');
+  const card = document.getElementById('card');
+  const hint = document.getElementById('hint');
+  stage.addEventListener('click', () => {
+    card.classList.toggle('flipped');
+    hint.style.opacity = 0;
+    setTimeout(() => { hint.textContent = card.classList.contains('flipped') ? '再 点 翻 回 去' : '轻 点 翻 面'; hint.style.opacity = 1; }, 700);
+  });
+
+  let lastW = 0;
+  const onResize = () => {
+    const w = cv.getBoundingClientRect().width;
+    if (Math.abs(w - lastW) > 2) { lastW = w; setup(); }
+  };
+  window.addEventListener('resize', onResize);
+  requestAnimationFrame(onResize);
+})();
+</script>
+</body>
+</html>

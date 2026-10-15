@@ -1,0 +1,477 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<meta name="robots" content="noindex,nofollow">
+<title>Get A Feel 实验报告</title>
+<style>
+/* 布局：单栏长文（约 760px 正文宽），图表和 GIF 可以放宽到 1080px；数据部分用内联 SVG */
+:root{
+  --bg:#f6f5f1; --paper:#fcfcfb; --fg:#1d1f24; --ink2:#4a4d55; --muted:#7a7d86; --line:#e2e0d8; --soft:#efede6;
+  --accent:#2a78d6; --me:#2a78d6; --no:#eb6834; --deny:#1baf7a; --none:#c9ccd3;
+  --seq1:#cde2fb; --seq3:#86b6ef; --seq5:#3987e5; --seq7:#1c5cab;
+  --serif:"Songti SC","STSong","Noto Serif CJK SC","Source Han Serif SC",serif;
+  --sans:-apple-system,BlinkMacSystemFont,"PingFang SC","Hiragino Sans GB","Noto Sans CJK SC","Microsoft YaHei",sans-serif;
+  color-scheme:light;
+}
+@media (prefers-color-scheme: dark){:root{
+  --bg:#121315; --paper:#1a1a19; --fg:#f0efec; --ink2:#c3c2b7; --muted:#8f9098; --line:#2e2f33; --soft:#222327;
+  --accent:#3987e5; --me:#3987e5; --no:#d95926; --deny:#199e70; --none:#4a4c52;
+  --seq1:#1c2c44; --seq3:#1c5cab; --seq5:#3987e5; --seq7:#86b6ef; color-scheme:dark}}
+*{box-sizing:border-box}
+html{scroll-behavior:smooth}
+body{margin:0;background:var(--bg);color:var(--fg);font-family:var(--sans);font-size:16px;line-height:1.8}
+a{color:var(--accent)}
+.page{max-width:1080px;margin:0 auto;padding:0 max(20px,env(safe-area-inset-left,0px)) 80px}
+.prose{max-width:760px;margin:0 auto}
+header.hero{padding:72px 0 36px;border-bottom:1px solid var(--line)}
+.eyebrow{font-size:.8rem;letter-spacing:.18em;color:var(--muted)}
+h1{font-family:var(--serif);font-weight:600;font-size:2.6rem;line-height:1.25;margin:.3em 0 .4em;text-wrap:balance}
+.sub{color:var(--ink2);font-size:1.05rem;max-width:62ch;margin:0}
+.links{margin-top:18px;font-size:.92rem;color:var(--muted)}
+.tiles{display:grid;grid-template-columns:repeat(4,1fr);gap:14px;margin:36px 0 0}
+.tile{background:var(--paper);border:1px solid var(--line);border-radius:14px;padding:16px 18px}
+.tile b{display:block;font-family:var(--serif);font-size:2.1rem;line-height:1.1;font-weight:600;font-variant-numeric:tabular-nums}
+.tile span{font-size:.85rem;color:var(--ink2)}
+.tile small{display:block;color:var(--muted);font-size:.76rem;margin-top:2px}
+nav.toc{display:flex;flex-wrap:wrap;gap:6px 18px;font-size:.9rem;padding:16px 0;border-bottom:1px solid var(--line);margin-bottom:24px}
+nav.toc a{color:var(--ink2);text-decoration:none}
+nav.toc a:hover{color:var(--accent)}
+h2{font-family:var(--serif);font-weight:600;font-size:1.75rem;margin:64px 0 8px;scroll-margin-top:20px}
+h2 .n{color:var(--muted);font-size:1rem;margin-right:10px;font-family:var(--sans)}
+h3{font-family:var(--serif);font-weight:600;font-size:1.3rem;margin:40px 0 6px}
+h4{font-size:1rem;margin:28px 0 4px}
+p{margin:.6em 0}
+ol,ul{padding-left:1.4em;margin:.5em 0}
+li{margin:.3em 0}
+.note{color:var(--muted);font-size:.88rem}
+table.t{border-collapse:collapse;width:100%;font-size:.92rem;margin:12px 0}
+table.t th,table.t td{border-bottom:1px solid var(--line);padding:8px 10px;text-align:left;vertical-align:top}
+table.t th{color:var(--muted);font-weight:500;font-size:.82rem}
+.num{font-variant-numeric:tabular-nums}
+.figure{background:var(--paper);border:1px solid var(--line);border-radius:16px;padding:22px 22px 16px;margin:22px 0}
+.figure h4{margin:0 0 2px;font-size:1.02rem}
+.figure .cap{color:var(--muted);font-size:.85rem;margin:0 0 14px}
+.figure svg{display:block;width:100%;height:auto;overflow:visible}
+.figure svg text{fill:var(--ink2);font-family:var(--sans)}
+.legend{display:flex;flex-wrap:wrap;gap:6px 16px;font-size:.82rem;color:var(--ink2);margin:10px 0 0}
+.legend i{display:inline-block;width:10px;height:10px;border-radius:3px;margin-right:6px;vertical-align:-1px}
+.insight{border-left:3px solid var(--accent);padding:2px 0 2px 16px;margin:16px 0;color:var(--fg)}
+.insight b{font-family:var(--serif)}
+blockquote{margin:14px 0;padding:12px 18px;background:var(--soft);border-radius:12px;color:var(--ink2);font-size:.95rem}
+blockquote cite{display:block;font-style:normal;color:var(--muted);font-size:.82rem;margin-top:4px}
+.works{display:grid;grid-template-columns:repeat(auto-fill,minmax(170px,1fr));gap:16px;margin:16px 0}
+.work{display:flex;flex-direction:column;gap:6px;text-decoration:none;color:inherit}
+.work img{width:100%;aspect-ratio:390/844;object-fit:cover;border-radius:12px;border:1px solid var(--line);background:var(--soft)}
+.work b{font-size:.92rem}
+.work span{font-size:.78rem;color:var(--muted);line-height:1.5}
+.pair{display:grid;grid-template-columns:200px 1fr;gap:22px;align-items:start;margin:22px 0}
+.pair .work{max-width:200px}
+.quad{max-width:760px;margin:12px auto}
+#tip{position:fixed;z-index:9;pointer-events:none;background:var(--fg);color:var(--bg);font-size:.8rem;line-height:1.5;padding:7px 10px;border-radius:8px;max-width:260px;opacity:0;transition:opacity .12s}
+@media (max-width:760px){.tiles{grid-template-columns:repeat(2,1fr)}h1{font-size:2rem}.pair{grid-template-columns:1fr}}
+@media (prefers-reduced-motion: reduce){html{scroll-behavior:auto}}
+</style>
+</head>
+<body>
+<div id="tip" role="tooltip"></div>
+<div class="page">
+<header class="hero">
+  <div class="prose">
+    <div class="eyebrow">GET A FEEL · v1.0 · 2026 年 10 月</div>
+    <h1>6 位朋友，42 件作品：AI 能不能“做出一个人的感觉”？</h1>
+    <p class="sub">用 10 个问题向 6 位朋友收集少量信息，按 7 种组合分别交给 Claude 自由创作，再让每位朋友在全部 42 件作品里找自己。这是这次实验的设计、过程和结果。</p>
+    <p class="links">相关页面：<a href="./" >42 件作品总览</a> · <a href="../" target="_blank" rel="noopener">朋友用的星空画廊</a>（口令 getafeel2026，测试钥匙 <code>#tester</code>）</p>
+  </div>
+  <div class="tiles">
+    <div class="tile"><b>41%</b><span>标 Me! 时真的是本人作品</span><small>随机只有 17%</small></div>
+    <div class="tile"><b>0.3%</b><span>5 人合计靠运气达到这个命中数的概率</span><small>超几何分布</small></div>
+    <div class="tile"><b>9 / 35</b><span>本人作品被本人认出的件数</span><small>召回率 26%</small></div>
+    <div class="tile"><b>27 件</b><span>每人平均浏览的作品数</span><small>远超过找到自己所需</small></div>
+  </div>
+</header>
+
+<nav class="toc prose">
+  <a href="#goal">实验目标</a><a href="#design">实验设计</a><a href="#process">实验过程</a><a href="#input">结果 1：哪些信息有用</a><a href="#llm">结果 2：LLM 的能力</a><a href="#visit">结果 3：串门意愿</a><a href="#next">小结与下一步</a>
+</nav>
+
+<section class="prose" id="goal">
+  <h2><span class="n">01</span>实验目标</h2>
+  <ol>
+    <li>输入哪些信息，能让 LLM 生成用户觉得"有我的感觉"（feel）的作品？</li>
+    <li>LLM 生成这类抽象、氛围化作品的能力如何？</li>
+    <li>用户是否愿意浏览其他用户的作品？</li>
+  </ol>
+</section>
+
+<section id="design">
+  <div class="prose">
+    <h2><span class="n">02</span>实验设计</h2>
+    <h3>Input：哪些信息有助于 Get A Feel？</h3>
+    <p>我按两个维度给信息分类：用户是否意识到这条信息在代表自己（有没有身份认同），以及这条信息是不是用户自己选的（有没有选择权）。以这两个维度为坐标轴，能收集到的信息分成四个象限。本次的 10 个问题落在其中三个象限里。</p>
+  </div>
+  <div class="figure quad">
+    <h4>信息四象限，以及本次 10 个问题的位置</h4>
+    <p class="cap">横轴：用户有没有选择权；纵轴：用户有没有意识到它在代表自己。</p>
+    <svg id="quad" viewBox="0 0 720 470" role="img" aria-label="信息四象限图"></svg>
+  </div>
+  <div class="prose">
+    <ul>
+      <li><b>第一象限（有意识，有选择权）</b>：线上 Profile（头像、背景、签名、昵称）、穿搭和随身物品、喜欢的书影音游戏。用户层层筛选过，最能代表"想展示的自己"。</li>
+      <li><b>第二象限（有选择权，没意识到）</b>：手机界面排布、私密轨迹（聊天记录、购物车、房间）、下意识反应（随口说的一句话）。很少被拿来展示，个体差异却真实存在。</li>
+      <li><b>第三象限（无选择权，无意识）</b>：平台算法记录的行为数据。很精准，但没法靠问卷拿到，本次没有收集。</li>
+      <li><b>第四象限（无选择权，有认同）</b>：先天信息（生辰、名字、出生地）和强随机机制（随手选一个数字、起卦）。多和玄学、命运有关。</li>
+    </ul>
+
+    <h3>Process：分组、分会话生成</h3>
+    <table class="t">
+      <thead><tr><th style="width:56px">组</th><th>问题</th><th style="width:150px">象限</th></tr></thead>
+      <tbody>
+        <tr><td><b>A</b></td><td>1. 出生日期（年月日、时辰）；2. 真名；3. 出生地</td><td>第四象限</td></tr>
+        <tr><td><b>B</b></td><td>4. 微信 combo：头像、朋友圈背景、个性签名；5. "人生作品"；6. comfort food；7. comfort 衣服</td><td>第一象限</td></tr>
+        <tr><td><b>C</b></td><td>8. 解锁后第一屏截图；9. 随便发一句话；10. 从 1 到 100 里随机选一个数字</td><td>第二象限（8、9）、第四象限（10）</td></tr>
+      </tbody>
+    </table>
+    <p>朋友不想答的问题可以用 👽 代替。每位朋友的三组信息按 A、B、C、A＋B、A＋C、B＋C、A＋B＋C 七种组合，各开一个<b>互相隔离</b>的 Claude 会话自由创作：不限形式，只有两条硬规则——不能原样出现资料里的名字、数字、原句和原图；不能冒犯对方。模型用 Claude Opus 5.5、推理强度 high，每个会话 4 到 15 分钟（max 强度要将近 1 小时）。6 位朋友 × 7 种组合，一共 42 件作品。</p>
+    <p>42 件作品打乱、去掉标题后交给每位朋友：看过的作品标"Me！""可以不承认是我吗？"或"不是我"；看完在自己标过的作品里挑一件最像自己的；然后揭晓哪 7 件是自己的，再给这 7 件各打 1 到 5 分。</p>
+
+    <h3>Output：用一个网站交还作品</h3>
+    <p>第一版以"镜子"为主题，作品是一圈圈环绕的玻璃片。朋友的反馈有两点：想知道哪些已经看过；镜子的比喻不对，里面大多是别人的作品，更像在探索别人的世界。于是第二版改成《小王子》式的星空：每件作品是一颗小星球，颜色、表面、大小、转速和小物件都按作品的创作说明来定；点一颗星球，光速降落进入作品；去过的星球会出现虚线和路灯，可以点亮，也可以留下一朵玫瑰。</p>
+  </div>
+  <div class="pair prose">
+    <a class="work" href="../" target="_blank" rel="noopener"><img src="gallery.gif" alt="星空画廊操作过程" loading="lazy"><b>星空画廊 v2</b><span>降落一段为 4 倍慢放</span></a>
+    <p class="note" style="margin:0">拖动星空 → 点一颗星球降落 → 看作品 → 返回 → 点亮路灯 → 留下一朵玫瑰。</p>
+  </div>
+</section>
+
+<section class="prose" id="process">
+  <h2><span class="n">03</span>实验过程</h2>
+  <p><b>邀请本身就有阻力。</b>私聊 6 位朋友，有人很快答应，有人拖到第二天。补充一句"很快，只要 3 分钟"之后，答应得爽快多了。</p>
+  <p><b>一问一答比一次发完效果好。</b>逐题提问并回应几句，朋友的回答更长、信息更多，完成得更快，还常主动补充原因。</p>
+  <p><b>"可以不回答"非常重要。</b>事先说明不想答就回一个 👽，朋友真的会用，也更安心，不会觉得是在拒绝。</p>
+  <p><b>两种不信任。</b>一是对 AI：有朋友觉得"把什么都透露给 AI 了"，所以要事先说明信息会交给 AI。二是人与人的不对等：有朋友问完后要求我也回答全部问题，"不然就像一个人脱光了衣服，另一个人还穿戴整齐"。产品要让用户觉得被回应，而不是只被看光。</p>
+  <p><b>"答无"会让人不安。</b>问到"人生作品"时，读书看片不多的朋友对"没有"这件事有些不安，需要及时安抚，比如"没有人生作品，说明你的人生没有被某一件事限定"。</p>
+</section>
+
+<section id="input">
+  <div class="prose">
+    <h2><span class="n">04</span>结果 1：输入哪些信息有助于 Get A Feel？</h2>
+    <p>截至 10 月 15 日，5 位朋友提交了结果，P02 还没交。随机基线：42 件里本人占 7 件，随便挑一件是本人的概率约 1/6（17%）。</p>
+  </div>
+
+  <div class="figure">
+    <h4>每位朋友怎么对待自己的 7 件作品</h4>
+    <p class="cap">每格是一件本人作品：颜色是当时的标记，数字是揭晓后本人打的分（1 到 5）。悬停可看作品名。最下面一行是每个组合被本人认出的件数和平均分。</p>
+    <svg id="matrix" viewBox="0 0 1000 470" role="img" aria-label="朋友乘组合的本人作品矩阵"></svg>
+    <div class="legend"><span><i style="background:var(--me)"></i>标了 Me!</span><span><i style="background:var(--deny)"></i>标了"可以不承认"</span><span><i style="background:var(--no)"></i>标了"不是我"</span><span><i style="background:var(--none)"></i>没标（多半没看到）</span></div>
+  </div>
+  <div class="prose">
+    <div class="insight"><b>整体能认出来，但认出的比例不高。</b>5 人一共标了 22 次 Me!，9 次是本人作品（41%），随机期望约 3.7 次，合计达到这个命中数的概率约 0.3%。但只有 P05 单独看也显著（4 件全中，概率约万分之三）；其余 4 人各只认出 1 到 2 件。35 件本人作品里有 11 件被本人明确标了"不是我"：P04 看完全部 42 件，只标了 1 件 Me!。</div>
+    <p class="note">"最像自己"一题有 3 人选中了本人作品，但它只能在标过 Me! 或"可以不承认"的作品里选，和 Me! 的结果不独立。P01 只看了 13 件、P03 只看了 19 件，没看到的作品自然认不出，召回率被低估了。</p>
+  </div>
+
+  <div class="figure">
+    <h4>给的信息越多，并不越容易被认出</h4>
+    <p class="cap">按作品用了几组信息分组，本人当时标 Me! 的比例。虚线是随机水平 17%。</p>
+    <svg id="groups" viewBox="0 0 1000 230" role="img" aria-label="按信息组数的识别率"></svg>
+  </div>
+  <div class="prose">
+    <p>单组信息生成的作品被本人认出 5/15（33%），两组的 3/15（20%），三组的 1/5（20%）。从创作说明看，信息一多，模型会挑一两条最有料的信息做骨架，其余只做点缀，作品的指向反而变散。含 A、B、C 组的作品分别被认出 5/20、5/20、4/20，三组之间没有明显的赢家。</p>
+  </div>
+
+  <div class="figure">
+    <h4>"认出是我"和"感觉像我"是两回事</h4>
+    <p class="cap">揭晓后本人给自己作品打的分。上排是当时标了 Me! 的 5 件，下排是当时没标 Me! 的 23 件，点的颜色是当时的标记。</p>
+    <svg id="dots" viewBox="0 0 1000 250" role="img" aria-label="打分点图"></svg>
+  </div>
+  <div class="prose">
+    <div class="insight"><b>没认出来的 23 件里，有 11 件揭晓后打了 4 到 5 分；</b>其中 3 件当时还被明确标了"不是我"（P04·B、P04·BC、P06·A）。朋友找自己时靠的是可辨认的元素，揭晓后打分时看的是有没有被说中。</div>
+  </div>
+
+  <div class="figure">
+    <h4>模型实际用了哪些信息</h4>
+    <p class="cap">42 份创作说明里，每道题在"可用时被引用的比例"（条），以及被写成"核心/主要依据"的次数（右侧数字）。</p>
+    <svg id="qs" viewBox="0 0 1000 420" role="img" aria-label="题目引用统计"></svg>
+  </div>
+  <div class="prose">
+    <ol>
+      <li>模型最依赖<b>第 9 题（随口一句话）、第 8 题（首屏截图）和第 4 题（微信 combo）</b>：只要提供几乎每次都用，也最常被当作骨架。第 9 题决定语气和情节结构，第 8、4 题决定视觉。</li>
+      <li>第 10 题（随机数）几乎每次都用上，但只做结构彩蛋，比如格子数、刻度、"差一格就满"，从不做核心。</li>
+      <li>第 1 到 3 题单独出现时，模型会把它们转成家乡或名字的意象，例如 P01·A《到点》、P06·A《一汪》。这两件是朋友情绪反应最强的作品，但当时都没被本人标成 Me!。<b>先天信息更容易打动人，却不容易让人认出自己。</b></li>
+      <li>42 份说明里有 34 份把壁纸、头像、朋友圈背景或首屏截图列为"可能被凭关键词认出"的风险。同一个人的作品也因此趋同：P06 的 7 件里有 6 件都叫《拓》。</li>
+    </ol>
+  </div>
+
+  <div class="figure">
+    <h4>谁把谁的作品认成了自己</h4>
+    <p class="cap">每行是一位朋友，每列是作品的主人；格子里是标成 Me! 或"可以不承认"的次数，颜色越深越多。对角线是认自己的作品。</p>
+    <svg id="claims" viewBox="0 0 1000 330" role="img" aria-label="认领热力图"></svg>
+  </div>
+  <div class="prose">
+    <div class="insight"><b>有的作品谁看都像自己。</b>被别人挑成"最像自己"的 2 件作品都是 P05 的（P06 挑了 P05·A《问》，P03 挑了 P05·B《一张明信片》），P05 的作品一共被另外 3 位朋友认领了 6 次。它们的主题多是"惦记远方的人""觉得自己很幸运""想不好说什么就直接说喜欢"，人人都能代入，类似巴纳姆效应：容易共鸣，但区分度低。</div>
+    <h4>对下一轮 Input 设计的启示</h4>
+    <ol>
+      <li>第 9 题性价比最高，建议保留，并多问几句不同情境下的"随口话"。</li>
+      <li>图像类问题（第 4、8 题）辨识度高，但容易变成"认出自己的东西"。如果目标是"感觉像我"，应限制模型复刻图片的构图和配色，只取情绪和结构。</li>
+      <li>先天信息（第 1 到 3 题）适合用来制造惊喜，而不是用来识别。</li>
+      <li>不必一次问满 10 题：单组信息被认出的比例不低于三组全给。</li>
+      <li>样本很小（5 人，每个组合 5 件），结论都需要更多人验证。下一轮每人只看一部分作品，并且必须看完。</li>
+    </ol>
+  </div>
+</section>
+
+<section id="llm">
+  <div class="prose">
+    <h2><span class="n">05</span>结果 2：LLM 生成抽象氛围作品的能力如何？</h2>
+    <ol>
+      <li><b>形式</b>：没有限定形式，模型 42 次全部选择了可交互的网页，没有一件是纯文字或静态图，17 件带声音。理由几乎一致：这种 feel 要亲手操作才能被"经历"。</li>
+      <li><b>擅长</b>：把一个意象或一句话的语气变成一条可以亲手操作的规则。例如"计划一路缩水最后躺下"变成导航不断"重新规划路线"（P02·C《顺路》）；"让说一句话就从一数到十"变成随便点哪里，圆环都按顺序排进格子（P01·C《随便》）；网名"快板"被本人当成"行板"，变成要往上推才会变慢的节拍器（P04·ABC《节拍》）。</li>
+      <li><b>不擅长</b>：直接复刻输入的图片；同一个人的作品高度趋同（P06 有 6 件《拓》，P04 有 3 件节拍器）；容易落到人人都能代入的普遍情绪上。</li>
+    </ol>
+
+    <h3>捕捉得好：家乡意象、人物状态、美术风格、音乐</h3>
+  </div>
+  <div class="pair prose">
+    <a class="work" href="w/P01-A.html" target="_blank" rel="noopener"><img src="g/P01_A.gif" alt="P01·A《到点》" loading="lazy"><b>P01·A《到点》</b><span>只用了 A 组信息，本人的作品</span></a>
+    <blockquote>"潮对我来说是一个本能的意象。我总觉得如果我死了骨灰一半是要撒在八月初八钱江潮里，另一半撒在西湖断桥底下的。"<cite>P01</cite></blockquote>
+  </div>
+  <div class="pair prose">
+    <a class="work" href="w/P06-A.html" target="_blank" rel="noopener"><img src="g/P06_A.gif" alt="P06·A《一汪》" loading="lazy"><b>P06·A《一汪》</b><span>只用了 A 组信息；本人当时标了"不是我"</span></a>
+    <blockquote>"'高原上把湖叫做海'这句话我也很喜欢。因为我们家就是这样的！嘿嘿。我说实话会叫海子。……总感觉也是海。一丝丝的乡愁来了。"<cite>P06</cite></blockquote>
+  </div>
+  <div class="prose">
+    <blockquote>"这个美术挺厉害的。ai想的？"<cite>P05</cite></blockquote>
+    <blockquote>"我这边表现最好的问题就是微信背景喜欢听歌的这个爱好。还有那一句想说的话。……既然音乐元素这么重要的话，我其实特别喜欢那个可以音乐互动的那个东西。……比如说我那个节拍器的那个就可以点，然后有音符弹出来。……把音乐这个能够兼具氛围感和互动感的元素可能突出一下，我觉得我个人可能会比较喜欢。"<cite>P04</cite></blockquote>
+
+    <h3>生搬硬套：直接复刻壁纸和背景</h3>
+    <p>P01 有作品直接从朋友圈背景生成；P02·C《顺路》的黄纸条压在彩色织物上，构图和配色都来自锁屏壁纸；P06 的 7 件里 6 件做成碑刻拓片，P06 自己也说"擦涂后出现画面的类型，全是我的爱碑和刻字"。</p>
+  </div>
+  <div class="works prose">
+    <a class="work" href="w/P02-C.html" target="_blank" rel="noopener"><img src="g/P02_C.gif" alt="P02·C《顺路》" loading="lazy"><b>P02·C《顺路》</b><span>黄纸条和织物取自锁屏壁纸</span></a>
+    <a class="work" href="w/P06-C.html" target="_blank" rel="noopener"><img src="g/P06_C.gif" alt="P06·C《拓》" loading="lazy"><b>P06·C《拓》</b><span>碑刻来自壁纸；P06 有 6 件同名</span></a>
+    <a class="work" href="w/P06-AB.html" target="_blank" rel="noopener"><img src="g/P06_AB.gif" alt="P06·AB《拓》" loading="lazy"><b>P06·AB《拓》</b><span>同一个人的作品趋同</span></a>
+  </div>
+
+  <div class="prose">
+    <h3>朋友喜欢的作品</h3>
+    <p class="note">每件都可以点开。</p>
+  </div>
+  <div class="works prose" id="liked"></div>
+
+  <div class="prose">
+    <h3>可以改进的作品</h3>
+  </div>
+  <div class="pair prose">
+    <a class="work" href="w/P03-A.html" target="_blank" rel="noopener"><img src="g/P03_A.gif" alt="P03·A《同一张钟面》" loading="lazy"><b>P03·A《同一张钟面》</b><span>按住天亮，松手天黑，钟面不动</span></a>
+    <div><blockquote>"……那个长按，然后白天和夜晚就是就时间不变，……就不太确定到什么时候它结束了。就如果每一个镜子的那个画面推进最后结束的时候，也有一个小提示，我觉得可能会好一点。"<cite>P04</cite></blockquote><p class="note">生成时可以要求每件作品都有明确的结尾。</p></div>
+  </div>
+  <div class="prose">
+    <blockquote>"是不是一个主题的有点太多了？就比如说那节拍器，感觉就有三四个吧。说实话，一开始我一个都没看出来哪个是我。"</blockquote>
+    <p>P04 的 7 件里确实有 3 件是节拍器（《节拍》《下一拍》《走平》）。同一个人的作品趋同，是这一轮生成最明显的问题。</p>
+  </div>
+</section>
+
+<section id="visit">
+  <div class="prose">
+    <h2><span class="n">06</span>结果 3：用户愿意四处串门，并希望有轻量的互动</h2>
+  </div>
+  <div class="figure">
+    <h4>每位朋友看了多少件作品</h4>
+    <p class="cap">满分 42 件；右侧是用时。找到自己的 7 件远用不了这么多。</p>
+    <svg id="seen" viewBox="0 0 1000 220" role="img" aria-label="浏览数量"></svg>
+  </div>
+  <div class="prose">
+    <h4>窥探：探索别人的世界</h4>
+    <blockquote>"其实你的 project 让我想起了《小王子》。小王子里有很多小星球，每个星球上都有且只有一个居民，这个星球代表了他们的人生哲学和精神状态。小王子是一个旅者，但是在和每个居民交互了之后，他也收获了他们的人生态度加入了他自己的思想循环。"</blockquote>
+    <h4>猜测：这是谁的</h4>
+    <p>有朋友猜某件作品是不是另一位共同朋友的；也有朋友猜节拍器那件是谁。（原文档里的聊天截图没有收录在本页。）</p>
+    <h4>认领：希望它是我的</h4>
+    <blockquote>"会吧！我会很有占有欲（什么）就是在可以猜测它是否属于我的前提下 我会说 嗯这个整体来说很对 能改一下这句话就好了 …… 我就不喜欢往里面丢东西 但后来一想 如果是石头的话可以接受 …… 然后其实美工我都很喜欢 希望它们都是我的，阿门 …… 但是像那个擦涂后出现画面的类型 全是我的爱碑和刻字"<cite>P06</cite></blockquote>
+    <p class="note">"往里面丢东西……石头"是 P06·A《一汪》；"蜡笔彩绘、写可爱行为的"是 P02·B《没有，》；"擦涂后出现画面"是 P06 自己的《拓》。认领既来自情感上的占有欲，也依赖可辨认的视觉元素。</p>
+    <h4>共情：我也曾如此</h4>
+    <blockquote>"会的，但不一定想要知道对面是谁，就是想要类似漂流瓶的能写点匿名文字。我看到有些小世界会想说，哎呀，我也是曾经有这样的感觉，但是现在如何如何。想要按 +1，或者按加油。"<cite>P04</cite></blockquote>
+  </div>
+</section>
+
+<section class="prose" id="next">
+  <h2><span class="n">07</span>小结与下一步</h2>
+  <ol>
+    <li><b>Input</b>：整体能认出自己（41% 对随机 17%），但多数人只认出 1 到 2 件。信息越多并不越像；第 9 题最有用；图像信息辨识度高但容易"认图"；先天信息最能打动人。</li>
+    <li><b>LLM 能力</b>：擅长把性格做成可以亲手操作的交互规则；会复刻图片、同一个人的作品趋同、容易落到普遍情绪。</li>
+    <li><b>串门意愿</b>：平均每人看了 27 件，想窥探、猜测、认领，也想给别人留下轻量的回应。</li>
+  </ol>
+  <h4>下一轮可以改的地方</h4>
+  <ol>
+    <li>生成：限制复刻图片的构图和配色；每件作品要有明确的结尾；同一个人的多件作品拉开题材。</li>
+    <li>问题：保留第 9 题并扩展成几句不同情境的"随口话"；第 1 到 3 题用来制造惊喜。</li>
+    <li>流程：每人只看一部分作品并且必须看完；"最像自己"改为在全部看过的作品里选。</li>
+    <li>互动：在星球上加入匿名的轻回应（+1、加油、一句话），验证串门能不能变成社交。</li>
+    <li>样本：P02 还没提交；每个组合目前只有 5 件，需要更多人验证。</li>
+  </ol>
+  <p class="note" style="margin-top:40px">本页由实验数据自动生成。作品编号写作"朋友·组合《标题》"。<a href="./">查看全部 42 件作品 →</a></p>
+</section>
+</div>
+
+<script>
+const D = {"people": {"P01": {"seen": 13, "min": 18, "me": 3, "hit": 1}, "P04": {"seen": 42, "min": 31, "me": 1, "hit": 1}, "P05": {"seen": 36, "min": 21, "me": 4, "hit": 4}, "P06": {"seen": 25, "min": 15, "me": 9, "hit": 2}, "P03": {"seen": 19, "min": 19, "me": 5, "hit": 1}}, "works": [{"code": "dnesa", "p": "P01", "c": "A", "title": "到点", "own": "none", "rate": 5, "claims": 0, "bestBy": []}, {"code": "bafay", "p": "P01", "c": "B", "title": "一整天", "own": "none", "rate": 3, "claims": 0, "bestBy": []}, {"code": "mjbcj", "p": "P01", "c": "C", "title": "随便", "own": "none", "rate": 4, "claims": 1, "bestBy": []}, {"code": "naztj", "p": "P01", "c": "AB", "title": "低头", "own": "none", "rate": 2, "claims": 1, "bestBy": []}, {"code": "gczpy", "p": "P01", "c": "AC", "title": "随便", "own": "none", "rate": 1, "claims": 0, "bestBy": []}, {"code": "xxjwr", "p": "P01", "c": "BC", "title": "按住", "own": "none", "rate": 5, "claims": 0, "bestBy": []}, {"code": "spcbq", "p": "P01", "c": "ABC", "title": "脚下", "own": "me", "rate": 4, "claims": 0, "bestBy": ["P01"]}, {"code": "ucedx", "p": "P02", "c": "A", "title": "那天晚上", "own": null, "rate": null, "claims": 0, "bestBy": []}, {"code": "cxhmj", "p": "P02", "c": "B", "title": "没有，", "own": null, "rate": null, "claims": 1, "bestBy": []}, {"code": "kggjk", "p": "P02", "c": "C", "title": "顺路", "own": null, "rate": null, "claims": 0, "bestBy": []}, {"code": "cazes", "p": "P02", "c": "AB", "title": "吃什么呢", "own": null, "rate": null, "claims": 1, "bestBy": []}, {"code": "baqzb", "p": "P02", "c": "AC", "title": "今天要做的事", "own": null, "rate": null, "claims": 1, "bestBy": []}, {"code": "qengt", "p": "P02", "c": "BC", "title": "今晚的计划", "own": null, "rate": null, "claims": 0, "bestBy": []}, {"code": "rrxjz", "p": "P02", "c": "ABC", "title": "关于今晚", "own": null, "rate": null, "claims": 1, "bestBy": []}, {"code": "wfetr", "p": "P03", "c": "A", "title": "同一张钟面", "own": "none", "rate": 4, "claims": 1, "bestBy": []}, {"code": "wbczm", "p": "P03", "c": "B", "title": "别找", "own": "me", "rate": 5, "claims": 2, "bestBy": []}, {"code": "wwwhs", "p": "P03", "c": "C", "title": "今天也很稳定", "own": "no", "rate": 2, "claims": 0, "bestBy": []}, {"code": "hdbte", "p": "P03", "c": "AB", "title": "别盯着看", "own": "none", "rate": 5, "claims": 1, "bestBy": []}, {"code": "hqawd", "p": "P03", "c": "AC", "title": "今日事", "own": "no", "rate": 3, "claims": 1, "bestBy": []}, {"code": "bmyzb", "p": "P03", "c": "BC", "title": "往下", "own": "none", "rate": 3, "claims": 0, "bestBy": []}, {"code": "ngxjh", "p": "P03", "c": "ABC", "title": "按住就能飞", "own": "none", "rate": 5, "claims": 1, "bestBy": []}, {"code": "hnubt", "p": "P04", "c": "A", "title": "，", "own": "no", "rate": 3, "claims": 0, "bestBy": []}, {"code": "kxgzy", "p": "P04", "c": "B", "title": "走着就好", "own": "no", "rate": 4, "claims": 0, "bestBy": []}, {"code": "urrkc", "p": "P04", "c": "C", "title": "走平", "own": "no", "rate": 3, "claims": 0, "bestBy": []}, {"code": "agztg", "p": "P04", "c": "AB", "title": "走路的速度", "own": "me", "rate": 1, "claims": 1, "bestBy": ["P04"]}, {"code": "tfqga", "p": "P04", "c": "AC", "title": "，", "own": "no", "rate": 1, "claims": 0, "bestBy": []}, {"code": "ffvcd", "p": "P04", "c": "BC", "title": "下一拍", "own": "no", "rate": 5, "claims": 1, "bestBy": []}, {"code": "ywnxv", "p": "P04", "c": "ABC", "title": "节拍", "own": "no", "rate": 2, "claims": 1, "bestBy": []}, {"code": "bnbmk", "p": "P05", "c": "A", "title": "问", "own": "me", "rate": null, "claims": 1, "bestBy": ["P05", "P06"]}, {"code": "vurvv", "p": "P05", "c": "B", "title": "一张明信片", "own": "me", "rate": null, "claims": 1, "bestBy": ["P03"]}, {"code": "qapfz", "p": "P05", "c": "C", "title": "寄过去", "own": "me", "rate": null, "claims": 0, "bestBy": []}, {"code": "awupn", "p": "P05", "c": "AB", "title": "一张明信片", "own": "no", "rate": null, "claims": 1, "bestBy": []}, {"code": "banqr", "p": "P05", "c": "AC", "title": "抽支签", "own": "me", "rate": null, "claims": 2, "bestBy": []}, {"code": "mrmrn", "p": "P05", "c": "BC", "title": "静音，表还开着", "own": "no", "rate": null, "claims": 1, "bestBy": []}, {"code": "gyueg", "p": "P05", "c": "ABC", "title": "此刻", "own": "none", "rate": null, "claims": 0, "bestBy": []}, {"code": "bwtzc", "p": "P06", "c": "A", "title": "一汪", "own": "no", "rate": 4, "claims": 0, "bestBy": []}, {"code": "egfpa", "p": "P06", "c": "B", "title": "拓", "own": "none", "rate": 3, "claims": 0, "bestBy": []}, {"code": "pyccn", "p": "P06", "c": "C", "title": "拓", "own": "me", "rate": 4, "claims": 0, "bestBy": []}, {"code": "yupya", "p": "P06", "c": "AB", "title": "拓", "own": "me", "rate": 5, "claims": 0, "bestBy": []}, {"code": "ydtrg", "p": "P06", "c": "AC", "title": "拓", "own": "none", "rate": 5, "claims": 0, "bestBy": []}, {"code": "bgkaq", "p": "P06", "c": "BC", "title": "拓", "own": "none", "rate": 2, "claims": 0, "bestBy": []}, {"code": "mfxyg", "p": "P06", "c": "ABC", "title": "拓", "own": "none", "rate": 4, "claims": 1, "bestBy": []}], "claims": {"P01": {"P01": 1, "P02": 0, "P03": 1, "P04": 0, "P05": 1, "P06": 1}, "P02": {"P01": 0, "P02": 0, "P03": 0, "P04": 0, "P05": 0, "P06": 0}, "P03": {"P01": 0, "P02": 2, "P03": 1, "P04": 1, "P05": 3, "P06": 0}, "P04": {"P01": 0, "P02": 0, "P03": 0, "P04": 1, "P05": 0, "P06": 0}, "P05": {"P01": 0, "P02": 0, "P03": 0, "P04": 0, "P05": 4, "P06": 0}, "P06": {"P01": 2, "P02": 2, "P03": 5, "P04": 2, "P05": 2, "P06": 2}}, "pts": [{"who": "P01", "c": "A", "me": false, "mark": "none", "r": 5}, {"who": "P01", "c": "AB", "me": false, "mark": "none", "r": 2}, {"who": "P01", "c": "ABC", "me": true, "mark": "me", "r": 4}, {"who": "P01", "c": "AC", "me": false, "mark": "none", "r": 1}, {"who": "P01", "c": "B", "me": false, "mark": "none", "r": 3}, {"who": "P01", "c": "BC", "me": false, "mark": "none", "r": 5}, {"who": "P01", "c": "C", "me": false, "mark": "none", "r": 4}, {"who": "P04", "c": "A", "me": false, "mark": "no", "r": 3}, {"who": "P04", "c": "AB", "me": true, "mark": "me", "r": 1}, {"who": "P04", "c": "ABC", "me": false, "mark": "no", "r": 2}, {"who": "P04", "c": "AC", "me": false, "mark": "no", "r": 1}, {"who": "P04", "c": "B", "me": false, "mark": "no", "r": 4}, {"who": "P04", "c": "BC", "me": false, "mark": "no", "r": 5}, {"who": "P04", "c": "C", "me": false, "mark": "no", "r": 3}, {"who": "P06", "c": "A", "me": false, "mark": "no", "r": 4}, {"who": "P06", "c": "AB", "me": true, "mark": "me", "r": 5}, {"who": "P06", "c": "ABC", "me": false, "mark": "none", "r": 4}, {"who": "P06", "c": "AC", "me": false, "mark": "none", "r": 5}, {"who": "P06", "c": "B", "me": false, "mark": "none", "r": 3}, {"who": "P06", "c": "BC", "me": false, "mark": "none", "r": 2}, {"who": "P06", "c": "C", "me": true, "mark": "me", "r": 4}, {"who": "P03", "c": "A", "me": false, "mark": "none", "r": 4}, {"who": "P03", "c": "AB", "me": false, "mark": "none", "r": 5}, {"who": "P03", "c": "ABC", "me": false, "mark": "none", "r": 5}, {"who": "P03", "c": "AC", "me": false, "mark": "no", "r": 3}, {"who": "P03", "c": "B", "me": true, "mark": "me", "r": 5}, {"who": "P03", "c": "BC", "me": false, "mark": "none", "r": 3}, {"who": "P03", "c": "C", "me": false, "mark": "no", "r": 2}], "q": [[1, "出生日期、时辰", "A", 62, 3], [2, "真名", "A", 62, 1], [3, "出生地", "A", 67, 0], [4, "微信头像、背景、签名", "B", 92, 6], [5, "人生作品", "B", 100, 1], [6, "comfort food", "B", 71, 0], [7, "comfort 衣服", "B", 75, 1], [8, "首屏截图", "C", 96, 7], [9, "随便一句话", "C", 100, 8], [10, "随机数", "C", 88, 0]]};
+const P5 = ["P01","P03","P04","P05","P06"], COMBOS = ["A","B","C","AB","AC","BC","ABC"];
+const W = (p, c) => D.works.find((w) => w.p === p && w.c === c);
+const esc = (s) => String(s).replace(/[&<>"]/g, (c) => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]));
+const COL = {me:"var(--me)", deny:"var(--deny)", no:"var(--no)", none:"var(--none)"};
+const LAB = {me:"Me!", deny:"可以不承认", no:"不是我", none:"没标"};
+const $ = (id) => document.getElementById(id);
+const txt = (x, y, s, o = {}) => `<text x="${x}" y="${y}" font-size="${o.size || 13}" text-anchor="${o.anchor || "start"}" ${o.weight ? `font-weight="${o.weight}"` : ""} ${o.fill ? `style="fill:${o.fill}"` : ""} dominant-baseline="middle">${s}</text>`;
+
+/* 四象限 */
+(() => {
+  const s = []; const cx = 360, cy = 223;
+  s.push(`<line x1="40" y1="${cy}" x2="680" y2="${cy}" style="stroke:var(--line)" stroke-width="2"/><line x1="${cx}" y1="14" x2="${cx}" y2="430" style="stroke:var(--line)" stroke-width="2"/>`);
+  s.push(`<rect x="560" y="${cy - 11}" width="124" height="22" style="fill:var(--paper)"/><rect x="36" y="${cy - 11}" width="124" height="22" style="fill:var(--paper)"/>`, txt(680, cy, "有选择权 →", {anchor:"end", size:12}), txt(40, cy, "← 没有选择权", {size:12}), txt(cx + 8, 20, "↑ 意识到它在代表自己", {size:12}), txt(cx + 8, 440, "↓ 没意识到", {size:12}));
+  const box = (x, y, title, sub, chips, dim) => {
+    s.push(`<rect x="${x}" y="${y}" width="300" height="170" rx="14" style="fill:${dim ? "var(--soft)" : "var(--paper)"};stroke:var(--line)"/>`);
+    s.push(txt(x + 16, y + 26, title, {size:15, weight:600, fill:"var(--fg)"}), txt(x + 16, y + 50, sub, {size:12}));
+    chips.forEach((c, i) => { const cxx = x + 16 + (i % 3) * 92, cyy = y + 84 + Math.floor(i / 3) * 34;
+      s.push(`<rect x="${cxx}" y="${cyy - 13}" width="86" height="26" rx="13" style="fill:${c[1]}" opacity=".16"/><rect x="${cxx}" y="${cyy - 13}" width="86" height="26" rx="13" fill="none" style="stroke:${c[1]}"/>`, txt(cxx + 43, cyy, c[0], {anchor:"middle", size:12, fill:"var(--fg)"})); });
+  };
+  box(380, 36, "第一象限 · B 组", "有意识、有选择：主动展示的自己", [["4 微信", "var(--me)"], ["5 人生作品", "var(--me)"], ["6 吃", "var(--me)"], ["7 穿", "var(--me)"]]);
+  box(40, 36, "第四象限 · A 组 + 第 10 题", "无选择、有认同：先天与随机", [["1 生辰", "var(--no)"], ["2 名字", "var(--no)"], ["3 出生地", "var(--no)"], ["10 随机数", "var(--deny)"]]);
+  box(380, 240, "第二象限 · C 组", "有选择、没意识到：不展示的自己", [["8 首屏截图", "var(--deny)"], ["9 随口一句", "var(--deny)"]]);
+  box(40, 240, "第三象限", "无选择、无意识：算法行为数据", [["本次未收集", "var(--none)"]], true);
+  $("quad").innerHTML = s.join("");
+})();
+
+/* 本人作品矩阵 */
+(() => {
+  const s = [], x0 = 150, cw = 118, ch = 54, y0 = 40;
+  COMBOS.forEach((c, j) => s.push(txt(x0 + j * cw + cw / 2 - 4, 18, c, {anchor:"middle", size:14, weight:600, fill:"var(--fg)"})));
+  const rows = ["P01","P02","P03","P04","P05","P06"];
+  rows.forEach((p, i) => {
+    const y = y0 + i * (ch + 8), pp = D.people[p];
+    s.push(txt(0, y + ch / 2 - 9, p, {size:15, weight:600, fill:"var(--fg)"}), txt(0, y + ch / 2 + 11, pp ? `认出 ${pp.hit} / Me! ${pp.me} 次` : "还没提交", {size:11}));
+    COMBOS.forEach((c, j) => {
+      const w = W(p, c), x = x0 + j * cw, mark = pp ? (w.own || "none") : null;
+      if (!pp) { s.push(`<rect x="${x}" y="${y}" width="${cw - 8}" height="${ch}" rx="6" fill="none" style="stroke:var(--line)" stroke-dasharray="4 4"/>`); return; }
+      const tip = `${p}·${c}《${esc(w.title)}》<br>当时：${LAB[mark]}${w.rate ? `<br>揭晓后打分：${w.rate}` : ""}`;
+      s.push(`<g data-tip="${esc(tip)}"><rect x="${x}" y="${y}" width="${cw - 8}" height="${ch}" rx="6" style="fill:${COL[mark]}" ${mark === "none" ? 'opacity=".55"' : ""}/>`);
+      const ink = mark === "none" ? "var(--fg)" : "#fff";
+      s.push(txt(x + 10, y + 17, LAB[mark], {size:11, fill:ink}));
+      if (w.rate) s.push(txt(x + cw - 18, y + ch - 17, w.rate, {anchor:"end", size:20, weight:700, fill:ink}));
+      s.push("</g>");
+    });
+  });
+  const yb = y0 + 6 * (ch + 8) + 6;
+  s.push(`<line x1="${x0}" y1="${yb}" x2="${x0 + 7 * cw - 8}" y2="${yb}" style="stroke:var(--line)"/>`);
+  s.push(txt(0, yb + 24, "这个组合", {size:12}));
+  COMBOS.forEach((c, j) => {
+    const own = P5.map((p) => W(p, c)), hit = own.filter((w) => w.own === "me").length, rs = own.map((w) => w.rate).filter(Boolean);
+    s.push(txt(x0 + j * cw + cw / 2 - 4, yb + 16, `认出 ${hit}/5`, {anchor:"middle", size:12, weight:600, fill:"var(--fg)"}), txt(x0 + j * cw + cw / 2 - 4, yb + 34, `均分 ${(rs.reduce((a, b) => a + b, 0) / rs.length).toFixed(1)}`, {anchor:"middle", size:12}));
+  });
+  $("matrix").innerHTML = s.join("");
+})();
+
+/* 按组数的识别率 */
+(() => {
+  const data = [["只用一组（A、B、C）", 5, 15], ["用两组（AB、AC、BC）", 3, 15], ["三组全给（ABC）", 1, 5]];
+  const s = [], x0 = 230, w = 620, bh = 34, sc = (v) => x0 + v / 0.5 * w;
+  [0, .1, .2, .3, .4, .5].forEach((v) => s.push(`<line x1="${sc(v)}" y1="10" x2="${sc(v)}" y2="170" style="stroke:var(--line)"/>`, txt(sc(v), 192, `${v * 100}%`, {anchor:"middle", size:11})));
+  data.forEach(([l, h, n], i) => { const y = 22 + i * 50, r = h / n;
+    s.push(txt(x0 - 14, y + bh / 2, l, {anchor:"end", size:13, fill:"var(--fg)"}));
+    s.push(`<g data-tip="${l}：${h}/${n} 件被本人认出（${Math.round(r * 100)}%）"><rect x="${x0}" y="${y}" width="${sc(r) - x0}" height="${bh}" rx="4" style="fill:var(--accent)"/></g>`);
+    s.push(txt(sc(r) + 10, y + bh / 2, `${Math.round(r * 100)}%  (${h}/${n})`, {size:13, weight:600, fill:"var(--fg)"}));
+  });
+  s.push(`<line x1="${sc(1 / 6)}" y1="6" x2="${sc(1 / 6)}" y2="176" style="stroke:var(--fg)" stroke-dasharray="5 4"/>`, txt(sc(1 / 6) + 6, 212, "随机 17%", {size:12, fill:"var(--fg)"}));
+  $("groups").innerHTML = s.join("");
+})();
+
+/* 认出 vs 感觉像 点图 */
+(() => {
+  const s = [], x0 = 230, step = 150, sc = (r) => x0 + (r - 1) * step;
+  [1, 2, 3, 4, 5].forEach((r) => s.push(`<line x1="${sc(r)}" y1="10" x2="${sc(r)}" y2="200" style="stroke:var(--line)"/>`, txt(sc(r), 222, `${r} 分`, {anchor:"middle", size:12})));
+  s.push(`<rect x="${sc(3.5)}" y="112" width="${sc(5.4) - sc(3.5)}" height="92" rx="10" style="fill:var(--accent)" opacity=".08"/>`, txt(sc(5.4) - 8, 124, "11 件 ≥ 4 分", {anchor:"end", size:12, weight:600, fill:"var(--fg)"}));
+  const rows = [["当时标了 Me!", D.pts.filter((p) => p.me), 52], ["当时没标 Me!", D.pts.filter((p) => !p.me), 160]];
+  rows.forEach(([l, pts, y]) => {
+    s.push(txt(x0 - 30, y, l, {anchor:"end", size:13, fill:"var(--fg)"}), txt(x0 - 30, y + 18, `${pts.length} 件`, {anchor:"end", size:11}));
+    const byR = {}; pts.forEach((p) => (byR[p.r] = byR[p.r] || []).push(p));
+    Object.entries(byR).forEach(([r, list]) => list.forEach((p, k) => {
+      const cols = 4, dx = (k % cols - (Math.min(list.length, cols) - 1) / 2) * 20, dy = (Math.floor(k / cols) - (Math.ceil(list.length / cols) - 1) / 2) * 20;
+      const w = W(p.who, p.c);
+      s.push(`<g data-tip="${esc(`${p.who}·${p.c}《${w.title}》<br>当时：${LAB[p.mark]}<br>揭晓后打分：${p.r}`)}"><circle cx="${sc(+r) + dx}" cy="${y + dy}" r="8" style="fill:${COL[p.mark]};stroke:var(--paper)" stroke-width="2"/></g>`);
+    }));
+  });
+  $("dots").innerHTML = s.join("");
+})();
+
+/* 题目引用 */
+(() => {
+  const s = [], x0 = 270, w = 560, bh = 24, sc = (v) => x0 + v / 100 * w;
+  [0, 25, 50, 75, 100].forEach((v) => s.push(`<line x1="${sc(v)}" y1="8" x2="${sc(v)}" y2="392" style="stroke:var(--line)"/>`, txt(sc(v), 410, `${v}%`, {anchor:"middle", size:11})));
+  s.push(txt(x0 + w + 110, 0, "核心次数", {anchor:"middle", size:11}));
+  D.q.forEach(([n, l, g, pct, core], i) => { const y = 14 + i * 38;
+    s.push(txt(16, y + bh / 2, g, {size:12, weight:700, fill:"var(--muted)"}), txt(x0 - 12, y + bh / 2, `${n}. ${l}`, {anchor:"end", size:13, fill:"var(--fg)"}));
+    s.push(`<g data-tip="第 ${n} 题 ${l}<br>可用时被引用 ${pct}%<br>被写成核心依据 ${core} 次"><rect x="${x0}" y="${y}" width="${sc(pct) - x0}" height="${bh}" rx="4" style="fill:${core >= 6 ? "var(--seq7)" : "var(--seq3)"}"/></g>`);
+    s.push(pct >= 90 ? txt(sc(pct) - 8, y + bh / 2, `${pct}%`, {anchor:"end", size:12, weight:600, fill:core >= 6 ? "#fff" : "var(--fg)"}) : txt(sc(pct) + 8, y + bh / 2, `${pct}%`, {size:12}), txt(x0 + w + 110, y + bh / 2, core ? `×${core}` : "–", {anchor:"middle", size:14, weight:core >= 6 ? 700 : 400, fill:"var(--fg)"}));
+  });
+  $("qs").innerHTML = s.join("");
+})();
+
+/* 认领热力图 */
+(() => {
+  const s = [], owners = ["P01","P02","P03","P04","P05","P06"], x0 = 170, cw = 120, ch = 44, y0 = 36;
+  const shade = (v) => v === 0 ? "var(--soft)" : v === 1 ? "var(--seq1)" : v <= 2 ? "var(--seq3)" : v <= 3 ? "var(--seq5)" : "var(--seq7)";
+  s.push(txt(x0 + 3 * cw, 10, "作品的主人 →", {anchor:"middle", size:12}));
+  owners.forEach((o, j) => s.push(txt(x0 + j * cw + cw / 2 - 4, 26, o, {anchor:"middle", size:13, weight:600, fill:"var(--fg)"})));
+  P5.forEach((p, i) => { const y = y0 + i * (ch + 6);
+    s.push(txt(x0 - 16, y + ch / 2, `${p} 认领了`, {anchor:"end", size:13, fill:"var(--fg)"}));
+    owners.forEach((o, j) => { const v = D.claims[p][o], x = x0 + j * cw;
+      s.push(`<g data-tip="${p} 把 ${o} 的作品标成 Me! 或“不承认”：${v} 次"><rect x="${x}" y="${y}" width="${cw - 8}" height="${ch}" rx="6" style="fill:${shade(v)};stroke:${p === o ? "var(--fg)" : "none"}" stroke-width="2"/></g>`);
+      s.push(txt(x + (cw - 8) / 2, y + ch / 2, v, {anchor:"middle", size:15, weight:600, fill:v >= 3 ? "#fff" : "var(--fg)"}));
+    });
+  });
+  s.push(`<rect x="${x0 + 4 * cw - 4}" y="${y0 - 4}" width="${cw}" height="${5 * (ch + 6) + 2}" rx="9" fill="none" style="stroke:var(--accent)" stroke-width="2" stroke-dasharray="6 4"/>`);
+  s.push(txt(x0 + 4 * cw + cw / 2 - 4, y0 + 5 * (ch + 6) + 18, "P05 的作品被 3 位朋友认领", {anchor:"middle", size:12, weight:600, fill:"var(--fg)"}));
+  $("claims").innerHTML = s.join("");
+})();
+
+/* 浏览数量 */
+(() => {
+  const s = [], x0 = 120, w = 700, bh = 26, sc = (v) => x0 + v / 42 * w;
+  [0, 7, 14, 21, 28, 35, 42].forEach((v) => s.push(`<line x1="${sc(v)}" y1="6" x2="${sc(v)}" y2="182" style="stroke:var(--line)"/>`, txt(sc(v), 200, v, {anchor:"middle", size:11})));
+  P5.forEach((p, i) => { const pp = D.people[p], y = 12 + i * 34;
+    s.push(txt(x0 - 14, y + bh / 2, p, {anchor:"end", size:14, weight:600, fill:"var(--fg)"}));
+    s.push(`<g data-tip="${p}：看了 ${pp.seen} 件，用时 ${pp.min} 分钟"><rect x="${x0}" y="${y}" width="${sc(pp.seen) - x0}" height="${bh}" rx="4" style="fill:var(--accent)"/></g>`);
+    s.push(txt(sc(pp.seen) + 10, y + bh / 2, `${pp.seen} 件 · ${pp.min} 分钟`, {size:12, fill:"var(--fg)"}));
+  });
+  s.push(`<line x1="${sc(7)}" y1="2" x2="${sc(7)}" y2="186" style="stroke:var(--fg)" stroke-dasharray="5 4"/>`, txt(sc(7) + 6, 212, "自己的作品只有 7 件", {size:12, fill:"var(--fg)"}));
+  $("seen").innerHTML = s.join("");
+})();
+
+/* 朋友喜欢的作品 */
+(() => {
+  const L = [["P01","BC","P01：是蓝色的黑暗里点亮那个吗？……左上角还有画正字……底色会从黑变深蓝。","本人作品，当时没标 Me!，揭晓后 5 分"],
+    ["P02","ABC","P01：有点喜剧的，那个过七天看似一事无成……然后这个躺下。",""],
+    ["P04","ABC","P01：（针对节拍器）卧槽。nb。","节拍器共 3 件，这是其中一件"],
+    ["P05","C","P04：4 个不同的时间……信息发了又删……然后再发送。",""],
+    ["P03","AB","P04：夜晚的山脚下……照了小东西就躲起来……飞到山顶，变成星星。",""],
+    ["P04","BC","P04：我打高分的那个很有意思：节拍器和路灯很喜欢。","本人作品，当时标了“不是我”，揭晓后 5 分"],
+    ["P04","B","P04：……路灯；P05：点击有旋律的那个。","本人作品，当时标了“不是我”，揭晓后 4 分"],
+    ["P05","AC","P06：抽签的和明信片都还挺有意思的。",""],
+    ["P05","B","P06：……明信片。","P03 把它挑成了“最像自己”"]];
+  $("liked").innerHTML = L.map(([p, c, q, n]) => { const w = W(p, c);
+    return `<a class="work" href="w/${p}-${c}.html" target="_blank" rel="noopener"><img src="g/${p}_${c}.gif" alt="${p}·${c}《${esc(w.title)}》" loading="lazy"><b>${p}·${c}《${esc(w.title)}》</b><span>${esc(q)}${n ? `<br><i>${esc(n)}</i>` : ""}</span></a>`; }).join("");
+})();
+
+/* 悬停提示 */
+(() => {
+  const tip = $("tip");
+  document.addEventListener("pointermove", (e) => {
+    const g = e.target.closest && e.target.closest("[data-tip]");
+    if (!g) { tip.style.opacity = 0; return; }
+    tip.innerHTML = g.getAttribute("data-tip");
+    const x = Math.min(e.clientX + 14, innerWidth - tip.offsetWidth - 8), y = Math.min(e.clientY + 14, innerHeight - tip.offsetHeight - 8);
+    tip.style.left = x + "px"; tip.style.top = y + "px"; tip.style.opacity = 1;
+  });
+})();
+</script>
+</body>
+</html>

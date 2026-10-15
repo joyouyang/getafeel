@@ -1,0 +1,367 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover,user-scalable=no">
+<title>问</title>
+<style>
+  :root{
+    --paper:#efe9dc; --ink:#2a2622; --faint:#a39a8b; --seal:#b23a2a;
+    --serif:"Songti SC","STSong","Noto Serif SC","Noto Serif CJK SC","Source Han Serif SC","SimSun",serif;
+  }
+  *{box-sizing:border-box;margin:0;padding:0;-webkit-tap-highlight-color:transparent}
+  html,body{height:100%;overflow:hidden;background:var(--paper);color:var(--ink);font-family:var(--serif)}
+  body{user-select:none;-webkit-user-select:none;touch-action:none}
+
+  .scene{position:fixed;inset:0;transition:opacity 1.2s ease}
+  .hidden{opacity:0;pointer-events:none}
+
+  /* 纸 */
+  #paper{
+    background:
+      radial-gradient(ellipse at 30% 20%,rgba(255,255,255,.45),transparent 60%),
+      radial-gradient(ellipse at 80% 90%,rgba(120,100,70,.08),transparent 55%),
+      var(--paper);
+    display:flex;align-items:center;justify-content:center;
+  }
+  #paper::after{content:"";position:absolute;inset:0;pointer-events:none;opacity:.35;
+    background-image:url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='160' height='160'><filter id='n'><feTurbulence type='fractalNoise' baseFrequency='.9' numOctaves='2' stitchTiles='stitch'/><feColorMatrix values='0 0 0 0 .4  0 0 0 0 .33  0 0 0 0 .25  0 0 0 .18 0'/></filter><rect width='100%' height='100%' filter='url(%23n)'/></svg>");}
+  #cols{
+    writing-mode:vertical-rl;text-orientation:upright;
+    height:min(72vh,560px);
+    font-size:clamp(19px,5.4vw,24px);letter-spacing:.32em;line-height:2.5;
+    position:relative;z-index:1;
+  }
+  .col{opacity:0;transform:translateY(-6px);transition:opacity 1s ease,transform 1s ease;white-space:nowrap}
+  .col.on{opacity:1;transform:none}
+  .q{color:var(--ink)}
+  .a{color:var(--faint);font-size:.82em}
+  .blank{display:inline-block;inline-size:3.2em;block-size:1.15em;border:1px dashed #bdb3a2;vertical-align:middle;margin-block:0 .2em;border-radius:1px}
+  .gap{inline-size:1.2em;display:inline-block}
+
+  .hint{position:fixed;left:0;right:0;bottom:calc(28px + env(safe-area-inset-bottom));text-align:center;
+    font-size:13px;letter-spacing:.4em;color:var(--faint);opacity:0;transition:opacity 1.4s;z-index:3;pointer-events:none}
+  .hint.on{opacity:.85;animation:breathe 2.8s ease-in-out infinite}
+  @keyframes breathe{50%{opacity:.35}}
+
+  /* 地 */
+  #land{background:#cfc6b2}
+  #cv{position:absolute;inset:0;width:100%;height:100%;display:block}
+  #say{position:absolute;left:0;right:0;top:calc(9vh + env(safe-area-inset-top));padding:0 30px;text-align:center;
+    font-size:clamp(16px,4.6vw,20px);letter-spacing:.14em;line-height:1.9;color:#3b352c;
+    transition:opacity .6s ease;min-height:4em;text-shadow:0 0 12px rgba(240,235,220,.7)}
+  #done{position:absolute;left:50%;bottom:calc(9vh + env(safe-area-inset-bottom));transform:translateX(-50%);
+    font-family:var(--serif);font-size:15px;letter-spacing:.5em;padding:10px 18px 10px 26px;
+    color:#eef0e6;background:none;border:1px solid rgba(238,240,230,.55);border-radius:2px;
+    opacity:0;pointer-events:none;transition:opacity 1.4s}
+  #done.on{opacity:1;pointer-events:auto}
+
+  /* 批 */
+  #end{display:flex;align-items:center;justify-content:center;background:var(--paper)}
+  #end::after{content:"";position:absolute;inset:0;pointer-events:none;opacity:.35;background-image:inherit}
+  #book{
+    writing-mode:vertical-rl;text-orientation:upright;height:min(78vh,600px);
+    font-size:clamp(15px,4.3vw,20px);letter-spacing:.26em;line-height:2.05;position:relative;
+  }
+  #book .col{transition-duration:1.4s}
+  .lab{color:var(--faint);font-size:.8em;margin-block-end:.6em}
+  .em{display:inline-block;margin-block-start:.4em}
+  .pi{color:#4a4238}
+  .gapcol{inline-size:.9em}
+  .sealcol{inline-size:auto}
+  .seal{
+    display:inline-grid;writing-mode:horizontal-tb;vertical-align:top;
+    margin-block-start:5.6em;margin-inline-start:.3em;
+    width:58px;height:58px;border:3px solid var(--seal);color:var(--seal);border-radius:4px;
+    grid-template-rows:1fr 1fr;place-items:center;font-size:22px;line-height:1;font-weight:700;letter-spacing:0;
+    opacity:0;transform:scale(1.8) rotate(-8deg);transition:opacity .25s ease,transform .35s cubic-bezier(.2,1.6,.4,1);
+    mix-blend-mode:multiply;filter:url(#rough);
+  }
+  .seal.on{opacity:.88;transform:scale(1) rotate(-6deg)}
+  #again{position:fixed;right:22px;bottom:calc(22px + env(safe-area-inset-bottom));font-family:var(--serif);font-size:12px;
+    letter-spacing:.3em;color:var(--faint);background:none;border:none;opacity:0;transition:opacity 2s;z-index:4}
+  #again.on{opacity:.8}
+</style>
+</head>
+<body>
+
+<svg width="0" height="0" style="position:absolute">
+  <filter id="rough"><feTurbulence type="fractalNoise" baseFrequency=".08" numOctaves="2" result="t"/>
+    <feDisplacementMap in="SourceGraphic" in2="t" scale="2.2"/></filter>
+</svg>
+
+<section id="paper" class="scene">
+  <div id="cols"></div>
+</section>
+
+<section id="land" class="scene hidden">
+  <canvas id="cv"></canvas>
+  <div id="say"></div>
+  <button id="done">收起</button>
+</section>
+
+<section id="end" class="scene hidden">
+  <div id="book"></div>
+</section>
+
+<div class="hint" id="hint">轻点</div>
+<button id="again">再看一遍</button>
+
+<script>
+(()=>{
+const $=s=>document.querySelector(s);
+const cols=$('#cols'), hint=$('#hint');
+const blank='<span class="blank"></span>';
+
+/* —— 第一张纸：问 —— */
+const steps=[
+  ['q','报上生辰。'],
+  ['a',blank+'<span class="gap"></span>不说。'],
+  ['q','那，名字。'],
+  ['a',blank+'<span class="gap"></span>也不说。'],
+  ['q','行。'],
+  ['q','那你打哪儿来？'],
+];
+let si=0, phase='ask', lock=false;
+
+function addCol(parent,cls,html){
+  const d=document.createElement('div');d.className='col '+cls;d.innerHTML=html;parent.appendChild(d);
+  requestAnimationFrame(()=>requestAnimationFrame(()=>d.classList.add('on')));
+  return d;
+}
+function next(){
+  if(lock) return;
+  if(si<steps.length){
+    addCol(cols,steps[si][0],steps[si][1]);si++;
+    hint.classList.remove('on');
+    lock=true;setTimeout(()=>{lock=false;if(phase==='ask'&&si<steps.length) hint.classList.add('on')},si===steps.length?400:900);
+    if(si===steps.length){ setTimeout(toLand,2200); }
+  }
+}
+$('#paper').addEventListener('pointerdown',()=>{ if(phase==='ask') next(); });
+setTimeout(()=>{ if(si===0) hint.classList.add('on') },1200);
+setTimeout(()=>{ if(si===0) next() },600);
+
+/* —— 地：一条线 —— */
+const cv=$('#cv'), ctx=cv.getContext('2d'), say=$('#say'), done=$('#done');
+let W,H,DPR,lineY;
+function resize(){
+  DPR=Math.min(window.devicePixelRatio||1,2);
+  W=innerWidth;H=innerHeight;cv.width=W*DPR;cv.height=H*DPR;ctx.setTransform(DPR,0,0,DPR,0,0);
+  lineY=H*0.52;
+  if(!dragging){dot.y=lineY+dot.off}
+}
+const dot={x:0,y:0,vy:0,off:0};
+let dragging=false, grab=0, running=false, t0=0;
+let seenN=false, seenS=false, back=false, curText='', landStart=0;
+
+const flakes=[], drops=[];
+function spawn(init){
+  return {x:Math.random()*W, y:init?Math.random()*H:-10-Math.random()*40,
+          v:.35+Math.random()*.55, ph:Math.random()*6.28, r:1+Math.random()*1.8, rain:false};
+}
+
+function riverY(x,t){return lineY+Math.sin(x*.012+t*.6)*3.2+Math.sin(x*.031-t*.9)*1.4}
+
+function draw(t){
+  const L=lineY;
+  // 北
+  let g=ctx.createLinearGradient(0,0,0,L);
+  g.addColorStop(0,'#e7e3d8');g.addColorStop(.55,'#ddd2b6');g.addColorStop(1,'#cdb98a');
+  ctx.fillStyle=g;ctx.fillRect(0,0,W,L+4);
+  // 南
+  g=ctx.createLinearGradient(0,L,0,H);
+  g.addColorStop(0,'#7d9878');g.addColorStop(.5,'#5d7d68');g.addColorStop(1,'#3f5d52');
+  ctx.fillStyle=g;ctx.fillRect(0,L,W,H-L);
+
+  // 北边：直的垄
+  ctx.strokeStyle='rgba(150,124,70,.18)';ctx.lineWidth=1;
+  for(let i=1;i<9;i++){
+    const y=L-i*i*4.2-6; if(y<H*.22) break;
+    ctx.beginPath();
+    for(let x=-10;x<W+10;x+=7){ctx.moveTo(x,y);ctx.lineTo(x+3.2,y)}
+    ctx.stroke();
+  }
+  // 南边：弯的茶垄
+  ctx.lineWidth=1.3;
+  for(let i=1;i<14;i++){
+    const y=L+i*i*2.6+10; if(y>H+20) break;
+    ctx.strokeStyle='rgba(190,215,170,'+(0.16-i*.006)+')';
+    ctx.beginPath();
+    for(let x=-10;x<=W+10;x+=8){
+      const yy=y+Math.sin(x*.016+i*.9)*(5+i*1.2);
+      x<0?ctx.moveTo(x,yy):ctx.lineTo(x,yy);
+    }
+    ctx.stroke();
+  }
+
+  // 雪 → 雨
+  for(const f of flakes){
+    const ry=riverY(f.x,t);
+    if(!f.rain){
+      f.y+=f.v; f.x+=Math.sin(t*1.1+f.ph)*.35;
+      if(f.y>=ry){f.rain=true}
+      ctx.fillStyle='rgba(255,255,255,.85)';
+      ctx.beginPath();ctx.arc(f.x,f.y,f.r,0,6.283);ctx.fill();
+    }else{
+      f.y+=f.v*6+2.2; f.x+=.6;
+      const k=Math.min(1,(f.y-ry)/30);
+      ctx.strokeStyle='rgba(225,238,232,'+(.12+.35*k)+')';ctx.lineWidth=1;
+      ctx.beginPath();ctx.moveTo(f.x,f.y);ctx.lineTo(f.x-2.4*k-.5,f.y-(4+10*k));ctx.stroke();
+      if(f.y>H+20) Object.assign(f,spawn(false));
+    }
+    if(f.x>W+10) f.x=-10; if(f.x<-10) f.x=W+10;
+  }
+
+  for(const r of drops){
+    r.y+=r.v;r.x+=.6;
+    const ry=riverY(r.x,t), k=Math.min(1,(r.y-ry)/40);
+    if(r.y>ry){
+      ctx.strokeStyle='rgba(225,238,232,'+(.1+.32*k)+')';ctx.lineWidth=1;
+      ctx.beginPath();ctx.moveTo(r.x,r.y);ctx.lineTo(r.x-2.4*k-.5,r.y-(4+10*k));ctx.stroke();
+    }
+    if(r.y>H+20){r.x=Math.random()*W;r.y=lineY-Math.random()*30;r.v=3+Math.random()*3}
+  }
+
+  // 河
+  ctx.beginPath();
+  for(let x=0;x<=W;x+=4){const y=riverY(x,t);x?ctx.lineTo(x,y):ctx.moveTo(x,y)}
+  ctx.strokeStyle='rgba(160,186,192,.9)';ctx.lineWidth=5;ctx.stroke();
+  ctx.strokeStyle='rgba(235,244,244,.75)';ctx.lineWidth=1.2;ctx.stroke();
+  // 河上的光
+  for(let i=0;i<5;i++){
+    const x=((t*18+i*W/5)%(W+40))-20, y=riverY(x,t);
+    ctx.fillStyle='rgba(255,255,255,.55)';ctx.fillRect(x,y-.6,10,1.2);
+  }
+
+  // 点
+  const dy=riverY(dot.x,t);
+  const d=(dot.y-dy);
+  ctx.save();
+  ctx.shadowColor='rgba(178,58,42,.45)';ctx.shadowBlur=dragging?22:14;
+  ctx.fillStyle='#b23a2a';
+  ctx.beginPath();ctx.arc(dot.x,dot.y,dragging?10:8.5,0,6.283);ctx.fill();
+  ctx.restore();
+  // 回线的细绳
+  if(Math.abs(d)>12){
+    ctx.setLineDash([2,5]);ctx.strokeStyle='rgba(178,58,42,.35)';ctx.lineWidth=1;
+    ctx.beginPath();ctx.moveTo(dot.x,dy);ctx.lineTo(dot.x,dot.y);ctx.stroke();ctx.setLineDash([]);
+  }
+}
+
+function setSay(s){
+  if(s===curText) return; curText=s;
+  say.style.opacity=0;
+  clearTimeout(setSay.tm);
+  setSay.tm=setTimeout(()=>{say.innerHTML=s;say.style.opacity=1},280);
+}
+function words(){
+  const half=Math.max(80,lineY-say.getBoundingClientRect().bottom-28);
+  const r=(dot.y-lineY)/half;
+  if(r<-.62){seenN=true;return '再往上，吃面的多了，<br>冬天屋里有暖气。'}
+  if(r<-.16){return '往这边走，<br>人家一听口音，说你是南方的。'}
+  if(r>.62){seenS=true;return '再往下，吃米的多了，<br>雪就不大下了。'}
+  if(r>.16){return '往那边走，<br>人家一听口音，说你是北方的。'}
+  if(seenN&&seenS){back=true;return '两头都去过了。<br>还是这儿。'}
+  return '就这儿。<br>雪下到这儿，下着下着就成了雨。'
+}
+
+function loop(ts){
+  if(!running) return;
+  const t=(ts-t0)/1000;
+  if(!dragging){
+    // 慢慢回到线上
+    const target=riverY(dot.x,t);
+    dot.vy+= (target-dot.y)*.012; dot.vy*=.9; dot.y+=dot.vy;
+  }
+  draw(t);
+  setSay(words());
+  if((back || (ts-landStart>26000 && (seenN||seenS))) && !done.classList.contains('on')){
+    setTimeout(()=>done.classList.add('on'),back?1200:0);
+    back=false; seenN=seenN; // keep
+    done.dataset.armed=1;
+  }
+  requestAnimationFrame(loop);
+}
+
+function toLand(){
+  phase='land';hint.classList.remove('on');
+  $('#paper').classList.add('hidden');
+  $('#land').classList.remove('hidden');
+  resize();
+  dot.x=W/2;dot.y=lineY;dot.vy=0;
+  flakes.length=0;
+  const n=Math.round(W*H/5200);
+  for(let i=0;i<n;i++){const f=spawn(true);if(f.y>lineY){f.y=Math.random()*lineY}flakes.push(f)}
+  drops.length=0;
+  for(let i=0;i<Math.round(n*.7);i++) drops.push({x:Math.random()*W,y:lineY+Math.random()*(H-lineY),v:3+Math.random()*3});
+  running=true;t0=performance.now();landStart=t0;
+  say.innerHTML='';curText='';
+  requestAnimationFrame(loop);
+  setTimeout(()=>{ if(!dragging && !seenN && !seenS){ hint.textContent='按住那个点，往上或往下拖';hint.classList.add('on');hint.style.color='#f2efe4' } },3200);
+}
+
+function pos(e){return e.touches?e.touches[0]:e}
+cv.addEventListener('pointerdown',e=>{
+  if(phase!=='land') return;
+  const p=pos(e);
+  if(Math.hypot(p.clientX-dot.x,p.clientY-dot.y)<56 || Math.abs(p.clientY-dot.y)<40){
+    dragging=true;grab=p.clientY-dot.y;cv.setPointerCapture&&cv.setPointerCapture(e.pointerId);
+    hint.classList.remove('on');
+  }
+});
+cv.addEventListener('pointermove',e=>{
+  if(!dragging) return;
+  const p=pos(e);
+  const top=say.getBoundingClientRect().bottom+28;
+  dot.y=Math.max(top,Math.min(H-40,p.clientY-grab));
+  dot.x+= (Math.max(30,Math.min(W-30,p.clientX))-dot.x)*.15;
+  dot.vy=0;
+});
+const up=()=>{dragging=false};
+cv.addEventListener('pointerup',up);cv.addEventListener('pointercancel',up);
+addEventListener('resize',()=>{ if(phase==='land') resize() });
+
+/* —— 批 —— */
+done.addEventListener('click',()=>{
+  phase='end';
+  $('#land').classList.add('hidden');
+  $('#end').classList.remove('hidden');
+  setTimeout(()=>{running=false},1300);
+  const book=$('#book');book.innerHTML='';
+  const rows=[
+    ['', '<span class="lab">生辰</span>'+blank],
+    ['', '<span class="lab">名字</span>'+blank],
+    ['', '<span class="lab">来处</span>南北中间，一条线上。'],
+    ['gapcol',''],
+    ['pi','两头都说得通，两头都不全是。'],
+    ['pi','时辰不报，名字不报，'],
+    ['pi','算不出来。'],
+    ['sealcol','<span class="seal"><span>不</span><span>算</span></span>'],
+    ['q','地方我记下了。'],
+    ['q','别的，你自己留着。'],
+  ];
+  let i=0;
+  const step=()=>{
+    if(i<rows.length){
+      const [c,h]=rows[i++];
+      const d=addCol(book,c,h||'');
+      setTimeout(step,c==='gapcol'?300:(c==='sealcol'?1900:(i===7?1200:900)));
+      if(c==='sealcol'){
+        setTimeout(()=>{
+          d.querySelector('.seal').classList.add('on');
+          if(navigator.vibrate) try{navigator.vibrate(18)}catch(_){}
+        },700);
+      }
+    }else{
+      setTimeout(()=>$('#again').classList.add('on'),1800);
+    }
+  };
+  setTimeout(step,1000);
+});
+
+$('#again').addEventListener('click',()=>location.reload());
+})();
+</script>
+</body>
+</html>

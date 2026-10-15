@@ -1,0 +1,345 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no,viewport-fit=cover">
+<meta name="theme-color" content="#0f1114">
+<title>拓</title>
+<style>
+  html,body{margin:0;height:100%;background:#0f1114;overflow:hidden;overscroll-behavior:none;
+    -webkit-user-select:none;user-select:none;-webkit-touch-callout:none;-webkit-tap-highlight-color:transparent}
+  body{background:radial-gradient(ellipse at 50% 40%,#1a1d22 0%,#0f1114 70%)}
+  #stage{position:absolute}
+  #stage canvas{position:absolute;left:0;top:0;width:100%;height:100%;touch-action:none;display:block}
+  #paper{transform-origin:50% 0;will-change:transform}
+  #paper.lift{animation:lift 2.1s cubic-bezier(.55,0,.75,.4) forwards;filter:drop-shadow(0 18px 24px rgba(0,0,0,.55))}
+  #paper.drop{animation:drop 1.1s cubic-bezier(.2,.7,.3,1) both}
+  @keyframes lift{
+    0%{transform:none}
+    28%{transform:perspective(900px) rotateX(-14deg) translateY(-4px)}
+    100%{transform:perspective(900px) rotateX(-28deg) rotate(-3deg) translateY(-130vh)}
+  }
+  @keyframes drop{
+    0%{transform:perspective(900px) rotateX(-20deg) translateY(-60px);opacity:0}
+    60%{opacity:1}
+    100%{transform:none;opacity:1}
+  }
+  .ui{position:absolute;left:0;right:0;text-align:center;
+    font-family:-apple-system,"PingFang SC","Hiragino Sans GB","Microsoft YaHei",system-ui,sans-serif}
+  #hint{color:#7f8690;font-size:13px;letter-spacing:.25em;opacity:0;transition:opacity 1.2s}
+  #hint.on{opacity:1}
+  #peel{display:block;margin:0 auto;background:none;border:1px solid #4d545e;color:#cdd2d8;
+    padding:10px 28px 10px 34px;font-size:14px;letter-spacing:.6em;border-radius:2px;opacity:0;
+    pointer-events:none;transition:opacity 1s;font-family:inherit;cursor:pointer}
+  #peel.on{opacity:1;pointer-events:auto}
+  #end{color:#c4c9cf;font-size:16px;line-height:2.1;letter-spacing:.2em;
+    font-family:"Songti SC","STSong","Noto Serif CJK SC","Source Han Serif SC","Noto Serif SC",serif}
+  #end p{margin:0;opacity:0;transition:opacity 1.6s}
+  #end .acts{margin-top:14px;font-size:12px;letter-spacing:.2em;opacity:0;transition:opacity 1.6s;
+    font-family:-apple-system,"PingFang SC",system-ui,sans-serif}
+  #end .acts a{color:#7a818b;text-decoration:none;border-bottom:1px solid #3c424a;padding:4px 2px;margin:0 14px;cursor:pointer}
+  #end .on{opacity:1}
+  #end{pointer-events:none}
+  #end .acts.on{pointer-events:auto}
+</style>
+</head>
+<body>
+<div id="stage">
+  <canvas id="stone"></canvas>
+  <canvas id="paper"></canvas>
+</div>
+<div class="ui" id="below">
+  <div id="hint">手指按在纸上，来回擦</div>
+  <button id="peel">揭下来</button>
+</div>
+<div class="ui" id="end">
+  <p id="e1">纸，你带走。</p>
+  <p id="e2">石头还在这儿。</p>
+  <div class="acts" id="e3"><a id="again">再拓一张</a><a id="save" download="拓片.png">存下这张</a></div>
+</div>
+
+<script>
+(function(){
+'use strict';
+
+// 从右往左读，每列自上而下
+const COLS = [
+  '风从海来头发乱了',
+  '不去管它低头做事',
+  '石头裂了照样立着',
+  '字拼错了照样算数',
+  '好的坏的一起收下',
+  '交出去的不会变少',
+  '还有空地留给以后',
+  '刻到这里有点饿'      // 最后一格不刻
+];
+const ROWS = 8;
+const FONT = '"Songti SC","STSong","Noto Serif CJK SC","Source Han Serif SC","Noto Serif SC","SimSun","PingFang SC",serif';
+
+const $ = id => document.getElementById(id);
+const stage = $('stage'), stoneC = $('stone'), paperC = $('paper');
+const hint = $('hint'), peelBtn = $('peel'), below = $('below'), end = $('end');
+
+function mulberry32(a){return function(){a|=0;a=a+0x6D2B79F5|0;let t=Math.imul(a^a>>>15,1|a);t=t+Math.imul(t^t>>>7,61|t)^t;return((t^t>>>14)>>>0)/4294967296}}
+
+let dpr, sw, sh, W, H, pad;
+let mask, mottle, paperTex, ink, inkCtx, tmp, tmpCtx, paperPath, sprites = [];
+let maskFrac = 0.15, dirty = false, state = 'rub', coverage = 0;
+
+function mk(w,h){const c=document.createElement('canvas');c.width=w;c.height=h;return c}
+function colorize(src,color){const c=mk(src.width,src.height),x=c.getContext('2d');x.drawImage(src,0,0);x.globalCompositeOperation='source-in';x.fillStyle=color;x.fillRect(0,0,c.width,c.height);return c}
+function noiseCanvas(w,h,lo,hi,r){
+  const c=mk(w,h),x=c.getContext('2d'),d=x.createImageData(w,h);
+  for(let i=0;i<w*h;i++){const v=lo+(hi-lo)*r();d.data[i*4]=v;d.data[i*4+1]=v;d.data[i*4+2]=v+3;d.data[i*4+3]=255}
+  x.putImageData(d,0,0);return c;
+}
+function raggedPath(x0,y0,x1,y1,step,amp,r){
+  const p=new Path2D();const pts=[];
+  for(let x=x0;x<x1;x+=step)pts.push([x,y0+(r()-.5)*amp]);
+  for(let y=y0;y<y1;y+=step)pts.push([x1+(r()-.5)*amp,y]);
+  for(let x=x1;x>x0;x-=step)pts.push([x,y1+(r()-.5)*amp]);
+  for(let y=y1;y>y0;y-=step)pts.push([x0+(r()-.5)*amp,y]);
+  pts.forEach((q,i)=>i?p.lineTo(q[0],q[1]):p.moveTo(q[0],q[1]));p.closePath();return p;
+}
+function grain(ctx,w,h,amt,r){
+  const d=ctx.getImageData(0,0,w,h),a=d.data;
+  for(let i=0;i<a.length;i+=4){const n=(r()-.5)*amt;a[i]+=n;a[i+1]+=n;a[i+2]+=n}
+  ctx.putImageData(d,0,0);
+}
+
+function crackPoints(r){
+  // 从左下斜着裂到右上，带一条小支线
+  const pts=[];let x=-0.02*sw,y=0.66*sh;
+  while(x<sw*1.02){pts.push([x,y]);x+=sw*(0.025+r()*0.05);y-=sh*(0.006+r()*0.03)-(r()-.5)*sh*0.02}
+  pts.push([sw*1.03,y]);
+  const k=Math.floor(pts.length*0.55),b=[pts[k].slice()];let bx=pts[k][0],by=pts[k][1];
+  for(let i=0;i<5;i++){bx+=sw*(0.02+r()*0.035);by+=sh*(0.008+r()*0.018);b.push([bx,by])}
+  return [pts,b];
+}
+
+function build(){
+  dpr=Math.min(window.devicePixelRatio||1,2);
+  const w=Math.round(sw*dpr),h=Math.round(sh*dpr);
+  const r=mulberry32(1017);
+  pad=sw*0.085;
+
+  // ---- 刻痕遮罩 ----
+  mask=mk(w,h);const m=mask.getContext('2d');m.scale(dpr,dpr);
+  const cw=(sw-pad*2)/COLS.length, ch=(sh-pad*2)/ROWS;
+  const fs=Math.min(cw*0.8,ch*0.66);
+  m.fillStyle='#fff';m.textAlign='center';m.textBaseline='middle';
+  COLS.forEach((col,c)=>{
+    const cx=sw-pad-cw*(c+.5);
+    [...col].forEach((chr,i)=>{
+      const cy=pad+ch*(i+.5);
+      m.save();m.translate(cx+(r()-.5)*1.4,cy+(r()-.5)*1.4);m.rotate((r()-.5)*0.05);
+      m.font='700 '+(fs*(0.96+r()*0.08)).toFixed(1)+'px '+FONT;
+      m.fillText(chr,0,0);m.restore();
+    });
+  });
+  const [crack,branch]=crackPoints(r);
+  m.lineJoin='round';m.lineCap='round';m.strokeStyle='#fff';
+  [[crack,2.6],[branch,1.4]].forEach(([pts,wd])=>{
+    for(let i=1;i<pts.length;i++){m.lineWidth=wd*(0.6+r()*0.9);m.beginPath();m.moveTo(pts[i-1][0],pts[i-1][1]);m.lineTo(pts[i][0],pts[i][1]);m.stroke()}
+  });
+  m.strokeStyle='#fff';
+  // 风化：刻痕里的小坑
+  m.globalCompositeOperation='destination-out';
+  for(let i=0;i<sw*sh/22;i++){m.globalAlpha=0.4+r()*0.6;m.beginPath();m.arc(r()*sw,r()*sh,0.3+r()*r()*1.9,0,7);m.fill()}
+  m.globalAlpha=1;m.globalCompositeOperation='source-over';
+  // 一圈浅浅的界框
+  m.globalAlpha=.55;m.lineWidth=1.1;m.strokeStyle='#fff';
+  m.strokeRect(pad*0.55,pad*0.55,sw-pad*1.1,sh-pad*1.1);m.globalAlpha=1;
+  m.setTransform(1,0,0,1,0,0);
+
+  // ---- 石头 ----
+  stoneC.width=w;stoneC.height=h;
+  const s=stoneC.getContext('2d');
+  s.fillStyle='#45484c';s.fillRect(0,0,w,h);
+  s.imageSmoothingEnabled=true;s.imageSmoothingQuality='high';
+  [[150,.45],[50,.35],[16,.25],[5,.18]].forEach(([cs,a])=>{
+    const n=noiseCanvas(Math.ceil(w/(cs*dpr))+2,Math.ceil(h/(cs*dpr))+2,38,104,r);
+    s.globalAlpha=a;s.drawImage(n,0,0,n.width*cs*dpr,n.height*cs*dpr);
+  });
+  s.globalAlpha=1;grain(s,w,h,26,r);
+  s.globalAlpha=.9;s.drawImage(colorize(mask,'#16171a'),0,0);
+  const lit=colorize(mask,'#8a8e92'),lc=mk(w,h),lx=lc.getContext('2d');
+  lx.drawImage(lit,1.6*dpr,1.6*dpr);lx.globalCompositeOperation='destination-in';lx.drawImage(mask,0,0);
+  s.globalAlpha=.6;s.drawImage(lc,0,0);s.globalAlpha=1;
+  const g=s.createLinearGradient(0,0,w*.3,h);g.addColorStop(0,'rgba(255,255,255,.07)');g.addColorStop(1,'rgba(0,0,0,.28)');
+  s.fillStyle=g;s.fillRect(0,0,w,h);
+  s.globalCompositeOperation='destination-in';
+  s.fill(raggedPath(1.5*dpr,1.5*dpr,w-1.5*dpr,h-1.5*dpr,5*dpr,2.6*dpr,r));
+  s.globalCompositeOperation='source-over';
+
+  // ---- 纸 ----
+  const ins=7*dpr;
+  paperPath=raggedPath(ins,ins,w-ins,h-ins,4*dpr,2.2*dpr,r);
+  paperTex=mk(w,h);const p=paperTex.getContext('2d');
+  p.save();p.clip(paperPath);
+  p.fillStyle='#e9e5da';p.fillRect(0,0,w,h);
+  [[40,.22],[9,.14]].forEach(([cs,a])=>{
+    const n=noiseCanvas(Math.ceil(w/(cs*dpr))+2,Math.ceil(h/(cs*dpr))+2,195,250,r);
+    p.globalAlpha=a;p.drawImage(n,0,0,n.width*cs*dpr,n.height*cs*dpr);
+  });
+  p.globalAlpha=1;p.lineCap='round';
+  for(let i=0;i<sw*sh/260;i++){
+    const x=r()*w,y=r()*h,l=(5+r()*16)*dpr,an=r()*Math.PI;
+    p.strokeStyle=r()<.6?'rgba(255,255,255,.5)':'rgba(130,120,100,.13)';p.lineWidth=(.4+r()*.5)*dpr;
+    p.beginPath();p.moveTo(x,y);p.quadraticCurveTo(x+Math.cos(an)*l*.5+(r()-.5)*4*dpr,y+Math.sin(an)*l*.5,x+Math.cos(an)*l,y+Math.sin(an)*l);p.stroke();
+  }
+  grain(p,w,h,10,r);
+  // 湿纸贴进刻痕后留下的一点点起伏
+  p.globalAlpha=.025;p.drawImage(colorize(mask,'#000'),1*dpr,1*dpr);
+  p.globalAlpha=.12;p.drawImage(colorize(mask,'#fff'),-.8*dpr,-.8*dpr);
+  p.globalAlpha=1;p.restore();
+  p.strokeStyle='rgba(60,50,40,.12)';p.lineWidth=1.5*dpr;p.stroke(paperPath);
+
+  // ---- 墨 ----
+  ink=mk(w,h);inkCtx=ink.getContext('2d');inkCtx.save();inkCtx.clip(paperPath);
+  tmp=mk(w,h);tmpCtx=tmp.getContext('2d');
+  // 墨不会上得一样匀：一层淡淡的斑驳
+  mottle=mk(w,h);const mo=mottle.getContext('2d');mo.imageSmoothingEnabled=true;
+  [[34,.5],[11,.35],[5,.25]].forEach(([cs,a])=>{
+    const n=noiseCanvas(Math.ceil(w/(cs*dpr))+2,Math.ceil(h/(cs*dpr))+2,0,255,r);
+    mo.globalAlpha=a;mo.drawImage(n,0,0,n.width*cs*dpr,n.height*cs*dpr);
+  });
+  mo.globalAlpha=1;const md0=mo.getImageData(0,0,w,h),ma=md0.data;
+  for(let i=0;i<ma.length;i+=4){const v=ma[i]/255;const a=Math.max(0,v-.42)*0.55+(r()<.012?.5:0);ma[i]=ma[i+1]=ma[i+2]=0;ma[i+3]=Math.min(255,a*255)}
+  mo.putImageData(md0,0,0);
+  paperC.width=w;paperC.height=h;
+
+  // 拓包：一团带颗粒的墨
+  sprites=[];
+  for(let k=0;k<4;k++){
+    const S=96,c=mk(S,S),x=c.getContext('2d'),d=x.createImageData(S,S);
+    const blob=noiseCanvas(8,8,0,255,r),bx=mk(S,S).getContext('2d');bx.imageSmoothingEnabled=true;bx.drawImage(blob,0,0,S,S);
+    const bd=bx.getImageData(0,0,S,S).data;
+    for(let yy=0;yy<S;yy++)for(let xx=0;xx<S;xx++){
+      const i=(yy*S+xx)*4,dd=Math.hypot(xx-S/2,yy-S/2)/(S/2);
+      let a=1-Math.min(1,Math.max(0,(dd-.35)/.65));a=a*a*(3-2*a);
+      a*=(.35+.65*r())*(.55+.45*bd[i]/255);
+      d.data[i]=17;d.data[i+1]=19;d.data[i+2]=24;d.data[i+3]=a*255;
+    }
+    x.putImageData(d,0,0);sprites.push(c);
+  }
+
+  // 刻痕占的比例
+  const sm=mk(40,60),sx=sm.getContext('2d');sx.drawImage(mask,0,0,40,60);
+  const md=sx.getImageData(0,0,40,60).data;let t=0;for(let i=3;i<md.length;i+=4)t+=md[i]/255;maskFrac=t/(40*60);
+
+  dirty=true;coverage=0;
+}
+
+function compose(){
+  const c=paperC.getContext('2d'),w=paperC.width,h=paperC.height;
+  c.clearRect(0,0,w,h);c.drawImage(paperTex,0,0);
+  tmpCtx.globalCompositeOperation='source-over';tmpCtx.clearRect(0,0,w,h);
+  tmpCtx.drawImage(ink,0,0);
+  tmpCtx.globalCompositeOperation='destination-out';tmpCtx.drawImage(mask,0,0);tmpCtx.drawImage(mottle,0,0);
+  c.globalAlpha=.97;c.drawImage(tmp,0,0);c.globalAlpha=1;
+}
+
+let lastMeasure=0;
+function measure(){
+  const sm=mk(40,60),sx=sm.getContext('2d');sx.drawImage(tmp,0,0,40,60);
+  const d=sx.getImageData(0,0,40,60).data;let t=0;for(let i=3;i<d.length;i+=4)t+=d[i]/255;
+  coverage=t/(40*60)/Math.max(.3,(1-maskFrac)*.93);
+  if(coverage>.03)hint.classList.remove('on');
+  if(coverage>.58&&state==='rub')peelBtn.classList.add('on');
+}
+
+function loop(t){
+  if(dirty){compose();dirty=false;if(t-lastMeasure>350){lastMeasure=t;measure()}}
+  requestAnimationFrame(loop);
+}
+
+// ---- 声音：拓包擦过纸的沙沙声 ----
+let ac,gain,bp;
+function initAudio(){
+  try{
+    if(ac){if(ac.state!=='running')ac.resume();return}
+    ac=new (window.AudioContext||window.webkitAudioContext)();
+    const len=ac.sampleRate*2,b=ac.createBuffer(1,len,ac.sampleRate),d=b.getChannelData(0);
+    let l=0;for(let i=0;i<len;i++){const wn=Math.random()*2-1;l=(l+0.04*wn)/1.04;d[i]=l*3.2+wn*.12}
+    const src=ac.createBufferSource();src.buffer=b;src.loop=true;
+    bp=ac.createBiquadFilter();bp.type='bandpass';bp.frequency.value=700;bp.Q.value=.6;
+    gain=ac.createGain();gain.gain.value=0;
+    src.connect(bp);bp.connect(gain);gain.connect(ac.destination);src.start();
+  }catch(e){ac=null}
+}
+function sound(speed){
+  if(!ac||!gain)return;const now=ac.currentTime;
+  gain.gain.setTargetAtTime(Math.min(.16,speed*.09),now,.04);
+  bp.frequency.setTargetAtTime(500+Math.min(1400,speed*700),now,.08);
+}
+
+// ---- 手指 ----
+const ptrs=new Map();
+function pos(e){const b=paperC.getBoundingClientRect();return[(e.clientX-b.left)*dpr,(e.clientY-b.top)*dpr]}
+function dab(x,y){
+  const R=sw*0.075*dpr*(.85+Math.random()*.3),sp=sprites[(Math.random()*sprites.length)|0];
+  inkCtx.save();inkCtx.translate(x+(Math.random()-.5)*R*.3,y+(Math.random()-.5)*R*.3);inkCtx.rotate(Math.random()*6.28);
+  inkCtx.globalAlpha=.13+Math.random()*.06;inkCtx.drawImage(sp,-R,-R,R*2,R*2);inkCtx.restore();
+}
+paperC.addEventListener('pointerdown',e=>{
+  if(state!=='rub')return;e.preventDefault();initAudio();
+  try{paperC.setPointerCapture(e.pointerId)}catch(_){}
+  const [x,y]=pos(e);ptrs.set(e.pointerId,{x,y,t:performance.now()});dab(x,y);dab(x,y);dirty=true;
+});
+paperC.addEventListener('pointermove',e=>{
+  const p=ptrs.get(e.pointerId);if(!p||state!=='rub')return;e.preventDefault();
+  const [x,y]=pos(e),dx=x-p.x,dy=y-p.y,dist=Math.hypot(dx,dy),now=performance.now();
+  const step=sw*0.075*dpr*.32,n=Math.max(1,Math.ceil(dist/step));
+  for(let i=1;i<=n;i++)dab(p.x+dx*i/n,p.y+dy*i/n);
+  sound(dist/dpr/Math.max(8,now-p.t));
+  p.x=x;p.y=y;p.t=now;dirty=true;
+});
+function up(e){ptrs.delete(e.pointerId);if(!ptrs.size)sound(0)}
+paperC.addEventListener('pointerup',up);paperC.addEventListener('pointercancel',up);
+document.addEventListener('touchmove',e=>e.preventDefault(),{passive:false});
+
+// ---- 揭 ----
+peelBtn.addEventListener('click',()=>{
+  if(state!=='rub')return;state='peel';sound(0);
+  peelBtn.classList.remove('on');hint.classList.remove('on');
+  compose();
+  $('save').href=paperC.toDataURL('image/png');
+  paperC.classList.remove('drop');void paperC.offsetWidth;paperC.classList.add('lift');
+  setTimeout(()=>$('e1').classList.add('on'),1700);
+  setTimeout(()=>$('e2').classList.add('on'),3000);
+  setTimeout(()=>{$('e3').classList.add('on');state='done'},4400);
+});
+$('again').addEventListener('click',()=>{
+  if(state!=='done')return;
+  ['e1','e2','e3'].forEach(i=>$(i).classList.remove('on'));
+  inkCtx.clearRect(0,0,ink.width,ink.height);coverage=0;dirty=true;compose();
+  paperC.classList.remove('lift');void paperC.offsetWidth;paperC.classList.add('drop');
+  state='rub';setTimeout(()=>{if(state==='rub'&&coverage<.03)hint.classList.add('on')},1400);
+});
+
+// ---- 布局 ----
+function place(){
+  W=window.innerWidth;H=window.innerHeight;
+  const top=Math.max(18,(H-sh-130)/2);
+  const left=(W-sw)/2;
+  Object.assign(stage.style,{left:left+'px',top:top+'px',width:sw+'px',height:sh+'px'});
+  below.style.top=(top+sh+30)+'px';
+  end.style.top=(top+sh+22)+'px';
+}
+function size(){
+  W=window.innerWidth;H=window.innerHeight;
+  const nsw=Math.floor(Math.max(200,Math.min(W-32,420,(H-170)/1.5)));
+  if(nsw!==sw){sw=nsw;sh=Math.round(sw*1.5);
+    if(state==='rub'||!mask){build()} else {build();state='rub';['e1','e2','e3'].forEach(i=>$(i).classList.remove('on'));paperC.classList.remove('lift');}
+  }
+  place();
+}
+size();
+requestAnimationFrame(loop);
+setTimeout(()=>hint.classList.add('on'),900);
+let rt;window.addEventListener('resize',()=>{clearTimeout(rt);rt=setTimeout(size,150)});
+})();
+</script>
+</body>
+</html>

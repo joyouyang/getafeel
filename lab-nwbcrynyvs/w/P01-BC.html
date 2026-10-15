@@ -1,0 +1,412 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
+<meta name="theme-color" content="#08090c">
+<title>按住</title>
+<style>
+  html, body {
+    margin: 0; padding: 0; height: 100%; overflow: hidden;
+    background: #08090c;
+    -webkit-user-select: none; user-select: none;
+    -webkit-touch-callout: none;
+    -webkit-tap-highlight-color: transparent;
+  }
+  canvas {
+    position: fixed; inset: 0; width: 100vw; height: 100vh; height: 100dvh;
+    display: block; touch-action: none; cursor: crosshair;
+  }
+  #line {
+    position: fixed; left: 0; right: 0;
+    bottom: calc(env(safe-area-inset-bottom, 0px) + 13vh);
+    text-align: center; pointer-events: none;
+    font-family: "Songti SC", "STSong", "Noto Serif SC", "Source Han Serif SC", serif;
+    font-size: 15px; letter-spacing: 0.18em; line-height: 2;
+    color: #8c91a6; padding: 0 28px;
+    opacity: 0; transition: opacity 1.4s ease;
+  }
+  #line.on { opacity: 1; }
+  #line.quick { transition: opacity .35s ease; }
+</style>
+</head>
+<body>
+<canvas id="c"></canvas>
+<div id="line"></div>
+<script>
+(() => {
+  const cv = document.getElementById('c');
+  const ctx = cv.getContext('2d');
+  const lineEl = document.getElementById('line');
+
+  let W = 0, H = 0, DPR = 1, maxR = 0;
+  function resize() {
+    DPR = Math.min(window.devicePixelRatio || 1, 2);
+    W = window.innerWidth; H = window.innerHeight;
+    cv.width = Math.round(W * DPR); cv.height = Math.round(H * DPR);
+    ctx.setTransform(DPR, 0, 0, DPR, 0, 0);
+    maxR = Math.hypot(W, H) * 0.8;
+  }
+  const probe = document.createElement('div');
+  probe.style.cssText = 'position:fixed;top:0;left:0;height:0;padding-top:env(safe-area-inset-top,0px);visibility:hidden;pointer-events:none';
+  document.body.appendChild(probe);
+  let safeTop = 0;
+  window.addEventListener('resize', () => { resize(); safeTop = probe.offsetHeight || 0; });
+  resize();
+  safeTop = probe.offsetHeight || 0;
+
+  const rand = (a, b) => a + Math.random() * (b - a);
+  const lerp = (a, b, t) => a + (b - a) * t;
+  const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
+
+  // ---------- 背景：黑，最后慢慢显出它本来的蓝 ----------
+  const BLACK = [8, 9, 12], DEEP = [11, 22, 66];
+  let bgT = 0, bgTarget = 0;
+
+  // ---------- 状态 ----------
+  let holding = false, pid = null;
+  let hx = 0, hy = 0;          // 按住的位置
+  let holdStart = 0, R = 0;    // 当前展开半径
+  let wash = 0;                // 天光的亮度
+  let washX = 0, washY = 0, washR = 0;
+  let strokes = [], gulls = [];
+  let count = 0;               // 已经松开几次
+  let tally = [];              // 每一笔：{p: 进度}
+  let lastGull = 0;
+
+  const INK = ['#141f52', '#141f52', '#1c2a6b', '#1e45e0', '#1e45e0', '#2a5cff', '#4f7dff', '#9dbcff', '#ffffff', '#ffffff', '#ffffff'];
+
+  function makeStroke() {
+    if (strokes.length > 900) return;
+    const r = R * Math.sqrt(Math.random()) * 0.95;
+    const a0 = Math.random() * Math.PI * 2;
+    const sx = hx + Math.cos(a0) * r, sy = hy + Math.sin(a0) * r;
+    // 风从右边来，往左上走；也有一些从按住的地方往外炸
+    let ang;
+    if (Math.random() < 0.62) ang = Math.PI + 0.28 + rand(-0.38, 0.38);
+    else ang = Math.atan2(sy - hy, sx - hx) + rand(-0.25, 0.25);
+    const bold = Math.random() < 0.07;
+    const patch = !bold && Math.random() < 0.035;
+    const len = bold ? rand(60, 260) : rand(18, 200);
+    const n = Math.max(4, Math.round(len / 14));
+    const curve = rand(-0.006, 0.006);
+    const pts = [];
+    let x = sx, y = sy, a = ang;
+    for (let i = 0; i <= n; i++) {
+      pts.push([x + rand(-0.7, 0.7), y + rand(-0.7, 0.7)]);
+      a += curve * (len / n) + rand(-0.04, 0.04);
+      x += Math.cos(a) * len / n; y += Math.sin(a) * len / n;
+    }
+    let color = INK[(Math.random() * INK.length) | 0];
+    let w = rand(0.45, 1.5);
+    if (bold) { color = Math.random() < 0.7 ? '#1d3fd6' : '#ffffff'; w = rand(2.4, 6); }
+    strokes.push({
+      pts, w, color, patch,
+      prog: 0, speed: rand(0.035, 0.11),
+      alpha: bold ? 0.95 : rand(0.55, 0.95),
+      dx: 0, dy: 0, vx: rand(-0.25, -0.05), vy: rand(-0.12, 0.02),
+      blow: false, decay: 0,
+      patchPts: patch ? makePatch(sx, sy) : null
+    });
+  }
+
+  function makePatch(x, y) {
+    // 一笔刷过去的蓝：两头尖，中间宽，边缘毛一点
+    const L = rand(50, 170), Wd = rand(7, 22);
+    let a = Math.PI + 0.28 + rand(-0.3, 0.3);
+    const n = 9, top = [], bot = [];
+    let cx = x, cy = y;
+    for (let i = 0; i <= n; i++) {
+      const t = i / n;
+      const w = Wd * Math.pow(Math.sin(Math.PI * Math.min(1, t * 1.15 + 0.02)), 0.6) + 0.5;
+      const nx = -Math.sin(a), ny = Math.cos(a);
+      top.push([cx + nx * w * rand(0.8, 1.05), cy + ny * w * rand(0.8, 1.05)]);
+      bot.push([cx - nx * w * rand(0.2, 0.5), cy - ny * w * rand(0.2, 0.5)]);
+      cx += Math.cos(a) * L / n; cy += Math.sin(a) * L / n;
+      a += rand(-0.03, 0.03);
+    }
+    return top.concat(bot.reverse());
+  }
+
+  function makeGull() {
+    const r = R * Math.sqrt(Math.random()) * 0.8;
+    const a = Math.random() * Math.PI * 2;
+    const s = rand(12, 30) * (Math.random() < 0.18 ? 1.7 : 1);
+    gulls.push({
+      x: hx + Math.cos(a) * r, y: hy + Math.sin(a) * r, s,
+      ph: rand(0, 6.28), fs: rand(0.11, 0.2),
+      vx: rand(0.4, 1.4) * (Math.random() < 0.7 ? 1 : -1), vy: rand(-0.9, -0.2),
+      alpha: 0, target: 1, blow: false, tilt: rand(-0.3, 0.3)
+    });
+  }
+
+  // ---------- 风声 ----------
+  let ac = null, windGain = null, windFilter = null;
+  function initAudio() {
+    if (ac) return;
+    try {
+      ac = new (window.AudioContext || window.webkitAudioContext)();
+      const len = ac.sampleRate * 2;
+      const buf = ac.createBuffer(1, len, ac.sampleRate);
+      const d = buf.getChannelData(0);
+      let last = 0;
+      for (let i = 0; i < len; i++) { const w = Math.random() * 2 - 1; last = (last + 0.035 * w) / 1.035; d[i] = last * 3.2; }
+      const src = ac.createBufferSource(); src.buffer = buf; src.loop = true;
+      windFilter = ac.createBiquadFilter(); windFilter.type = 'bandpass'; windFilter.frequency.value = 420; windFilter.Q.value = 0.7;
+      windGain = ac.createGain(); windGain.gain.value = 0;
+      src.connect(windFilter); windFilter.connect(windGain); windGain.connect(ac.destination);
+      src.start();
+    } catch (e) { ac = null; }
+  }
+  function windTo(g, f, t) {
+    if (!ac) return;
+    const now = ac.currentTime;
+    windGain.gain.cancelScheduledValues(now);
+    windGain.gain.setTargetAtTime(g, now, t);
+    windFilter.frequency.cancelScheduledValues(now);
+    windFilter.frequency.setTargetAtTime(f, now, t);
+  }
+
+  // ---------- 文字 ----------
+  const LINES = {
+    1: ['松手，就没了。'],
+    2: ['本来也没打算留。'],
+    5: ['不知道画什么的时候，<br>就画蓝的。'],
+    8: ['一张都不留，<br>也没少什么。'],
+    10: ['你穿的那种黑，<br>是蓝走得太深了。', '太宽了，<br>本来就装不进哪一件作品里。']
+  };
+  let lineTimers = [];
+  function say(html, delay) {
+    lineTimers.push(setTimeout(() => {
+      lineEl.classList.remove('quick');
+      lineEl.classList.remove('on');
+      lineTimers.push(setTimeout(() => {
+        lineEl.innerHTML = html;
+        lineEl.classList.add('on');
+      }, lineEl.innerHTML ? 1200 : 0));
+    }, delay));
+  }
+  function hush() {
+    lineTimers.forEach(clearTimeout); lineTimers = [];
+    lineEl.classList.add('quick');
+    lineEl.classList.remove('on');
+  }
+
+  // ---------- 输入 ----------
+  function down(e) {
+    if (holding) return;
+    initAudio();
+    if (ac && ac.state === 'suspended') ac.resume();
+    holding = true; pid = e.pointerId;
+    hx = e.clientX; hy = e.clientY;
+    holdStart = performance.now();
+    R = 0;
+    washX = hx; washY = hy;
+    hush();
+    try { cv.setPointerCapture(pid); } catch (_) {}
+    windTo(0.05, 380, 0.25);
+  }
+  function move(e) {
+    if (!holding || e.pointerId !== pid) return;
+    hx = e.clientX; hy = e.clientY;
+  }
+  function up(e) {
+    if (!holding || (e && e.pointerId !== pid)) return;
+    holding = false; pid = null;
+    const held = performance.now() - holdStart;
+    // 吹散
+    for (const s of strokes) {
+      s.blow = true;
+      s.vx -= rand(7, 17); s.vy -= rand(0.5, 3.5);
+      s.decay = rand(0.035, 0.07);
+    }
+    for (const g of gulls) {
+      g.blow = true; g.target = 0;
+      g.vx = -rand(3, 9); g.vy = -rand(1.5, 5); g.fs *= 1.6;
+    }
+    windTo(0.16 + 0.1 * clamp(R / maxR, 0, 1), 900, 0.05);
+    setTimeout(() => windTo(0, 300, 0.5), 260);
+
+    if (held < 160 && R < 40) return; // 太短，不算
+    count++;
+    tally.push({ p: 0 });
+    const ls = LINES[count];
+    if (ls) {
+      say(ls[0], 900);
+      if (ls[1]) say(ls[1], 6400);
+    }
+    if (count === 10) bgTarget = 1;
+  }
+  cv.addEventListener('pointerdown', down);
+  cv.addEventListener('pointermove', move);
+  cv.addEventListener('pointerup', up);
+  cv.addEventListener('pointercancel', up);
+  window.addEventListener('blur', () => up());
+  cv.addEventListener('contextmenu', e => e.preventDefault());
+  // 电脑上也可以按空格
+  window.addEventListener('keydown', e => {
+    if (e.code === 'Space' && !e.repeat && !holding) { e.preventDefault(); down({ pointerId: 'k', clientX: W / 2, clientY: H * 0.55 }); }
+  });
+  window.addEventListener('keyup', e => { if (e.code === 'Space' && pid === 'k') up({ pointerId: 'k' }); });
+
+  // ---------- 画 ----------
+  function drawStroke(s) {
+    const n = s.pts.length - 1;
+    const upto = s.prog * n;
+    const k = Math.floor(upto);
+    ctx.globalAlpha = clamp(s.alpha, 0, 1);
+    if (s.patch && s.patchPts) {
+      ctx.fillStyle = '#1d3fd6';
+      ctx.globalAlpha = clamp(s.alpha * s.prog * 0.9, 0, 1);
+      ctx.beginPath();
+      s.patchPts.forEach(([x, y], i) => i ? ctx.lineTo(x + s.dx, y + s.dy) : ctx.moveTo(x + s.dx, y + s.dy));
+      ctx.closePath(); ctx.fill();
+      ctx.globalAlpha = clamp(s.alpha, 0, 1);
+    }
+    ctx.strokeStyle = s.color;
+    ctx.lineWidth = s.w;
+    ctx.beginPath();
+    ctx.moveTo(s.pts[0][0] + s.dx, s.pts[0][1] + s.dy);
+    for (let i = 1; i <= k && i <= n; i++) ctx.lineTo(s.pts[i][0] + s.dx, s.pts[i][1] + s.dy);
+    if (k < n) {
+      const f = upto - k, a = s.pts[k], b = s.pts[k + 1];
+      ctx.lineTo(lerp(a[0], b[0], f) + s.dx, lerp(a[1], b[1], f) + s.dy);
+    }
+    ctx.stroke();
+  }
+
+  function drawGull(g) {
+    const f = Math.sin(g.ph);
+    const s = g.s;
+    ctx.save();
+    ctx.translate(g.x, g.y);
+    ctx.rotate(g.tilt);
+    ctx.globalAlpha = clamp(g.alpha, 0, 1);
+    ctx.fillStyle = '#ffffff';
+    ctx.strokeStyle = 'rgba(20,31,82,0.7)';
+    ctx.lineWidth = 0.9;
+    for (const side of [-1, 1]) {
+      const tipY = -s * 0.55 * f;
+      ctx.beginPath();
+      ctx.moveTo(0, 0);
+      ctx.quadraticCurveTo(side * s * 0.4, -s * 0.7 * f - s * 0.15, side * s, tipY);
+      ctx.quadraticCurveTo(side * s * 0.5, -s * 0.25 * f + s * 0.12, side * s * 0.08, s * 0.14);
+      ctx.closePath();
+      ctx.fill(); ctx.stroke();
+    }
+    ctx.beginPath();
+    ctx.ellipse(0, s * 0.05, s * 0.12, s * 0.2, 0, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.restore();
+  }
+
+  // 正 的五笔
+  const ZHENG = [
+    [[0.06, 0.08], [0.94, 0.08]],
+    [[0.5, 0.08], [0.5, 0.94]],
+    [[0.5, 0.5], [0.84, 0.5]],
+    [[0.2, 0.42], [0.2, 0.94]],
+    [[0.02, 0.94], [0.98, 0.94]]
+  ];
+  function drawTally() {
+    if (!tally.length) return;
+    const size = 17, gap = 11;
+    const top = 26 + safeTop;
+    const left = 24;
+    ctx.save();
+    ctx.lineCap = 'round';
+    ctx.lineWidth = 1.3;
+    const c = bgT > 0.01 ? `rgba(${Math.round(lerp(120, 150, bgT))},${Math.round(lerp(124, 170, bgT))},${Math.round(lerp(140, 230, bgT))},0.75)` : 'rgba(120,124,140,0.75)';
+    ctx.strokeStyle = c;
+    tally.forEach((t, i) => {
+      t.p = Math.min(1, t.p + 0.045);
+      const z = Math.floor(i / 5), sIdx = i % 5;
+      const col = z % 6, row = Math.floor(z / 6);
+      const ox = left + col * (size + gap), oy = top + row * (size + gap);
+      const [[x1, y1], [x2, y2]] = ZHENG[sIdx];
+      const e = 1 - Math.pow(1 - t.p, 3);
+      ctx.beginPath();
+      ctx.moveTo(ox + x1 * size, oy + y1 * size);
+      ctx.lineTo(ox + lerp(x1, x2, e) * size, oy + lerp(y1, y2, e) * size);
+      ctx.stroke();
+    });
+    ctx.restore();
+  }
+
+  // 一开始的提示
+  setTimeout(() => { if (!count && !holding) { lineEl.innerHTML = '按住。'; lineEl.classList.add('on'); } }, 900);
+
+  let last = performance.now();
+  function frame(now) {
+    const dt = Math.min(2.5, (now - last) / 16.67); last = now;
+
+    bgT += (bgTarget - bgT) * 0.006 * dt;
+    const bg = BLACK.map((v, i) => Math.round(lerp(v, DEEP[i], bgT)));
+    ctx.globalAlpha = 1;
+    ctx.fillStyle = `rgb(${bg[0]},${bg[1]},${bg[2]})`;
+    ctx.fillRect(0, 0, W, H);
+
+    if (holding) {
+      const t = (now - holdStart) / 1000;
+      const target = maxR * (1 - Math.exp(-t / 1.6));
+      R += (target - R) * 0.12 * dt;
+      washX += (hx - washX) * 0.15 * dt; washY += (hy - washY) * 0.15 * dt;
+      washR = R;
+      wash += (1 - wash) * 0.08 * dt;
+      const spawn = Math.min(14, 2 + R / 45) * dt;
+      for (let i = 0; i < spawn; i++) makeStroke();
+      if (now - lastGull > 260 - Math.min(150, R / 4) && gulls.length < 26 && R > 50) { makeGull(); lastGull = now; }
+      if (ac) windTo(0.04 + 0.13 * clamp(R / maxR, 0, 1), 380 + 500 * clamp(R / maxR, 0, 1), 0.3);
+    } else {
+      // 光也被风带走：缩小、往左上偏，再淡掉
+      wash += (0 - wash) * 0.09 * dt;
+      washR *= 1 - 0.1 * dt;
+      washX -= 9 * dt; washY -= 2 * dt;
+    }
+
+    // 天光
+    if (wash > 0.005 && washR > 1) {
+      const g = ctx.createRadialGradient(washX, washY, 0, washX, washY, washR);
+      g.addColorStop(0, 'rgba(248,251,255,1)');
+      g.addColorStop(0.28, 'rgba(218,231,255,1)');
+      g.addColorStop(0.6, 'rgba(126,163,255,0.98)');
+      g.addColorStop(0.84, 'rgba(40,82,232,0.9)');
+      g.addColorStop(1, 'rgba(22,48,170,0)');
+      ctx.globalAlpha = wash;
+      ctx.fillStyle = g;
+      ctx.fillRect(0, 0, W, H);
+    }
+
+    // 线
+    ctx.lineCap = 'round'; ctx.lineJoin = 'round';
+    for (let i = strokes.length - 1; i >= 0; i--) {
+      const s = strokes[i];
+      s.prog = Math.min(1, s.prog + s.speed * dt);
+      if (s.blow) { s.vx *= 1.015; s.alpha -= s.decay * dt; }
+      s.dx += s.vx * dt; s.dy += s.vy * dt;
+      if (s.alpha <= 0.01) { strokes.splice(i, 1); continue; }
+      drawStroke(s);
+    }
+    if (strokes.length > 820) strokes.splice(0, 30);
+
+    // 鸟
+    for (let i = gulls.length - 1; i >= 0; i--) {
+      const g = gulls[i];
+      g.ph += g.fs * dt;
+      g.x += g.vx * dt; g.y += g.vy * dt;
+      if (g.blow) { g.vx *= 1.03; g.vy *= 1.02; g.alpha -= 0.02 * dt; }
+      else g.alpha += (g.target - g.alpha) * 0.08 * dt;
+      if (g.alpha <= 0.01 && g.blow) { gulls.splice(i, 1); continue; }
+      if (g.x < -80 || g.x > W + 80 || g.y < -80) { gulls.splice(i, 1); continue; }
+      drawGull(g);
+    }
+    ctx.globalAlpha = 1;
+
+    drawTally();
+    requestAnimationFrame(frame);
+  }
+  requestAnimationFrame(frame);
+})();
+</script>
+</body>
+</html>

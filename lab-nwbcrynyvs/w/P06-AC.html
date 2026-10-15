@@ -1,0 +1,681 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no,viewport-fit=cover">
+<meta name="theme-color" content="#e9e3d6">
+<title>拓</title>
+<style>
+  :root{
+    --paper:#e9e3d6;
+    --ink:#24211e;
+    --ink2:#6b655c;
+  }
+  *{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+  html,body{margin:0;padding:0;background:var(--paper);color:var(--ink);}
+  body{
+    min-height:100vh;min-height:100dvh;
+    font-family:"Songti SC","STSong","Noto Serif CJK SC","Source Han Serif SC","Source Han Serif","SimSun",serif;
+    -webkit-user-select:none;user-select:none;
+    -webkit-touch-callout:none;
+    overflow-x:hidden;
+  }
+  main{
+    display:flex;flex-direction:column;align-items:center;
+    padding:max(5vh,28px) 16px 40px;
+  }
+  #stele{
+    position:relative;touch-action:none;
+  }
+  #stele canvas{position:absolute;left:0;top:0;display:block}
+  #paper{transition:opacity 1.8s ease}
+  #mark{
+    position:absolute;pointer-events:none;opacity:0;
+    border:1px solid rgba(236,230,218,.0);
+    transition:opacity 1.2s ease;
+  }
+  #mark.on{opacity:1;animation:breathe 2.8s ease-in-out infinite}
+  @keyframes breathe{
+    0%,100%{box-shadow:0 0 0 0 rgba(236,230,218,0), inset 0 0 0 1px rgba(236,230,218,.18)}
+    50%{box-shadow:0 0 14px 2px rgba(236,230,218,.18), inset 0 0 0 1px rgba(236,230,218,.55)}
+  }
+  #hit{position:absolute;display:none;cursor:pointer}
+  #words{
+    width:100%;max-width:400px;margin-top:26px;min-height:200px;
+    padding:0 6px;
+  }
+  #words p{
+    margin:0 0 .85em;font-size:16px;line-height:1.7;letter-spacing:.06em;
+    opacity:0;transform:translateY(4px);
+    transition:opacity 1.4s ease, transform 1.4s ease;
+  }
+  #words p.in{opacity:1;transform:none}
+  #words p.hint{color:var(--ink2);font-size:14px}
+  #words p.gap{margin-top:1.6em}
+  .btns{display:flex;gap:14px;margin-top:6px;opacity:0;transition:opacity 1.2s ease}
+  .btns.in{opacity:1}
+  button{
+    font:inherit;font-size:15px;letter-spacing:.12em;color:var(--ink);
+    background:transparent;border:1px solid rgba(36,33,30,.45);border-radius:2px;
+    padding:9px 18px;cursor:pointer;
+  }
+  button:active{background:rgba(36,33,30,.06)}
+  button.ghost{border-color:transparent;color:var(--ink2);padding-left:6px;padding-right:6px}
+  #again{
+    display:block;margin:34px auto 0;font-size:13px;color:var(--ink2);
+    border:none;opacity:0;transition:opacity 2s ease;letter-spacing:.2em;
+  }
+  #again.in{opacity:.75}
+
+  /* 刻的那一格 */
+  #carve{
+    position:fixed;inset:0;display:none;align-items:center;justify-content:center;flex-direction:column;
+    background:rgba(233,227,214,.0);transition:background .6s ease;z-index:10;
+    padding:20px;
+  }
+  #carve.show{display:flex}
+  #carve.dim{background:rgba(233,227,214,.97)}
+  #stone{
+    position:relative;touch-action:none;
+    transform-origin:center center;
+    transition:transform .9s cubic-bezier(.6,0,.2,1), opacity .9s ease;
+    box-shadow:0 1px 0 rgba(255,255,255,.4), 0 10px 30px rgba(30,25,20,.18);
+  }
+  #stone canvas{position:absolute;left:0;top:0;display:block}
+  #carve .tip{margin:18px 0 14px;font-size:14px;color:var(--ink2);letter-spacing:.08em;transition:opacity .5s}
+  #carve .btns{opacity:1}
+</style>
+</head>
+<body>
+<main>
+  <div id="stele">
+    <canvas id="rub"></canvas>
+    <canvas id="paper"></canvas>
+    <div id="mark"></div>
+    <div id="hit"></div>
+  </div>
+  <div id="words"></div>
+  <button id="again">再拓一张</button>
+</main>
+
+<div id="carve">
+  <div id="stone"><canvas id="stoneBg"></canvas><canvas id="stoneCut"></canvas></div>
+  <div class="tip" id="ctip">用手指刻。刻什么都行。</div>
+  <div class="btns">
+    <button class="ghost" id="cClear">磨平重来</button>
+    <button id="cDone">就这样</button>
+  </div>
+</div>
+
+<script>
+(function(){
+"use strict";
+
+/* ---------- 基础 ---------- */
+const DPR = Math.min(window.devicePixelRatio || 1, 2);
+const PAPER = [233,227,214];
+const CUT   = [222,217,206];
+const COLS = 10, ROWS = 10;
+
+function rngFrom(seed){
+  let a = seed >>> 0;
+  return function(){
+    a |= 0; a = a + 0x6D2B79F5 | 0;
+    let t = Math.imul(a ^ a >>> 15, 1 | a);
+    t = t + Math.imul(t ^ t >>> 7, 61 | t) ^ t;
+    return ((t ^ t >>> 14) >>> 0) / 4294967296;
+  };
+}
+const lerp = (a,b,t)=>a+(b-a)*t;
+const clamp = (v,a,b)=>v<a?a:v>b?b:v;
+
+/* 平滑的值噪声 */
+function valueNoise(w,h,cell,rng){
+  const gw = Math.ceil(w/cell)+2, gh = Math.ceil(h/cell)+2;
+  const g = new Float32Array(gw*gh);
+  for(let i=0;i<g.length;i++) g[i]=rng();
+  const out = new Float32Array(w*h);
+  for(let y=0;y<h;y++){
+    const fy = y/cell, iy = fy|0; let ty = fy-iy; ty = ty*ty*(3-2*ty);
+    for(let x=0;x<w;x++){
+      const fx = x/cell, ix = fx|0; let tx = fx-ix; tx = tx*tx*(3-2*tx);
+      const a=g[iy*gw+ix], b=g[iy*gw+ix+1], c=g[(iy+1)*gw+ix], d=g[(iy+1)*gw+ix+1];
+      out[y*w+x] = lerp(lerp(a,b,tx), lerp(c,d,tx), ty);
+    }
+  }
+  return out;
+}
+
+/* 墨面：拓包一下一下按出来的不匀 */
+function inkField(w,h,rng,scale){
+  const n1 = valueNoise(w,h,Math.max(8,70*scale),rng);
+  const n2 = valueNoise(w,h,Math.max(4,22*scale),rng);
+  const n3 = valueNoise(w,h,Math.max(2,6*scale),rng);
+  const f = new Float32Array(w*h);
+  for(let i=0;i<f.length;i++){
+    const v = n1[i]*0.55 + n2[i]*0.3 + n3[i]*0.15;
+    f[i] = v;
+  }
+  return f;
+}
+
+/* ---------- 篆意字形（不是真的字，只是像） ---------- */
+function glyph(ctx, x, y, w, h, rng){
+  const R = {x0:x+w*.16, y0:y+h*.08, x1:x+w*.84, y1:y+h*.92};
+  const P = [];
+
+  function hbar(r,t){ const yy=lerp(r.y0,r.y1,t); ctx.moveTo(r.x0,yy); ctx.lineTo(r.x1,yy); }
+  function vstem(r,s,a,b){ const xx=lerp(r.x0,r.x1,s); ctx.moveTo(xx,lerp(r.y0,r.y1,a||0)); ctx.lineTo(xx,lerp(r.y0,r.y1,b==null?1:b)); }
+  function box(r){
+    const ix=(r.x1-r.x0)*.14, iy=(r.y1-r.y0)*.14;
+    const a=r.x0+ix,b=r.y0+iy,c=r.x1-ix,d=r.y1-iy, k=Math.min(c-a,d-b)*.22;
+    ctx.moveTo(a,b+k); ctx.quadraticCurveTo(a,b,a+k,b); ctx.lineTo(c-k,b); ctx.quadraticCurveTo(c,b,c,b+k);
+    ctx.lineTo(c,d); ctx.moveTo(a,b+k); ctx.lineTo(a,d); ctx.lineTo(c,d);
+  }
+  function arch(r){
+    const ym=lerp(r.y0,r.y1,.42);
+    ctx.moveTo(r.x0,r.y1); ctx.lineTo(r.x0,ym);
+    ctx.bezierCurveTo(r.x0,r.y0, r.x1,r.y0, r.x1,ym); ctx.lineTo(r.x1,r.y1);
+  }
+  function cup(r){
+    const ym=lerp(r.y0,r.y1,.5);
+    ctx.moveTo(r.x0,r.y0); ctx.lineTo(r.x0,ym);
+    ctx.bezierCurveTo(r.x0,r.y1, r.x1,r.y1, r.x1,ym); ctx.lineTo(r.x1,r.y0);
+  }
+  function legs(r){
+    const xm=(r.x0+r.x1)/2, ym=lerp(r.y0,r.y1,.5);
+    ctx.moveTo(xm,r.y0); ctx.quadraticCurveTo(xm,ym, r.x0,r.y1);
+    ctx.moveTo(xm,r.y0); ctx.quadraticCurveTo(xm,ym, r.x1,r.y1);
+  }
+  function wing(r){ /* 两侧向内卷 */
+    const xm=(r.x0+r.x1)/2;
+    ctx.moveTo(xm,r.y0); ctx.lineTo(xm,r.y1);
+    ctx.moveTo(r.x0,r.y0); ctx.bezierCurveTo(r.x0,lerp(r.y0,r.y1,.7), xm,lerp(r.y0,r.y1,.6), xm,lerp(r.y0,r.y1,.45));
+    ctx.moveTo(r.x1,r.y0); ctx.bezierCurveTo(r.x1,lerp(r.y0,r.y1,.7), xm,lerp(r.y0,r.y1,.6), xm,lerp(r.y0,r.y1,.45));
+  }
+  function hook(r,flip){
+    const xx=lerp(r.x0,r.x1,flip?.35:.65), w2=(r.x1-r.x0)*.45*(flip?-1:1);
+    ctx.moveTo(xx,r.y0); ctx.lineTo(xx,lerp(r.y0,r.y1,.72));
+    ctx.quadraticCurveTo(xx,r.y1, xx-w2,lerp(r.y0,r.y1,.82));
+  }
+  function mount(r){
+    const yb=lerp(r.y0,r.y1,.85);
+    ctx.moveTo(r.x0,r.y0+ (r.y1-r.y0)*.3); ctx.lineTo(r.x0,yb); ctx.lineTo(r.x1,yb); ctx.lineTo(r.x1,r.y0+(r.y1-r.y0)*.3);
+    const xm=(r.x0+r.x1)/2; ctx.moveTo(xm,r.y0); ctx.lineTo(xm,yb);
+  }
+  function curl(r){
+    const cx=(r.x0+r.x1)/2, cy=(r.y0+r.y1)/2, rr=Math.min(r.x1-r.x0,r.y1-r.y0)*.36;
+    ctx.moveTo(cx-rr,cy+rr*1.3); ctx.lineTo(cx-rr,cy);
+    ctx.arc(cx,cy,rr,Math.PI,Math.PI*2.6,false);
+  }
+  function tri(r){ hbar(r,.1); hbar(r,.5); hbar(r,.9); }
+  function wave(r){
+    const ym=lerp(r.y0,r.y1,.5), q=(r.x1-r.x0)/4, a=(r.y1-r.y0)*.35;
+    ctx.moveTo(r.x0,ym);
+    ctx.bezierCurveTo(r.x0+q,ym-a, r.x0+q,ym+a, r.x0+2*q,ym);
+    ctx.bezierCurveTo(r.x0+3*q,ym-a, r.x0+3*q,ym+a, r.x1,ym);
+  }
+
+  const parts = [box,arch,cup,legs,wing,mount,curl,tri,wave];
+  const pick = a => a[(rng()*a.length)|0];
+  const sub = (r,a,b,c,d)=>({x0:lerp(r.x0,r.x1,a),y0:lerp(r.y0,r.y1,b),x1:lerp(r.x0,r.x1,c),y1:lerp(r.y0,r.y1,d)});
+
+  ctx.beginPath();
+  const kind = rng();
+  if(kind < .30){ /* 上下 */
+    const s = lerp(.38,.55,rng());
+    pick(parts)(sub(R,.05,0,.95,s-.04));
+    const lo = sub(R,0,s+.04,1,1);
+    if(rng()<.5){ pick(parts)(lo); } else { pick([legs,wing,hook])(lo); hbar(lo,0); }
+  } else if(kind < .58){ /* 左右 */
+    const s = lerp(.4,.52,rng());
+    const L = sub(R,0,.04,s-.05,.96), Rr = sub(R,s+.05,0,1,1);
+    if(rng()<.5){ pick([box,curl,mount,tri])(sub(L,0,0,1,.55)); pick([legs,cup,wing])(sub(L,0,.6,1,1)); }
+    else { pick(parts)(L); }
+    pick([arch,hook,wing,legs,box])(Rr);
+    if(rng()<.5) vstem(Rr,.5,.1,.95);
+  } else if(kind < .78){ /* 包围 */
+    arch(R);
+    const inn = sub(R,.24,.32,.76,.92);
+    pick([box,tri,legs,curl,wave])(inn);
+  } else { /* 对称独体 */
+    const xm=.5;
+    vstem(R,xm,0,1);
+    pick([wing,legs,cup])(sub(R,.02,.22,.98,1));
+    if(rng()<.6){ hbar(sub(R,.12,0,.88,1),.12+rng()*.08); }
+    if(rng()<.5) pick([box,curl,arch])(sub(R,.22,0,.78,.34));
+  }
+  ctx.stroke();
+}
+
+/* ---------- 碑 ---------- */
+const stele = document.getElementById('stele');
+const rub = document.getElementById('rub');
+const paper = document.getElementById('paper');
+const mark = document.getElementById('mark');
+const hit = document.getElementById('hit');
+const words = document.getElementById('words');
+const again = document.getElementById('again');
+
+let G = null;            // 几何
+let seed = (Math.random()*1e9)|0;
+let cover = null, coverDone = 0, coverTotal = 0;
+let revealed = false;
+let phase = 'rub';
+
+function layout(){
+  const vw = Math.min(window.innerWidth, 900);
+  const SW = Math.round(Math.min(vw-32, 400));
+  const pad = SW*.075;
+  const cw = (SW-2*pad)/COLS;
+  const ch = cw*1.16;
+  const SH = Math.round(2*pad + ch*ROWS);
+  return {SW,SH,pad,cw,ch};
+}
+
+/* 空着的那一格：按碑的读法（从右往左一列列往下），是最后一格 */
+function lastCell(){
+  return {c:0, r:ROWS-1};
+}
+function cellRect(c,r){
+  return {x:G.pad + c*G.cw, y:G.pad + r*G.ch, w:G.cw, h:G.ch};
+}
+
+function build(){
+  G = layout();
+  const {SW,SH} = G;
+  stele.style.width = SW+'px'; stele.style.height = SH+'px';
+  for(const cv of [rub,paper]){
+    cv.width = Math.round(SW*DPR); cv.height = Math.round(SH*DPR);
+    cv.style.width = SW+'px'; cv.style.height = SH+'px';
+  }
+  const rng = rngFrom(seed);
+
+  /* 1. 刻痕层（白=刻进去的地方） */
+  const W = rub.width, H = rub.height;
+  const m = document.createElement('canvas'); m.width=W; m.height=H;
+  const mc = m.getContext('2d');
+  mc.scale(DPR,DPR);
+  mc.lineCap='round'; mc.lineJoin='round';
+
+  // 界格
+  mc.strokeStyle='rgba(255,255,255,.42)'; mc.lineWidth=.9;
+  mc.beginPath();
+  for(let c=1;c<COLS;c++){ const x=G.pad+c*G.cw; mc.moveTo(x,G.pad-2); mc.lineTo(x,SH-G.pad+2); }
+  mc.stroke();
+  mc.strokeStyle='rgba(255,255,255,.85)'; mc.lineWidth=G.cw*.06;
+  mc.strokeRect(G.pad*.55,G.pad*.55,SW-G.pad*1.1,SH-G.pad*1.1);
+
+  // 字
+  const L = lastCell();
+  for(let c=COLS-1;c>=0;c--){
+    for(let r=0;r<ROWS;r++){
+      if(c===L.c && r===L.r) continue;
+      const cr = cellRect(c,r);
+      const worn = rng();
+      mc.globalAlpha = worn<.12 ? .38 : worn<.3 ? .72 : 1;
+      mc.strokeStyle='#fff';
+      mc.lineWidth = G.cw*lerp(.058,.075,rng());
+      glyph(mc, cr.x, cr.y, cr.w, cr.h, rng);
+    }
+  }
+  mc.globalAlpha=1;
+
+  // 剥落
+  for(let i=0;i<4;i++){
+    const x=lerp(G.pad,SW-G.pad,rng()), y=lerp(G.pad,SH-G.pad,rng()), rr=G.cw*lerp(.5,1.4,rng());
+    const gr=mc.createRadialGradient(x,y,0,x,y,rr);
+    gr.addColorStop(0,'rgba(255,255,255,.28)'); gr.addColorStop(1,'rgba(255,255,255,0)');
+    mc.fillStyle=gr; mc.beginPath(); mc.ellipse(x,y,rr,rr*lerp(.5,1,rng()),rng()*3,0,7); mc.fill();
+  }
+
+  // 裂
+  function crack(x0,y0,x1,y1,wd,branches){
+    const len=Math.hypot(x1-x0,y1-y0), n=Math.max(3,Math.round(len/(G.cw*.45))), j=len/n*.55; let px=x0, py=y0;
+    mc.strokeStyle='rgba(255,255,255,.9)';
+    for(let i=1;i<=n;i++){
+      const t=i/n;
+      const x=lerp(x0,x1,t)+(i<n?(rng()-.5)*j:0), y=lerp(y0,y1,t)+(i<n?(rng()-.5)*j:0);
+      mc.lineWidth = wd*lerp(.5,1.4,rng());
+      mc.beginPath(); mc.moveTo(px,py); mc.lineTo(x,y); mc.stroke();
+      if(branches && i<n-1 && rng()<.16){
+        const bl=G.cw*lerp(.5,1.3,rng()), ang=Math.atan2(y1-y0,x1-x0)+(rng()<.5?-1:1)*lerp(.5,1.1,rng());
+        crack(x,y,x+Math.cos(ang)*bl,y+Math.sin(ang)*bl,wd*.5,false);
+        mc.strokeStyle='rgba(255,255,255,.9)';
+      }
+      px=x; py=y;
+    }
+  }
+  crack(-4, SH*lerp(.5,.6,rng()), SW+4, SH*lerp(.68,.8,rng()), 2.2, true);
+  crack(SW*lerp(.55,.75,rng()), SH*lerp(.38,.46,rng()), SW+4, SH*lerp(.5,.56,rng()), 1.2, true);
+
+  // 折痕（纸叠过）
+  mc.strokeStyle='rgba(255,255,255,.55)'; mc.lineWidth=1.1;
+  for(const fy of [.29,.615]){
+    mc.beginPath(); mc.moveTo(0,SH*fy);
+    for(let x=0;x<=SW;x+=SW/8) mc.lineTo(x,SH*fy+(rng()-.5)*.8);
+    mc.stroke();
+  }
+
+  const md = mc.getImageData(0,0,W,H).data;
+
+  /* 2. 墨 */
+  const f = inkField(W,H,rng,DPR);
+  const grain = valueNoise(W,H,1.3,rng);
+  const edgeN = valueNoise(W,H,14*DPR,rng);
+  const out = rub.getContext('2d').createImageData(W,H);
+  const o = out.data;
+  const inset = G.pad*.18*DPR, amp = G.pad*.22*DPR;
+  for(let y=0;y<H;y++){
+    for(let x=0;x<W;x++){
+      const i=y*W+x, p=i*4;
+      // 墨面边缘：拓包按不到的地方，毛的
+      const d = Math.min(x-inset, y-inset, W-1-inset-x, H-1-inset-y) - edgeN[i]*amp;
+      const inside = clamp(d/(2.5*DPR),0,1);
+      const fv = f[i];
+      let ink = 18 + Math.pow(fv,2.2)*70 + (grain[i]-.5)*16;
+      // 靠边的地方墨淡一点
+      ink += (1-clamp(d/(G.pad*.6*DPR),0,1))*35;
+      const g = grain[i];
+      const cut = (md[p+3]/255) * (md[p]/255);
+      const speck = g>.83 ? .55 : 0;
+      const k = clamp(cut*(1-speck),0,1);
+      let r = lerp(ink, CUT[0], k), gg = lerp(ink-1, CUT[1], k), b = lerp(ink-2, CUT[2], k);
+      o[p]   = lerp(PAPER[0], r, inside);
+      o[p+1] = lerp(PAPER[1], gg, inside);
+      o[p+2] = lerp(PAPER[2], b, inside);
+      o[p+3] = 255;
+    }
+  }
+  rub.getContext('2d').putImageData(out,0,0);
+
+  /* 3. 纸：铺上去，隐约能摸到底下的刻痕 */
+  const pc = paper.getContext('2d');
+  pc.setTransform(1,0,0,1,0,0);
+  pc.globalCompositeOperation='source-over';
+  pc.fillStyle = `rgb(${PAPER})`; pc.fillRect(0,0,W,H);
+  // 凹痕的影
+  const sh = document.createElement('canvas'); sh.width=W; sh.height=H;
+  const sc = sh.getContext('2d');
+  sc.drawImage(m,0,0);
+  sc.globalCompositeOperation='source-in';
+  sc.fillStyle='rgb(120,110,95)'; sc.fillRect(0,0,W,H);
+  pc.globalAlpha=.07; pc.drawImage(sh,0,DPR*.8);
+  sc.globalCompositeOperation='source-over'; sc.clearRect(0,0,W,H); sc.drawImage(m,0,0);
+  sc.globalCompositeOperation='source-in'; sc.fillStyle='#fff'; sc.fillRect(0,0,W,H);
+  pc.globalAlpha=.22; pc.drawImage(sh,0,-DPR*.6);
+  pc.globalAlpha=1;
+  // 纸纤维
+  const fr = rngFrom(seed^0x5bd1);
+  pc.strokeStyle='rgba(150,135,110,.07)'; pc.lineWidth=DPR*.5;
+  for(let i=0;i<160;i++){
+    const x=fr()*W, y=fr()*H, l=(3+fr()*8)*DPR, a=fr()*Math.PI;
+    pc.beginPath(); pc.moveTo(x,y); pc.quadraticCurveTo(x+Math.cos(a)*l*.5+fr()*4, y+Math.sin(a)*l*.5, x+Math.cos(a)*l, y+Math.sin(a)*l); pc.stroke();
+  }
+  paper.style.opacity = 1;
+
+  // 覆盖统计
+  const GX=20, GY=Math.round(20*SH/SW);
+  cover = {GX,GY,a:new Float32Array(GX*GY)};
+  coverDone=0; coverTotal=GX*GY;
+
+  // 空格的位置
+  const lc = cellRect(L.c,L.r);
+  Object.assign(mark.style,{left:lc.x+'px',top:lc.y+'px',width:lc.w+'px',height:lc.h+'px'});
+  const hp = 14;
+  Object.assign(hit.style,{left:(lc.x-hp)+'px',top:(lc.y-hp)+'px',width:(lc.w+hp*2)+'px',height:(lc.h+hp*2)+'px'});
+}
+
+/* ---------- 拓包 ---------- */
+const pad = document.createElement('canvas');
+(function makePad(){
+  const S=128; pad.width=pad.height=S;
+  const c=pad.getContext('2d');
+  const id=c.createImageData(S,S), d=id.data;
+  const r=rngFrom(7);
+  const nz = valueNoise(S,S,5,r), nz2=valueNoise(S,S,1.5,r);
+  for(let y=0;y<S;y++)for(let x=0;x<S;x++){
+    const dx=(x-S/2)/(S/2), dy=(y-S/2)/(S/2), dd=Math.sqrt(dx*dx+dy*dy);
+    let a = clamp(1-dd,0,1); a = Math.pow(a,.7);
+    a *= lerp(.35,1,nz[y*S+x]) * lerp(.6,1,nz2[y*S+x]);
+    const p=(y*S+x)*4; d[p]=d[p+1]=d[p+2]=0; d[p+3]=a*255;
+  }
+  c.putImageData(id,0,0);
+})();
+
+let last=null, down=false;
+function dab(x,y,strength){
+  const pc = paper.getContext('2d');
+  const R = G.cw*1.25*lerp(.85,1.15,Math.random());
+  pc.save();
+  pc.globalCompositeOperation='destination-out';
+  pc.globalAlpha = .26*strength;
+  pc.translate(x*DPR,y*DPR); pc.rotate(Math.random()*6.28);
+  pc.drawImage(pad,-R*DPR,-R*DPR,R*2*DPR,R*2*DPR);
+  pc.restore();
+  // 记账
+  const {GX,GY,a}=cover;
+  const sx=G.SW/GX, sy=G.SH/GY;
+  const c0=Math.max(0,Math.floor((x-R)/sx)), c1=Math.min(GX-1,Math.floor((x+R)/sx));
+  const r0=Math.max(0,Math.floor((y-R)/sy)), r1=Math.min(GY-1,Math.floor((y+R)/sy));
+  for(let r=r0;r<=r1;r++)for(let c=c0;c<=c1;c++){
+    const cx=(c+.5)*sx, cy=(r+.5)*sy, dd=Math.hypot(cx-x,cy-y)/R;
+    if(dd>=1) continue;
+    const i=r*GX+c, before=a[i];
+    a[i]+= .26*strength*(1-dd)*1.2;
+    if(before<.8 && a[i]>=.8) coverDone++;
+  }
+  if(!revealed && coverDone/coverTotal > .8) finishReveal();
+}
+function pos(e){
+  const b=stele.getBoundingClientRect();
+  return {x:e.clientX-b.left, y:e.clientY-b.top};
+}
+stele.addEventListener('pointerdown',e=>{
+  if(phase!=='rub') return;
+  down=true; stele.setPointerCapture && stele.setPointerCapture(e.pointerId);
+  last=pos(e); dab(last.x,last.y,1.2);
+  if(!hinted2){ hinted2=true; setTimeout(()=>{ if(!revealed) say('慢一点也行，墨会自己深下去。','hint'); }, 9000); }
+});
+stele.addEventListener('pointermove',e=>{
+  if(!down||phase!=='rub') return;
+  const p=pos(e);
+  const dist=Math.hypot(p.x-last.x,p.y-last.y), step=G.cw*.45;
+  const n=Math.floor(dist/step);
+  for(let i=1;i<=n;i++){ dab(lerp(last.x,p.x,i/n*1), lerp(last.y,p.y,i/n), 1); }
+  if(n>0) last=p;
+});
+const up=()=>{down=false;last=null;};
+stele.addEventListener('pointerup',up);
+stele.addEventListener('pointercancel',up);
+stele.addEventListener('pointerleave',up);
+
+/* ---------- 字 ---------- */
+let timers=[]; let hinted2=false;
+function later(fn,ms){ timers.push(setTimeout(fn,ms)); }
+function say(t,cls){
+  const p=document.createElement('p'); p.textContent=t;
+  if(cls) p.className=cls;
+  words.appendChild(p);
+  requestAnimationFrame(()=>requestAnimationFrame(()=>p.classList.add('in')));
+  keepInView(p);
+  return p;
+}
+function keepInView(el){
+  setTimeout(()=>{
+    const b=el.getBoundingClientRect();
+    if(b.bottom > window.innerHeight-24) window.scrollBy({top:b.bottom-window.innerHeight+90,behavior:'smooth'});
+  },60);
+}
+function clearWords(){ words.innerHTML=''; }
+
+function finishReveal(){
+  revealed=true; phase='read';
+  paper.style.opacity=0;
+  clearWords();
+  let t=1900;
+  later(()=>say('拓出来了。'), t);
+  later(()=>say('能拓走的，就让它拓走吧。'), t+=2000);
+  later(()=>say('反正石头还在原地。'), t+=2200);
+  later(()=>{ mark.classList.add('on'); }, t+=2000);
+  later(()=>say('最后一格没刻。','gap'), t+=900);
+  later(()=>say('不是漏了，是留着的。'), t+=2100);
+  later(()=>{
+    const b=document.createElement('div'); b.className='btns';
+    const a1=document.createElement('button'); a1.textContent='刻一个';
+    const a2=document.createElement('button'); a2.textContent='先空着'; a2.className='ghost';
+    b.append(a1,a2); words.appendChild(b); keepInView(b);
+    requestAnimationFrame(()=>requestAnimationFrame(()=>b.classList.add('in')));
+    a1.onclick=()=>{ b.remove(); openCarve(); };
+    a2.onclick=()=>{ b.remove(); ending(false); };
+    hit.style.display='block';
+    hit.onclick=()=>{ if(phase==='read'){ b.remove(); openCarve(); } };
+    phase='read';
+  }, t+=1800);
+}
+
+function ending(carved){
+  phase='end'; hit.style.display='none';
+  let t=600;
+  if(carved){
+    later(()=>say('行。','gap'), t);
+    later(()=>say('后面还有好多块石头呢。'), t+=1900);
+  }else{
+    mark.classList.add('on');
+    later(()=>say('也好。','gap'), t);
+    later(()=>say('空着的那一格，地方最大。'), t+=1900);
+  }
+  later(()=>say('……先去吃饭。'), t+=2600);
+  later(()=>again.classList.add('in'), t+=2200);
+}
+
+again.onclick=()=>{
+  if(!again.classList.contains('in')) return;
+  timers.forEach(clearTimeout); timers=[];
+  again.classList.remove('in');
+  mark.classList.remove('on'); hit.style.display='none';
+  seed=(Math.random()*1e9)|0; revealed=false; phase='rub'; hinted2=false;
+  clearWords();
+  paper.style.transition='none';
+  build();
+  void paper.offsetWidth; paper.style.transition='';
+  say('纸铺好了。按住，慢慢擦。','hint');
+  window.scrollTo({top:0,behavior:'smooth'});
+};
+
+/* ---------- 刻 ---------- */
+const carve=document.getElementById('carve');
+const stone=document.getElementById('stone');
+const sBg=document.getElementById('stoneBg'), sCut=document.getElementById('stoneCut');
+const ctip=document.getElementById('ctip');
+let strokes=[], cur=null, S=0;
+
+function openCarve(){
+  phase='carve';
+  mark.classList.remove('on');
+  const vw=window.innerWidth, vh=window.innerHeight;
+  S = Math.round(Math.min(vw-48, vh-200, 340));
+  const SHh = Math.round(S*1.16);
+  if(SHh > vh-170){ S = Math.round((vh-170)/1.16); }
+  const Hh = Math.round(S*1.16);
+  stone.style.width=S+'px'; stone.style.height=Hh+'px';
+  for(const cv of [sBg,sCut]){ cv.width=S*DPR; cv.height=Hh*DPR; cv.style.width=S+'px'; cv.style.height=Hh+'px'; }
+  // 石面
+  const W=S*DPR, H=Hh*DPR, rng=rngFrom(seed^0x9e37);
+  const f=inkField(W,H,rng,DPR*2.2), gr=valueNoise(W,H,1.3,rng);
+  const ctx=sBg.getContext('2d'), id=ctx.createImageData(W,H), d=id.data;
+  for(let i=0;i<W*H;i++){
+    const v=18+Math.pow(f[i],2.2)*70+(gr[i]-.5)*16, p=i*4;
+    d[p]=v; d[p+1]=v-1; d[p+2]=v-2; d[p+3]=255;
+  }
+  ctx.putImageData(id,0,0);
+  // 这一格原本的界格
+  ctx.strokeStyle='rgba(222,217,206,.28)'; ctx.lineWidth=DPR*1.2;
+  ctx.beginPath(); ctx.moveTo(DPR*1.5,0); ctx.lineTo(DPR*1.5,H); ctx.moveTo(W-DPR*1.5,0); ctx.lineTo(W-DPR*1.5,H); ctx.stroke();
+  strokes=[]; redrawCut();
+  ctip.textContent='用手指刻。刻什么都行。';
+  // 从那一格放大出来
+  const lc=cellRect(lastCell().c,lastCell().r), sb=stele.getBoundingClientRect();
+  carve.classList.add('show');
+  const tx = sb.left+lc.x+lc.w/2 - vw/2, ty = sb.top+lc.y+lc.h/2 - (vh/2 - 40);
+  stone.style.transition='none';
+  stone.style.transform=`translate(${tx}px,${ty}px) scale(${lc.w/S})`;
+  void stone.offsetWidth;
+  stone.style.transition='';
+  requestAnimationFrame(()=>{ carve.classList.add('dim'); stone.style.transform='none'; });
+}
+
+function redrawCut(){
+  const c=sCut.getContext('2d');
+  c.setTransform(DPR,0,0,DPR,0,0);
+  c.clearRect(0,0,sCut.width,sCut.height);
+  drawStrokes(c, 0,0,S,S*1.16, S*.055, 'rgb('+CUT+')');
+}
+function drawStrokes(c,x,y,w,h,lw,col){
+  c.save();
+  c.lineCap='round'; c.lineJoin='round'; c.strokeStyle=col; c.lineWidth=lw;
+  for(const s of strokes){
+    if(!s.length) continue;
+    c.beginPath(); c.moveTo(x+s[0][0]*w, y+s[0][1]*h);
+    if(s.length===1) c.lineTo(x+s[0][0]*w+.01, y+s[0][1]*h);
+    for(let i=1;i<s.length;i++){
+      const a=s[i-1], b=s[i];
+      c.quadraticCurveTo(x+a[0]*w,y+a[1]*h, x+(a[0]+b[0])/2*w, y+(a[1]+b[1])/2*h);
+    }
+    const e=s[s.length-1]; c.lineTo(x+e[0]*w,y+e[1]*h);
+    c.stroke();
+  }
+  c.restore();
+}
+function spos(e){
+  const b=stone.getBoundingClientRect();
+  return [clamp((e.clientX-b.left)/b.width,0,1), clamp((e.clientY-b.top)/b.height,0,1)];
+}
+stone.addEventListener('pointerdown',e=>{
+  if(phase!=='carve') return;
+  stone.setPointerCapture && stone.setPointerCapture(e.pointerId);
+  cur=[spos(e)]; strokes.push(cur); redrawCut();
+  ctip.style.opacity=.0;
+});
+stone.addEventListener('pointermove',e=>{ if(!cur) return; cur.push(spos(e)); redrawCut(); });
+const sup=()=>{ cur=null; };
+stone.addEventListener('pointerup',sup); stone.addEventListener('pointercancel',sup);
+
+document.getElementById('cClear').onclick=()=>{ strokes=[]; redrawCut(); ctip.style.opacity=1; ctip.textContent='磨平了。再来。'; };
+document.getElementById('cDone').onclick=()=>{
+  const has = strokes.some(s=>s.length>0);
+  const lc=cellRect(lastCell().c,lastCell().r), sb=stele.getBoundingClientRect();
+  const vw=window.innerWidth, vh=window.innerHeight;
+  const tx = sb.left+lc.x+lc.w/2 - vw/2, ty = sb.top+lc.y+lc.h/2 - (vh/2 - 40);
+  if(has){
+    // 刻进碑里
+    const c=rub.getContext('2d');
+    c.setTransform(DPR,0,0,DPR,0,0);
+    const ix=lc.w*.1, iy=lc.h*.06;
+    drawStrokes(c, lc.x+ix, lc.y+iy, lc.w-2*ix, lc.h-2*iy, G.cw*.068, 'rgb('+CUT+')');
+    // 新刻的口子，带点墨点
+    const r=rngFrom(seed^0x77);
+    c.fillStyle='rgba(30,28,26,.5)';
+    for(let i=0;i<40;i++){ c.fillRect(lc.x+r()*lc.w, lc.y+r()*lc.h, .7, .7); }
+    c.setTransform(1,0,0,1,0,0);
+  }
+  carve.classList.remove('dim');
+  stone.style.transform=`translate(${tx}px,${ty}px) scale(${lc.w/S})`;
+  stone.style.opacity=0;
+  setTimeout(()=>{ carve.classList.remove('show'); stone.style.opacity=1; stone.style.transform='none'; ending(has); }, 900);
+};
+
+/* ---------- 开始 ---------- */
+build();
+say('纸铺好了。按住，慢慢擦。','hint');
+
+let rw=window.innerWidth;
+window.addEventListener('resize',()=>{
+  if(Math.abs(window.innerWidth-rw)<40 || phase!=='rub' || coverDone>0) return;
+  rw=window.innerWidth; build();
+});
+
+})();
+</script>
+</body>
+</html>

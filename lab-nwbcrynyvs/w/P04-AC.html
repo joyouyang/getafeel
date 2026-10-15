@@ -1,0 +1,504 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, user-scalable=no">
+<meta name="theme-color" content="#2b3346">
+<title>，</title>
+<style>
+  html, body {
+    margin: 0; padding: 0; height: 100%; overflow: hidden;
+    background: #2b3346;
+    -webkit-user-select: none; user-select: none;
+    -webkit-tap-highlight-color: transparent;
+    touch-action: manipulation;
+  }
+  canvas { position: fixed; inset: 0; width: 100%; height: 100%; display: block; }
+  #grain {
+    position: fixed; inset: 0; pointer-events: none; opacity: .07; mix-blend-mode: overlay; background-size: 160px 160px;
+  }
+  .say {
+    position: fixed; left: 0; right: 0;
+    text-align: center; padding: 0 9vw;
+    font-family: -apple-system, "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei", "Noto Sans CJK SC", sans-serif;
+    color: #f4ead8;
+    pointer-events: none;
+    transition: opacity 1.1s ease, transform 1.1s ease;
+    opacity: 0;
+    text-shadow: 0 1px 14px rgba(20, 22, 30, .35);
+  }
+  #line {
+    top: 70%;
+    font-size: clamp(17px, 4.6vw, 23px);
+    font-weight: 300;
+    letter-spacing: .08em;
+    line-height: 1.7;
+    transform: translateY(6px);
+  }
+  #line.on { opacity: .95; transform: translateY(0); }
+  #hint {
+    bottom: calc(5.5vh + env(safe-area-inset-bottom));
+    font-size: 12.5px; letter-spacing: .18em; font-weight: 300;
+  }
+  #hint.on { opacity: .55; }
+  #mute {
+    position: fixed; top: calc(14px + env(safe-area-inset-top)); right: 16px;
+    font: 300 12px/1 -apple-system, "PingFang SC", sans-serif; letter-spacing: .15em;
+    color: #f4ead8; opacity: .4; background: none; border: 0; padding: 10px 6px; cursor: pointer;
+  }
+  .blink { animation: blink 1.4s ease-in-out infinite; display: inline-block; }
+  @keyframes blink { 0%, 100% { opacity: 1 } 50% { opacity: .15 } }
+</style>
+</head>
+<body>
+<canvas id="c"></canvas>
+<div id="grain"></div>
+<div id="line" class="say"></div>
+<div id="hint" class="say"></div>
+<button id="mute" aria-label="声音">声音 开</button>
+
+<script>
+(() => {
+  const cv = document.getElementById('c');
+  const ctx = cv.getContext('2d');
+  const lineEl = document.getElementById('line');
+  const hintEl = document.getElementById('hint');
+  const muteBtn = document.getElementById('mute');
+
+  let W = 0, H = 0, DPR = 1;
+  function resize() {
+    DPR = Math.min(window.devicePixelRatio || 1, 2);
+    W = window.innerWidth; H = window.innerHeight;
+    cv.width = W * DPR; cv.height = H * DPR;
+    ctx.setTransform(DPR, 0, 0, DPR, 0, 0);
+    drawGrain();
+  }
+
+  // 一点颗粒，像没对上焦的那种
+  const grainEl = document.getElementById('grain');
+  let grained = false;
+  function drawGrain() {
+    if (grained) return; grained = true;
+    const s = 320;
+    const gcv = document.createElement('canvas');
+    gcv.width = s; gcv.height = s;
+    const g = gcv.getContext('2d');
+    const img = g.createImageData(s, s);
+    for (let i = 0; i < img.data.length; i += 4) {
+      const v = Math.random() * 255;
+      img.data[i] = img.data[i + 1] = img.data[i + 2] = v; img.data[i + 3] = 255;
+    }
+    g.putImageData(img, 0, 0);
+    grainEl.style.backgroundImage = `url(${gcv.toDataURL()})`;
+  }
+
+  // ---------- 颜色：天没亮的那边 → 傍晚的这边 ----------
+  const FROM = { top: [36, 42, 60], mid: [86, 86, 100], hz: [196, 178, 150], low: [58, 56, 62], deep: [30, 30, 38], hill: [24, 26, 36] };
+  const TO   = { top: [226, 205, 186], mid: [214, 170, 112], hz: [232, 176, 96], low: [86, 98, 64], deep: [42, 52, 38], hill: [70, 78, 52] };
+  const mix = (a, b, t) => a.map((v, i) => Math.round(v + (b[i] - v) * t));
+  const rgb = (c, a = 1) => `rgba(${c[0]},${c[1]},${c[2]},${a})`;
+
+  // ---------- 山 ----------
+  const K = 10;               // 山头
+  let peaks = [];             // {x, h, target}
+  let valleys = [];           // 山头之间
+  function makeRidge(grow) {
+    peaks = []; valleys = [];
+    for (let i = 0; i < K; i++) {
+      const t = (i + 0.5) / K;
+      const brow = 0.55 + 0.45 * Math.sin(Math.PI * Math.min(1, t * 1.15)); // 像眉毛，中间挑一点
+      const h = (0.35 + Math.random() * 0.65) * brow;
+      peaks.push({ x: t + (Math.random() - 0.5) * 0.035, h: grow ? 0 : h, target: h });
+    }
+    for (let i = 0; i <= K; i++) {
+      const h = (i === 0 || i === K) ? 0.02 : 0.08 + Math.random() * 0.4;
+      valleys.push({ h: grow ? 0 : h, target: h });
+    }
+  }
+
+  const horizonY = () => H * 0.47;
+  const amp = () => Math.min(H * 0.1, W * 0.2);
+  const marginX = () => Math.max(W * 0.06, (W - Math.min(W, H * 0.95)) / 2);
+  const px = (t) => marginX() + t * (W - marginX() * 2);
+
+  function ridgePoints(sign, wob) {
+    const pts = [];
+    const y0 = horizonY(), A = amp();
+    pts.push([-10, y0]);
+    pts.push([px(0) - 6, y0]);
+    for (let i = 0; i < K; i++) {
+      const vx = i === 0 ? peaks[0].x - 0.5 / K : (peaks[i - 1].x + peaks[i].x) / 2;
+      pts.push([px(vx), y0 - sign * valleys[i].h * A]);
+      pts.push([px(peaks[i].x), y0 - sign * peaks[i].h * A]);
+    }
+    pts.push([px(peaks[K - 1].x + 0.5 / K), y0 - sign * valleys[K].h * A]);
+    pts.push([px(1) + 6, y0]);
+    pts.push([W + 10, y0]);
+    if (wob) {
+      for (let i = 0; i < pts.length; i++) pts[i][1] += Math.sin(now / 700 + i * 1.7) * wob;
+    }
+    return pts;
+  }
+  function tracePath(pts) {
+    ctx.moveTo(pts[0][0], pts[0][1]);
+    for (let i = 0; i < pts.length - 1; i++) {
+      const p0 = pts[Math.max(0, i - 1)], p1 = pts[i], p2 = pts[i + 1], p3 = pts[Math.min(pts.length - 1, i + 2)];
+      const k = 0.12; // 稍微有点棱角，不要太圆
+      ctx.bezierCurveTo(p1[0] + (p2[0] - p0[0]) * k, p1[1] + (p2[1] - p0[1]) * k,
+                        p2[0] - (p3[0] - p1[0]) * k, p2[1] - (p3[1] - p1[1]) * k, p2[0], p2[1]);
+    }
+  }
+
+  // ---------- 声音 ----------
+  let AC = null, master = null, muted = false;
+  function audio() {
+    if (AC) return AC;
+    const C = window.AudioContext || window.webkitAudioContext;
+    if (!C) return null;
+    AC = new C();
+    master = AC.createGain(); master.gain.value = 0.9;
+    const comp = AC.createDynamicsCompressor();
+    master.connect(comp); comp.connect(AC.destination);
+    return AC;
+  }
+  function click(accent) {
+    if (!AC || muted) return;
+    const t = AC.currentTime + 0.005;
+    // 木头的那一下
+    const len = 0.04;
+    const buf = AC.createBuffer(1, Math.floor(AC.sampleRate * len), AC.sampleRate);
+    const d = buf.getChannelData(0);
+    for (let i = 0; i < d.length; i++) d[i] = (Math.random() * 2 - 1) * Math.pow(1 - i / d.length, 6);
+    const src = AC.createBufferSource(); src.buffer = buf;
+    const bp = AC.createBiquadFilter(); bp.type = 'bandpass'; bp.frequency.value = accent ? 2400 : 1800; bp.Q.value = 6;
+    const g = AC.createGain(); g.gain.value = accent ? 0.55 : 0.38;
+    src.connect(bp); bp.connect(g); g.connect(master);
+    src.start(t);
+    const o = AC.createOscillator(); o.type = 'sine'; o.frequency.value = accent ? 1320 : 990;
+    const og = AC.createGain();
+    og.gain.setValueAtTime(0.0001, t);
+    og.gain.exponentialRampToValueAtTime(accent ? 0.12 : 0.07, t + 0.002);
+    og.gain.exponentialRampToValueAtTime(0.0001, t + 0.05);
+    o.connect(og); og.connect(master); o.start(t); o.stop(t + 0.07);
+  }
+  // 山越高音越高；山平了，音就落回同一个
+  const SCALE = [0, 2, 4, 7, 9, 12, 14, 16, 19];
+  function tone(height, dur = 1.1, vol = 0.09, base = 196) {
+    if (!AC || muted) return;
+    const t = AC.currentTime + 0.01;
+    const step = SCALE[Math.max(0, Math.min(SCALE.length - 1, Math.round(height * (SCALE.length - 1))))];
+    const f = base * Math.pow(2, step / 12);
+    [1, 2.001].forEach((m, j) => {
+      const o = AC.createOscillator(); o.type = j ? 'sine' : 'triangle';
+      o.frequency.value = f * m;
+      const g = AC.createGain();
+      g.gain.setValueAtTime(0.0001, t);
+      g.gain.exponentialRampToValueAtTime(vol * (j ? 0.25 : 1), t + 0.015);
+      g.gain.exponentialRampToValueAtTime(0.0001, t + dur);
+      o.connect(g); g.connect(master); o.start(t); o.stop(t + dur + 0.05);
+    });
+  }
+
+  // ---------- 话 ----------
+  const LINES = [
+    '一下，一下，不着急，',
+    '拍子我数着，你只管弹，',
+    '没拆的，没回的，都先放着，',
+    '反正你出生那天，<br>天也是慢慢才亮的，',
+    '这边翻过去，就是那边，',
+    '那边下雪的时候，<br>这边正好是夏天，',
+    '让你随便挑一个，<br>你就挑了眼前那个，也挺好，',
+    '电不多了，够走回去，',
+  ];
+  let lineTimer = null;
+  function say(html, keep) {
+    clearTimeout(lineTimer);
+    lineEl.classList.remove('on');
+    lineTimer = setTimeout(() => {
+      lineEl.innerHTML = html;
+      lineEl.classList.add('on');
+    }, lineEl.textContent ? 650 : 0);
+  }
+  function hint(text, ms) {
+    hintEl.textContent = text;
+    hintEl.classList.add('on');
+    if (ms) setTimeout(() => hintEl.classList.remove('on'), ms);
+  }
+
+  // ---------- 走 ----------
+  // 从左走到右，再走回来，再走过去 —— 跟摆一样
+  const PASSES = [
+    { from: 0, to: K - 1, keep: 0.74 },
+    { from: K - 1, to: 0, keep: 0.6 },
+    { from: 0, to: K - 1, keep: 0.4 },
+    { from: K - 1, to: 0, keep: 0 },
+  ];
+  // 话还没说完，就再摆一趟（山已经平了，拍子还在）
+  const EXTRA = [{ from: K - 1, to: 0, keep: 0 }, { from: 0, to: K - 1, keep: 0 }];
+  const passAt = (i) => i < PASSES.length ? PASSES[i] : EXTRA[(i - PASSES.length) % 2];
+  let lineIdx = 0, lastLineAt = -1e9;
+  let state = 'idle';
+  let interval = 0.78;        // 秒
+  let lastBeat = 0;           // performance 时间（秒）
+  let beat = 0;               // 已经走了几下
+  let pass = 0, pos = 0;      // 当前在哪个山头
+  let prevPos = 0;
+  let taps = [];
+  let progress = 0, progressShown = 0;
+  let doneAt = 0;
+  let now = 0;
+  let rings = [];
+  const totalHops = PASSES.reduce((s, p) => s + Math.abs(p.to - p.from), 0);
+
+  function start() {
+    makeRidgeIfFlat();
+    state = 'walk';
+    beat = 0; pass = 0; pos = PASSES[0].from; prevPos = pos;
+    lineIdx = 0; lastLineAt = -1e9;
+    lastBeat = now / 1000;
+    taps = [];
+    land(true);
+    hint('跟着点几下，拍子就听你的', 5200);
+  }
+  function makeRidgeIfFlat() {
+    if (!peaks.length || peaks.every(p => p.h < 0.01)) makeRidge();
+  }
+
+  function land(first) {
+    const p = passAt(pass);
+    const pk = peaks[pos];
+    const accent = beat % 4 === 0;
+    click(accent);
+    tone(pk.h, 1.2, 0.08);
+    // 踩过的地方，平一点
+    pk.target = Math.min(pk.target, pk.h * p.keep + (p.keep ? 0 : 0));
+    if (p.keep === 0) pk.target = 0;
+    const vi = p.from < p.to ? pos : pos + 1;
+    if (valleys[vi]) valleys[vi].target *= p.keep ? 0.5 : 0;
+    if (!first) {
+      const vj = p.from < p.to ? pos + 1 : pos;
+      if (pos === p.to && valleys[vj]) valleys[vj].target *= p.keep ? 0.5 : 0;
+    }
+    // 话：一句说完、看完了，再说下一句
+    if (beat > 0 && lineIdx < LINES.length) {
+      const prev = lineIdx ? LINES[lineIdx - 1] : '';
+      const need = 1700 + prev.replace(/<[^>]+>/g, '').length * 130;
+      if (now - lastLineAt >= need) { say(LINES[lineIdx]); lineIdx++; lastLineAt = now; }
+    }
+  }
+
+  function step() {
+    beat++;
+    const p = passAt(pass);
+    prevPos = pos;
+    if (pos === p.to) {
+      pass++;
+      if (pass >= PASSES.length && lineIdx >= LINES.length && now - lastLineAt > 2600) { finish(); return; }
+      pos = passAt(pass).from;
+      prevPos = pos;
+      // 掉头那一下，原地
+    } else {
+      pos += p.to > p.from ? 1 : -1;
+    }
+    land(false);
+  }
+
+  function finish() {
+    state = 'done';
+    doneAt = now;
+    peaks.forEach(p => p.target = 0);
+    valleys.forEach(v => v.target = 0);
+    tone(0, 3.2, 0.09, 196);
+    setTimeout(() => tone(0, 3.6, 0.05, 293.66), 120);
+    say('好，平了，');
+    setTimeout(() => { if (state === 'done') say('然后<span class="blink">，</span>'); }, 4200);
+    setTimeout(() => { if (state === 'done') hint('还皱的话，再点一下', 0); }, 9000);
+  }
+
+  function onTap(e) {
+    if (e.target === muteBtn) return;
+    const t = performance.now() / 1000;
+    const x = e.clientX ?? (e.touches && e.touches[0].clientX) ?? W / 2;
+    const y = e.clientY ?? (e.touches && e.touches[0].clientY) ?? H / 2;
+    rings.push({ x, y, t: performance.now() });
+    const ac = audio();
+    if (ac && ac.state === 'suspended') ac.resume();
+
+    if (state === 'idle') { start(); return; }
+    if (state === 'done') {
+      if (now - doneAt < 2500) return;
+      hintEl.classList.remove('on');
+      makeRidge(true);
+      progress = 0;
+      say('又皱了？');
+      state = 'idle';
+      setTimeout(() => { if (state === 'idle') hint('点一下，我来数拍子', 0); }, 900);
+      return;
+    }
+    // 跟拍
+    taps.push(t);
+    taps = taps.filter(x => t - x < 4);
+    if (taps.length >= 2) {
+      const ds = [];
+      for (let i = 1; i < taps.length; i++) ds.push(taps[i] - taps[i - 1]);
+      const recent = ds.slice(-3).filter(d => d > 0.25 && d < 1.6);
+      if (recent.length) {
+        const avg = recent.reduce((a, b) => a + b, 0) / recent.length;
+        interval = Math.max(0.32, Math.min(1.3, avg));
+        // 对齐到你点的这一下
+        if (t - lastBeat > interval * 0.35) { lastBeat = t; step(); }
+        else lastBeat = t;
+      }
+    }
+  }
+
+  // ---------- 画 ----------
+  function frame(ts) {
+    now = ts;
+    const tsec = ts / 1000;
+    if (state === 'walk' && tsec - lastBeat >= interval) {
+      lastBeat += interval;
+      if (tsec - lastBeat > interval) lastBeat = tsec;
+      step();
+    }
+
+    // 往 target 慢慢落
+    const ease = 0.06;
+    peaks.forEach(p => p.h += (p.target - p.h) * ease);
+    valleys.forEach(v => v.h += (v.target - v.h) * ease);
+
+    if (state === 'walk') progress = Math.min(1, beat / (totalHops + 2));
+    else if (state === 'done') progress = 1;
+    else progress = Math.min(progress, 1);
+    progressShown += (progress - progressShown) * 0.02;
+    const P = progressShown;
+    muteBtn.style.color = P > 0.45 ? '#3b3a2c' : '#f4ead8';
+
+    // 天
+    const y0 = horizonY();
+    const top = mix(FROM.top, TO.top, P), mid = mix(FROM.mid, TO.mid, P), hz = mix(FROM.hz, TO.hz, P);
+    const low = mix(FROM.low, TO.low, P), deep = mix(FROM.deep, TO.deep, P);
+    const sky = ctx.createLinearGradient(0, 0, 0, H);
+    sky.addColorStop(0, rgb(top));
+    sky.addColorStop(y0 / H * 0.6, rgb(mid));
+    sky.addColorStop(y0 / H, rgb(hz));
+    sky.addColorStop(Math.min(1, y0 / H + 0.12), rgb(low));
+    sky.addColorStop(1, rgb(deep));
+    ctx.fillStyle = sky;
+    ctx.fillRect(0, 0, W, H);
+
+    // 地平线上那团光，越往后越暖
+    const glowX = W * (0.5 + 0.18 * Math.sin(P * Math.PI * 0.5));
+    const glow = ctx.createRadialGradient(glowX, y0, 0, glowX, y0, Math.max(W, H) * 0.55);
+    glow.addColorStop(0, `rgba(255, 214, 150, ${0.12 + 0.3 * P})`);
+    glow.addColorStop(0.5, `rgba(255, 190, 120, ${0.05 + 0.08 * P})`);
+    glow.addColorStop(1, 'rgba(255,190,120,0)');
+    ctx.fillStyle = glow;
+    ctx.fillRect(0, 0, W, H);
+
+    const hill = mix(FROM.hill, TO.hill, P);
+    const upper = ridgePoints(1, 0);
+    const lower = ridgePoints(-1, P * 1.6);
+
+    // 正面和反面之间
+    ctx.beginPath();
+    tracePath(upper);
+    ctx.lineTo(W + 10, y0);
+    const rev = lower.slice().reverse();
+    ctx.lineTo(rev[0][0], rev[0][1]);
+    tracePath(rev);
+    ctx.closePath();
+    ctx.fillStyle = rgb(hill, 0.55 - 0.25 * P);
+    ctx.fill();
+
+    // 倒影
+    ctx.beginPath(); tracePath(lower);
+    ctx.strokeStyle = `rgba(244,234,216,${0.22 + 0.1 * P})`;
+    ctx.lineWidth = 1.2; ctx.stroke();
+
+    // 山
+    ctx.beginPath(); tracePath(upper);
+    ctx.strokeStyle = `rgba(244,234,216,${0.85})`;
+    ctx.lineWidth = 1.6; ctx.lineJoin = 'round'; ctx.stroke();
+
+    // 平了以后，水面上几道很细的光
+    if (P > 0.5) {
+      const a = (P - 0.5) * 2;
+      for (let i = 0; i < 7; i++) {
+        const yy = y0 + 10 + i * i * 4.5;
+        const w = (W * 0.5) * (1 - i / 8) * (0.7 + 0.3 * Math.sin(ts / 1300 + i));
+        ctx.beginPath();
+        ctx.moveTo(glowX - w / 2, yy); ctx.lineTo(glowX + w / 2, yy);
+        ctx.strokeStyle = `rgba(255,224,170,${0.13 * a * (1 - i / 8)})`;
+        ctx.lineWidth = 1; ctx.stroke();
+      }
+    }
+
+    // 走的那个点
+    if (state === 'walk' || state === 'done') {
+      let x, y;
+      const A = amp();
+      if (state === 'walk') {
+        const f = Math.min(1, (tsec - lastBeat) / interval);
+        const a = peaks[prevPos], b = peaks[pos];
+        // 落地后先停一下，再起跳
+        const k = Math.max(0, Math.min(1, (f - 0.15) / 0.85));
+        const e = k < 0.5 ? 2 * k * k : 1 - Math.pow(-2 * k + 2, 2) / 2;
+        // 下一个山头
+        const p = passAt(pass);
+        const nextIdx = pos === p.to ? pos : pos + (p.to > p.from ? 1 : -1);
+        const n = peaks[nextIdx];
+        const xa = px(b.x), xb = px(n.x);
+        const ya = y0 - b.h * A, yb = y0 - n.h * A;
+        const hop = nextIdx === pos ? A * 0.12 : A * 0.28 + Math.abs(xb - xa) * 0.15;
+        x = xa + (xb - xa) * e;
+        y = ya + (yb - ya) * e - Math.sin(Math.PI * e) * hop;
+      } else {
+        const t = Math.min(1, (now - doneAt) / 2600);
+        const last = peaks[passAt(pass - 1).to];
+        const ex = px(last.x), cx = W / 2;
+        const e = 1 - Math.pow(1 - t, 3);
+        x = ex + (cx - ex) * e;
+        y = y0 - last.h * A - Math.sin(Math.PI * Math.min(1, t * 1.4)) * A * 0.15 * (1 - t);
+      }
+      const r = 3.6;
+      const halo = ctx.createRadialGradient(x, y - r, 0, x, y - r, 26);
+      halo.addColorStop(0, 'rgba(255,236,200,0.55)'); halo.addColorStop(1, 'rgba(255,236,200,0)');
+      ctx.fillStyle = halo; ctx.beginPath(); ctx.arc(x, y - r, 26, 0, Math.PI * 2); ctx.fill();
+      ctx.fillStyle = '#fff4e0';
+      ctx.beginPath(); ctx.arc(x, y - r, r, 0, Math.PI * 2); ctx.fill();
+      // 它在水里的那个
+      const ry = 2 * y0 - (y - r);
+      ctx.fillStyle = `rgba(255,244,224,${0.28})`;
+      ctx.beginPath(); ctx.arc(x + Math.sin(ts / 300) * P, ry, r * 0.9, 0, Math.PI * 2); ctx.fill();
+    }
+
+    // 点过的地方，一圈
+    rings = rings.filter(r => ts - r.t < 900);
+    rings.forEach(r => {
+      const k = (ts - r.t) / 900;
+      ctx.beginPath(); ctx.arc(r.x, r.y, 8 + k * 38, 0, Math.PI * 2);
+      ctx.strokeStyle = `rgba(244,234,216,${0.35 * (1 - k)})`; ctx.lineWidth = 1; ctx.stroke();
+    });
+
+    requestAnimationFrame(frame);
+  }
+
+  muteBtn.addEventListener('click', (e) => {
+    e.stopPropagation();
+    muted = !muted;
+    muteBtn.textContent = muted ? '声音 关' : '声音 开';
+  });
+  window.addEventListener('pointerdown', onTap);
+  window.addEventListener('resize', resize);
+  window.addEventListener('keydown', (e) => { if (e.code === 'Space') onTap({ target: null, clientX: W / 2, clientY: H / 2 }); });
+
+  resize();
+  makeRidge();
+  say('又皱眉了，');
+  setTimeout(() => { if (state === 'idle') hint('点一下，我来数拍子', 0); }, 1400);
+  requestAnimationFrame(frame);
+})();
+</script>
+</body>
+</html>

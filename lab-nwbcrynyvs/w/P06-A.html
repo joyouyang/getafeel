@@ -1,0 +1,368 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no,viewport-fit=cover">
+<meta name="theme-color" content="#8a3d27">
+<title>一汪</title>
+<style>
+  html,body{margin:0;height:100%;overflow:hidden;background:#8a3d27;
+    -webkit-user-select:none;user-select:none;-webkit-tap-highlight-color:transparent;touch-action:none}
+  canvas{position:fixed;inset:0;width:100vw;height:100vh;height:100dvh;display:block}
+  body::after{content:"";position:fixed;left:0;right:0;bottom:0;height:26vh;pointer-events:none;
+    background:linear-gradient(to bottom,rgba(80,28,16,0),rgba(80,28,16,.38))}
+  #line{z-index:2;position:fixed;left:0;right:0;bottom:calc(env(safe-area-inset-bottom,0px) + 7.5vh);
+    padding:0 9vw;text-align:center;pointer-events:none;
+    font-family:"Songti SC","STSong","Noto Serif SC","Source Han Serif SC","SimSun",serif;
+    font-size:clamp(15px,4.3vw,21px);line-height:1.9;letter-spacing:.14em;color:#f6ecdf;
+    text-shadow:0 1px 2px rgba(60,20,10,.55),0 0 18px rgba(90,30,15,.45);
+    opacity:0;transition:opacity 1.6s ease}
+  #line.on{opacity:1}
+  #hint{position:fixed;left:0;right:0;top:calc(env(safe-area-inset-top,0px) + 8vh);text-align:center;
+    pointer-events:none;font-family:"Songti SC","STSong",serif;font-size:13px;letter-spacing:.3em;
+    color:rgba(246,236,223,.7);opacity:0;transition:opacity 2s ease}
+  #hint.on{opacity:1}
+  .stone{position:fixed;width:9px;height:8px;margin:-4px 0 0 -4.5px;border-radius:50% 45% 50% 40%;
+    background:radial-gradient(circle at 35% 30%,#8b7b70,#3b302b 70%);pointer-events:none;
+    box-shadow:2px 3px 3px rgba(0,0,0,.25)}
+</style>
+</head>
+<body>
+<canvas id="c"></canvas>
+<div id="hint">轻 点 水 面</div>
+<div id="line"></div>
+<script>
+(function(){
+"use strict";
+const cv=document.getElementById('c'), ctx=cv.getContext('2d');
+const lineEl=document.getElementById('line'), hintEl=document.getElementById('hint');
+
+// ---------- seeded random ----------
+function rng(seed){let s=seed>>>0;return function(){s=(s+0x6D2B79F5)>>>0;let t=s;t=Math.imul(t^t>>>15,t|1);t^=t+Math.imul(t^t>>>7,t|61);return((t^t>>>14)>>>0)/4294967296;};}
+function hash2(a,b){let h=(Math.imul(a,374761393)+Math.imul(b,668265263))|0;h=Math.imul(h^(h>>>13),1274126177);return((h^(h>>>16))>>>0)/4294967296;}
+
+// periodic value noise
+function makeNoise(seed){
+  return function(x,y,px,py){ // periodic with period px,py lattice cells
+    const xi=Math.floor(x),yi=Math.floor(y),xf=x-xi,yf=y-yi;
+    const u=xf*xf*(3-2*xf),v=yf*yf*(3-2*yf);
+    const m=(a,p)=>((a%p)+p)%p;
+    const x0=m(xi,px),x1=m(xi+1,px),y0=m(yi,py),y1=m(yi+1,py);
+    const a=hash2(x0+seed*131,y0),b=hash2(x1+seed*131,y0),c=hash2(x0+seed*131,y1),d=hash2(x1+seed*131,y1);
+    return a+(b-a)*u+(c-a)*v+(a-b-c+d)*u*v;
+  };
+}
+
+let W,H,N,cur,prev,mask,depth,landR,landG,landB,cloud,lakeCx,lakeCy,lakeRx,lakeRy,img,data;
+let sunStart={x:0,y:0};
+
+function build(){
+  const vw=window.innerWidth, vh=window.innerHeight;
+  W=Math.round(Math.min(480,Math.max(160,vw/1.8)));
+  H=Math.round(W*vh/vw);
+  N=W*H;
+  cv.width=W;cv.height=H;
+  img=ctx.createImageData(W,H);data=img.data;
+  cur=new Float32Array(N);prev=new Float32Array(N);
+  mask=new Uint8Array(N);depth=new Float32Array(N);
+  landR=new Uint8Array(N);landG=new Uint8Array(N);landB=new Uint8Array(N);
+  cloud=new Float32Array(N);
+
+  // ---- lake shape ----
+  const R=rng(1017);
+  lakeCx=W*0.5;lakeCy=H*0.45;
+  lakeRy=H*0.30;lakeRx=Math.min(W*0.41,lakeRy*1.35);
+  const harm=[];for(let k=2;k<=6;k++)harm.push([k,(R()*0.5+0.5)*0.11/k*2.2,R()*Math.PI*2]);
+  function rad(th){let r=1;for(const[k,a,p]of harm)r+=a*Math.sin(k*th+p);return r;}
+  for(let y=0;y<H;y++)for(let x=0;x<W;x++){
+    const dx=(x+.5-lakeCx)/lakeRx,dy=(y+.5-lakeCy)/lakeRy;
+    const th=Math.atan2(dy,dx),d=Math.hypot(dx,dy);
+    if(d<rad(th)*0.97)mask[y*W+x]=1;
+  }
+  // keep border cells dry so the sim has walls
+  for(let x=0;x<W;x++){mask[x]=0;mask[(H-1)*W+x]=0;}
+  for(let y=0;y<H;y++){mask[y*W]=0;mask[y*W+W-1]=0;}
+
+  // ---- distance fields (chamfer) ----
+  function dist(inside){
+    const D=new Float32Array(N),BIG=1e9;
+    for(let i=0;i<N;i++)D[i]=(mask[i]===(inside?1:0))?BIG:0;
+    const a=1,b=1.414;
+    for(let y=0;y<H;y++)for(let x=0;x<W;x++){const i=y*W+x;if(!D[i])continue;let v=D[i];
+      if(x>0)v=Math.min(v,D[i-1]+a);if(y>0){v=Math.min(v,D[i-W]+a);if(x>0)v=Math.min(v,D[i-W-1]+b);if(x<W-1)v=Math.min(v,D[i-W+1]+b);}D[i]=v;}
+    for(let y=H-1;y>=0;y--)for(let x=W-1;x>=0;x--){const i=y*W+x;if(!D[i])continue;let v=D[i];
+      if(x<W-1)v=Math.min(v,D[i+1]+a);if(y<H-1){v=Math.min(v,D[i+W]+a);if(x<W-1)v=Math.min(v,D[i+W+1]+b);if(x>0)v=Math.min(v,D[i+W-1]+b);}D[i]=v;}
+    return D;
+  }
+  const din=dist(true),dout=dist(false);
+  let maxIn=1;for(let i=0;i<N;i++)if(din[i]<1e8&&din[i]>maxIn)maxIn=din[i];
+  for(let i=0;i<N;i++)depth[i]=mask[i]?Math.min(1,din[i]/(maxIn*0.55)):0;
+
+  // ---- land: terraces following the shore, red earth, pines ----
+  const n1=makeNoise(3),n2=makeNoise(7),n3=makeNoise(11);
+  const cell=W/150; // scale factor so the look is similar across sizes
+  const bandW=6.5*cell;
+  const pal=[
+    [150,66,42],[138,58,38],[162,76,48],[146,62,40],   // red earth
+    [176,128,82],[168,118,76],                         // harvested, pale
+    [150,66,42],[134,56,36],                           // more red earth
+    [124,98,60],                                       // dry stalks
+    [108,106,66]                                       // late green, muted
+  ];
+  for(let y=0;y<H;y++)for(let x=0;x<W;x++){
+    const i=y*W+x;
+    if(mask[i])continue;
+    const d=dout[i];
+    const warp=(n1(x/22/cell,y/22/cell,1e4,1e4)-.5)*9*cell;
+    const t=(d+warp)/bandW;
+    const band=Math.floor(t),fr=t-band;
+    const th=Math.atan2((y-lakeCy)/lakeRy,(x-lakeCx)/lakeRx);
+    const ns=6+band;
+    let sect=Math.floor((th+Math.PI)/(Math.PI*2)*ns+n2(x/14/cell,y/14/cell,1e4,1e4)*1.4);
+    sect=((sect%ns)+ns)%ns;
+    const h=hash2(band+50,sect+900);
+    let c=pal[Math.floor(h*pal.length)];
+    let r=c[0],g=c[1],bb=c[2];
+    // soft large-scale variation + furrows
+    const lv=(n2(x/30/cell+9,y/30/cell+9,1e4,1e4)-.5)*0.16;
+    const f=n3(x/1.6/cell,y/1.6/cell,1e5,1e5)*0.10-0.05+lv;
+    r*=1+f;g*=1+f;bb*=1+f;
+    // terrace lip
+    const lip=Math.max(0,1-fr/0.14);r*=1-0.17*lip;g*=1-0.19*lip;bb*=1-0.19*lip;
+    // shore: pale gravel
+    if(d<1.8*cell){const s=1-d/(1.8*cell);r=r+(190-r)*s*.85;g=g+(172-g)*s*.85;bb=bb+(146-bb)*s*.85;}
+    // pine woods on the upper slopes, soft-edged
+    const pn=n1(x/16/cell+40,y/16/cell+40,1e4,1e4)*0.7+n3(x/4/cell,y/4/cell,1e5,1e5)*0.3;
+    const far=Math.min(1,Math.max(0,(d-12*cell)/(10*cell)));
+    let wv=(pn-0.6)/0.08;wv=wv<0?0:wv>1?1:wv;wv*=far;
+    if(wv>0){const k=0.85+n3(x/1.2/cell,y/1.2/cell,1e5,1e5)*0.3;r+=(52*k-r)*wv;g+=(68*k-g)*wv;bb+=(46*k-bb)*wv;}
+    landR[i]=r<0?0:r>255?255:r;landG[i]=g<0?0:g>255?255:g;landB[i]=bb<0?0:bb>255?255:bb;
+  }
+
+  // soften: one 3x3 pass over land cells only
+  for(const A of[landR,landG,landB]){
+    const B=A.slice();
+    for(let y=1;y<H-1;y++)for(let x=1;x<W-1;x++){const i=y*W+x;if(mask[i])continue;
+      let sum=0,n=0;for(let yy=-1;yy<=1;yy++)for(let xx=-1;xx<=1;xx++){const j=i+yy*W+xx;if(!mask[j]){sum+=B[j]*(xx||yy?1:2);n+=(xx||yy?1:2);}}
+      A[i]=sum/n;}
+  }
+
+  // ---- cloud texture, periodic in both axes ----
+  const cn=makeNoise(21);
+  const P=6,PY=Math.max(2,Math.round(P*H/W));
+  for(let y=0;y<H;y++)for(let x=0;x<W;x++){
+    let v=0,amp=.55,fx=P,fy=PY;
+    for(let o=0;o<4;o++){v+=amp*cn(x/W*fx,y/H*fy,fx,fy);fx*=2;fy*=2;amp*=.5;}
+    v=(v-0.56)/0.18;v=v<0?0:v>1?1:v;v=v*v*(3-2*v);
+    cloud[y*W+x]=v;
+  }
+
+  sunStart={x:lakeCx-lakeRx*0.42,y:lakeCy+lakeRy*0.30};
+}
+
+function cloudAt(x,y){
+  x=((x%W)+W)%W;y=((y%H)+H)%H;
+  const xi=x|0,yi=y|0,xf=x-xi,yf=y-yi,x1=(xi+1)%W,y1=(yi+1)%H;
+  const a=cloud[yi*W+xi],b=cloud[yi*W+x1],c=cloud[y1*W+xi],d=cloud[y1*W+x1];
+  return a+(b-a)*xf+(c-a)*yf+(a-b-c+d)*xf*yf;
+}
+
+// ---------- simulation ----------
+function step(){
+  const damp=0.972;
+  for(let y=1;y<H-1;y++){
+    let i=y*W+1;
+    for(let x=1;x<W-1;x++,i++){
+      if(!mask[i]){prev[i]=0;continue;}
+      prev[i]=((cur[i-1]+cur[i+1]+cur[i-W]+cur[i+W])*0.5-prev[i])*damp;
+    }
+  }
+  const t=cur;cur=prev;prev=t;
+}
+
+function drop(cx,cy,r,amp){
+  const r2=r*r;
+  for(let y=Math.max(1,Math.floor(cy-r));y<=Math.min(H-2,Math.ceil(cy+r));y++)
+    for(let x=Math.max(1,Math.floor(cx-r));x<=Math.min(W-2,Math.ceil(cx+r));x++){
+      const d2=(x-cx)*(x-cx)+(y-cy)*(y-cy);if(d2>r2)continue;
+      const i=y*W+x;if(!mask[i])continue;
+      const f=Math.cos(Math.sqrt(d2)/r*Math.PI/2);
+      cur[i]-=amp*f;
+    }
+}
+
+// ---------- render ----------
+const t0=performance.now();
+function render(now){
+  const t=(now-t0)/1000;
+  const ox=t*0.55*(W/150),oy=t*0.22*(W/150);       // clouds drift
+  // the sun's reflection creeps toward the middle and never quite gets there
+  const k=Math.exp(-t/80);
+  const sx=lakeCx+(sunStart.x-lakeCx)*k-lakeRx*0.05*(1-k)*0.6-lakeRx*0.03;
+  const sy=lakeCy+(sunStart.y-lakeCy)*k+lakeRy*0.03;
+  const sr=lakeRx*0.1, sr2=sr*sr;
+  const K=2.2*(W/150);
+  for(let y=0;y<H;y++){
+    for(let x=0;x<W;x++){
+      const i=y*W+x,p=i*4;
+      let r,g,b;
+      if(mask[i]){
+        const dx=cur[i-1]-cur[i+1],dy=cur[i-W]-cur[i+W];
+        const rx=x+dx*K,ry=y+dy*K;
+        const c=cloudAt(rx-ox*1.0,ry-oy*1.0);
+        // zenith blue of a high plateau sky
+        let sR=30,sG=78,sB=158;
+        sR+=(226-sR)*c*.85;sG+=(232-sG)*c*.85;sB+=(240-sB)*c*.85;
+        const dep=depth[i];
+        // body colour: shallow teal over gravel -> deep ink blue
+        const sh=(1-dep);const sh3=sh*sh*sh;
+        let bR=16+(88-16)*sh3,bG=44+(132-44)*sh3,bB=92+(124-92)*sh3;
+        const fres=0.62-0.25*sh3;
+        r=bR+(sR-bR)*fres;g=bG+(sG-bG)*fres;b=bB+(sB-bB)*fres;
+        // slope light
+        const sl=(dx*0.8-dy*0.6)*30;
+        r+=sl;g+=sl;b+=sl*0.9;
+        // sun glint, broken up by the ripples
+        const gx=x+dx*K*3.2-sx,gy=y+dy*K*3.2-sy;
+        const d2=gx*gx+gy*gy;
+        if(d2<sr2*9){
+          const gl=Math.exp(-d2/sr2);
+          const halo=Math.exp(-d2/(sr2*4))*0.25;
+          const v=gl*255+halo*120;
+          r+=v;g+=v*0.97;b+=v*0.86;
+        }
+        // shoreline foam/edge darkening
+        if(dep<0.03){r=r*0.85+30;g=g*0.85+30;b=b*0.85+28;}
+      }else{
+        const sh=cloudAt(x-ox*1.0+W*0.07,y-oy*1.0-H*0.05);
+        const f=1-0.34*sh;
+        r=landR[i]*f;g=landG[i]*f*1.02;b=landB[i]*f*1.08;
+      }
+      data[p]=r;data[p+1]=g;data[p+2]=b;data[p+3]=255;
+    }
+  }
+  ctx.putImageData(img,0,0);
+}
+
+function loop(now){step();render(now);requestAnimationFrame(loop);}
+
+// ---------- words ----------
+const lines=[
+  [0,  '高原上的人，管一汪湖叫海。'],
+  [1,  '往里面扔东西，它不躲。'],
+  [3,  '一圈，两圈，就平了。'],
+  [6,  '你扔了什么，它不提。'],
+  [9,  '它底下有什么，它也不提。'],
+  [13, '平下来的时候，整片天都在里面。'],
+  [18, '钟上已经过了正午。<br>这里的太阳，还在往上走。']
+];
+let shown=-1,throws=0,busy=false,queued=false,lastLineAt=0;
+function showNext(){
+  if(shown>=lines.length-1)return;
+  if(busy){queued=true;return;}
+  busy=true;
+  const go=()=>{
+    shown++;lineEl.innerHTML=lines[shown][1];lineEl.classList.add('on');lastLineAt=performance.now();
+    setTimeout(()=>{busy=false;if(queued){queued=false;maybeAdvance();}},2600);
+  };
+  if(lineEl.classList.contains('on')){lineEl.classList.remove('on');setTimeout(go,1500);}else go();
+}
+function maybeAdvance(){
+  const nx=shown+1;
+  if(nx<lines.length&&throws>=lines[nx][0])showNext();
+}
+setTimeout(showNext,1400);
+let hintTimer=setTimeout(()=>{if(!throws)hintEl.classList.add('on');},5200);
+// the last line also arrives on its own if someone just watches for a while
+setInterval(()=>{
+  if(shown>=5&&shown<lines.length-1&&performance.now()-lastLineAt>9000){throws=Math.max(throws,lines[lines.length-1][0]);maybeAdvance();}
+},1000);
+
+// ---------- sound ----------
+let ac=null;
+function plop(strength){
+  try{
+    if(!ac){const A=window.AudioContext||window.webkitAudioContext;if(!A)return;ac=new A();}
+    if(ac.state==='suspended')ac.resume();
+    const t=ac.currentTime;
+    const o=ac.createOscillator(),g=ac.createGain();
+    o.type='sine';
+    const f0=520+Math.random()*220;
+    o.frequency.setValueAtTime(f0,t);
+    o.frequency.exponentialRampToValueAtTime(f0*0.32,t+0.09);
+    g.gain.setValueAtTime(0.0001,t);
+    g.gain.exponentialRampToValueAtTime(0.16*strength,t+0.006);
+    g.gain.exponentialRampToValueAtTime(0.0001,t+0.16);
+    o.connect(g);g.connect(ac.destination);o.start(t);o.stop(t+0.2);
+    // a faint low "gulp" after
+    const o2=ac.createOscillator(),g2=ac.createGain();
+    o2.type='sine';o2.frequency.setValueAtTime(170,t+0.05);o2.frequency.exponentialRampToValueAtTime(90,t+0.25);
+    g2.gain.setValueAtTime(0.0001,t+0.05);g2.gain.exponentialRampToValueAtTime(0.07*strength,t+0.07);
+    g2.gain.exponentialRampToValueAtTime(0.0001,t+0.3);
+    o2.connect(g2);g2.connect(ac.destination);o2.start(t+0.05);o2.stop(t+0.32);
+  }catch(e){}
+}
+
+// ---------- input ----------
+function toGrid(e){return{x:e.clientX/window.innerWidth*W,y:e.clientY/window.innerHeight*H};}
+function inLake(g){const xi=g.x|0,yi=g.y|0;return xi>0&&yi>0&&xi<W-1&&yi<H-1&&mask[yi*W+xi];}
+
+let down=false,last=null,moved=0;
+cv.addEventListener('pointerdown',e=>{
+  e.preventDefault();down=true;moved=0;last=toGrid(e);
+  try{cv.setPointerCapture(e.pointerId);}catch(_){}
+});
+cv.addEventListener('pointermove',e=>{
+  if(!down)return;
+  const g=toGrid(e);
+  if(last){
+    const dist=Math.hypot(g.x-last.x,g.y-last.y);moved+=dist;
+    const steps=Math.ceil(dist/1.2);
+    for(let s=1;s<=steps;s++){
+      const px=last.x+(g.x-last.x)*s/steps,py=last.y+(g.y-last.y)*s/steps;
+      if(inLake({x:px,y:py}))drop(px,py,1.6*(W/150),0.9);
+    }
+  }
+  last=g;
+});
+function up(e){
+  if(!down)return;down=false;
+  if(moved<6*(W/150)){
+    const g=toGrid(e);
+    if(inLake(g))throwStone(e.clientX,e.clientY,g);
+  }
+}
+cv.addEventListener('pointerup',up);
+cv.addEventListener('pointercancel',()=>{down=false;});
+
+function throwStone(cx,cy,g){
+  const s=document.createElement('div');s.className='stone';
+  s.style.left=cx+'px';s.style.top=cy+'px';
+  const rot=Math.random()*360;
+  s.style.transform='scale(2.4) rotate('+rot+'deg)';s.style.opacity='0';
+  document.body.appendChild(s);
+  s.animate([
+    {transform:'translate(0,-26px) scale(2.6) rotate('+rot+'deg)',opacity:0},
+    {transform:'translate(0,-14px) scale(2.0) rotate('+(rot+40)+'deg)',opacity:1,offset:.35},
+    {transform:'translate(0,0) scale(0.6) rotate('+(rot+90)+'deg)',opacity:.9}
+  ],{duration:330,easing:'cubic-bezier(.5,0,.9,.6)',fill:'forwards'});
+  setTimeout(()=>{
+    s.remove();
+    const sc=W/150;
+    drop(g.x,g.y,2.6*sc,7);
+    plop(1);
+    throws++;
+    clearTimeout(hintTimer);hintEl.classList.remove('on');
+    maybeAdvance();
+  },330);
+}
+
+// ---------- boot ----------
+build();
+requestAnimationFrame(loop);
+let rt=null;
+window.addEventListener('resize',()=>{clearTimeout(rt);rt=setTimeout(build,250);});
+})();
+</script>
+</body>
+</html>

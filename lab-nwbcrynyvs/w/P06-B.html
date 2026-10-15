@@ -1,0 +1,541 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover,user-scalable=no">
+<meta name="theme-color" content="#17181a">
+<title>拓</title>
+<style>
+  html,body{margin:0;height:100%;background:#17181a;overflow:hidden;
+    -webkit-user-select:none;user-select:none;-webkit-touch-callout:none;-webkit-tap-highlight-color:transparent}
+  body{font-family:-apple-system,"PingFang SC","Hiragino Sans GB","Noto Sans CJK SC","Microsoft YaHei",sans-serif;color:#8e9093}
+  #light{position:fixed;inset:0;pointer-events:none;
+    background:radial-gradient(ellipse 80% 60% at 50% 40%,rgba(255,248,236,.075),rgba(0,0,0,0) 72%)}
+  #app{position:relative;margin:0 auto;max-width:460px;height:100%}
+  #placard{position:absolute;font-size:11px;letter-spacing:.14em;line-height:1.75;color:#77797c;transition:opacity 1s}
+  #placard b{display:block;font-weight:500;color:#a6a8aa;letter-spacing:.3em}
+  #stone{position:absolute;pointer-events:none}
+  #paper{position:absolute;transform-origin:50% 0;
+    transition:transform 1.7s cubic-bezier(.3,.75,.2,1),box-shadow 1.7s ease;
+    box-shadow:0 1px 3px rgba(0,0,0,.4),0 6px 22px rgba(0,0,0,.25)}
+  #paper.lift{box-shadow:0 18px 40px rgba(0,0,0,.55),0 2px 6px rgba(0,0,0,.4)}
+  #paper.drop{transition:none;transform:translateY(-18px);opacity:0}
+  #ink{display:block;width:100%;height:100%;touch-action:none;cursor:crosshair}
+  #seal{position:absolute;pointer-events:none;opacity:0;transform:scale(1.7) rotate(-4deg);mix-blend-mode:multiply;
+    transition:opacity .16s ease-in,transform .2s cubic-bezier(.5,0,.9,.4)}
+  #seal.on{opacity:.93;transform:scale(1) rotate(-1.5deg)}
+  #bottom{position:absolute;left:0;right:0;bottom:0;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:14px;
+    padding-bottom:env(safe-area-inset-bottom)}
+  .fade{transition:opacity .9s ease;opacity:0;pointer-events:none}
+  .fade.on{opacity:1;pointer-events:auto}
+  #hint{font-size:13px;letter-spacing:.12em;color:#8a8c8f;position:absolute}
+  #line{font-size:15px;letter-spacing:.2em;color:#cfccc4;position:absolute}
+  button{font:inherit;font-size:14px;letter-spacing:.2em;color:#dedbd3;background:transparent;
+    border:1px solid rgba(255,255,255,.22);border-radius:999px;padding:10px 22px 10px 24px;cursor:pointer;position:absolute}
+  button:active{background:rgba(255,255,255,.06)}
+  #btnSeal i{display:inline-block;width:9px;height:12px;background:#cf4630;margin-right:10px;vertical-align:-1px;border-radius:1px}
+</style>
+</head>
+<body>
+<div id="light"></div>
+<div id="app">
+  <div id="placard"><b>刻石　残</b>存字六行。可拓。</div>
+  <canvas id="stone"></canvas>
+  <div id="paper">
+    <canvas id="ink"></canvas>
+    <canvas id="seal"></canvas>
+  </div>
+  <div id="bottom">
+    <div id="hint" class="fade on">用手指在纸上拍一拍，来回抹</div>
+    <button id="btnSeal" class="fade"><i></i>盖个章</button>
+    <button id="btnPeel" class="fade">揭下来</button>
+    <div id="line" class="fade">裂缝也一起拓下来了。</div>
+    <button id="btnAgain" class="fade" style="transform:translateY(46px)">再拓一张</button>
+  </div>
+</div>
+<script>
+(() => {
+'use strict';
+const $ = id => document.getElementById(id);
+const app = $('app'), paper = $('paper'), ink = $('ink'), stoneCv = $('stone'), sealCv = $('seal');
+const placard = $('placard'), bottom = $('bottom');
+const hint = $('hint'), btnSeal = $('btnSeal'), btnPeel = $('btnPeel'), line = $('line'), btnAgain = $('btnAgain');
+
+const COLS = ['石头裂了', '字没走', '知道是画的', '照样当真', '好也照旧', '坏也照旧'];
+const CARVE_FONT = '"Songti SC","STSong","Noto Serif CJK SC","Source Han Serif SC","Noto Serif SC","SimSun","Songti TC",serif';
+const SEAL_FONT = '"Kaiti SC","STKaiti","Songti SC","STSong","Noto Serif CJK SC","KaiTi",serif';
+
+// ---------- seeded random ----------
+let seed = 20141;
+const rnd = () => { seed = (seed * 1664525 + 1013904223) >>> 0; return seed / 4294967296; };
+
+let W, H, S, PW, PH, PX, PY, cw, ch, N;
+let G; // stone geometry (css px, paper-local)
+let relief, recB, inS, grain, density, base, img, ictx, pad;
+let surfaceCount = 0, covered = 0, state = 'rub';
+let dirty = null, rafPending = false;
+
+// ---------- noise ----------
+function valueNoise(w, h, cell, wrap) {
+  const gw = Math.ceil(w / cell) + 2, gh = Math.ceil(h / cell) + 2;
+  const g = new Float32Array(gw * gh);
+  for (let i = 0; i < g.length; i++) g[i] = rnd();
+  if (wrap) { // tileable: make last column/row equal first
+    const tw = Math.round(w / cell), th = Math.round(h / cell);
+    for (let y = 0; y < gh; y++) for (let x = 0; x < gw; x++) g[y * gw + x] = g[(y % th) * gw + (x % tw)];
+  }
+  const out = new Float32Array(w * h);
+  for (let y = 0; y < h; y++) {
+    const fy = y / cell, iy = fy | 0; let ty = fy - iy; ty = ty * ty * (3 - 2 * ty);
+    for (let x = 0; x < w; x++) {
+      const fx = x / cell, ix = fx | 0; let tx = fx - ix; tx = tx * tx * (3 - 2 * tx);
+      const a = g[iy * gw + ix], b = g[iy * gw + ix + 1], c = g[(iy + 1) * gw + ix], d = g[(iy + 1) * gw + ix + 1];
+      out[y * w + x] = (a + (b - a) * tx) * (1 - ty) + (c + (d - c) * tx) * ty;
+    }
+  }
+  return out;
+}
+function boxBlur(src, w, h, r) {
+  if (r < 1) return src;
+  const tmp = new Float32Array(src.length), out = new Float32Array(src.length), n = 2 * r + 1;
+  for (let y = 0; y < h; y++) {
+    let s = 0; const row = y * w;
+    for (let x = -r; x <= r; x++) s += src[row + Math.min(w - 1, Math.max(0, x))];
+    for (let x = 0; x < w; x++) {
+      tmp[row + x] = s / n;
+      s += src[row + Math.min(w - 1, x + r + 1)] - src[row + Math.max(0, x - r)];
+    }
+  }
+  for (let x = 0; x < w; x++) {
+    let s = 0;
+    for (let y = -r; y <= r; y++) s += tmp[Math.min(h - 1, Math.max(0, y)) * w + x];
+    for (let y = 0; y < h; y++) {
+      out[y * w + x] = s / n;
+      s += tmp[Math.min(h - 1, y + r + 1) * w + x] - tmp[Math.max(0, y - r) * w + x];
+    }
+  }
+  return out;
+}
+
+// ---------- layout ----------
+function layout() {
+  W = app.clientWidth; H = window.innerHeight;
+  const top = Math.max(66, Math.round(H * 0.09));
+  const bot = Math.max(118, Math.round(H * 0.16));
+  PW = Math.round(Math.min(W * 0.9, 420));
+  PX = Math.round((W - PW) / 2);
+  PY = top;
+  PH = Math.round(Math.min(H - top - bot, PW * 2.05));
+  S = Math.min(window.devicePixelRatio || 1, 2);
+  cw = Math.round(PW * S); ch = Math.round(PH * S); N = cw * ch;
+
+  for (const el of [paper, stoneCv]) {
+    el.style.left = PX + 'px'; el.style.top = PY + 'px';
+    el.style.width = PW + 'px'; el.style.height = PH + 'px';
+  }
+  ink.width = stoneCv.width = cw; ink.height = stoneCv.height = ch;
+  placard.style.left = (PX + 2) + 'px';
+  placard.style.top = Math.max(12, PY - 46) + 'px';
+  bottom.style.top = (PY + PH) + 'px';
+}
+
+// ---------- geometry ----------
+function buildGeometry() {
+  const mx = PW * 0.065;
+  const sx0 = mx, sx1 = PW - mx, sy0 = PH * 0.045, sy1 = PH * 0.83;
+  const sw = sx1 - sx0, sh = sy1 - sy0, rr = sw * 0.17;
+  const pts = [];
+  const jit = () => (rnd() - 0.5) * 2.2;
+  const seg = (ax, ay, bx, by, j = 1) => {
+    const len = Math.hypot(bx - ax, by - ay), n = Math.max(1, Math.round(len / 4));
+    for (let i = 0; i < n; i++) { const t = i / n; pts.push([ax + (bx - ax) * t + jit() * j, ay + (by - ay) * t + jit() * j]); }
+  };
+  const arc = (cx, cy, r, a0, a1) => {
+    const n = Math.max(6, Math.round(r * Math.abs(a1 - a0) / 4));
+    for (let i = 0; i < n; i++) { const a = a0 + (a1 - a0) * i / n; pts.push([cx + Math.cos(a) * r + jit(), cy + Math.sin(a) * r + jit()]); }
+  };
+  // clockwise from top-left arc
+  arc(sx0 + rr, sy0 + rr, rr, Math.PI, Math.PI * 1.5);
+  seg(sx0 + rr, sy0, sx1 - rr, sy0);
+  arc(sx1 - rr, sy0 + rr, rr, Math.PI * 1.5, Math.PI * 2);
+  const chipY = sy1 - sh * 0.13, chipX = sx1 - sw * 0.24;
+  seg(sx1, sy0 + rr, sx1, chipY);
+  // broken corner, jagged
+  const chip = [[sx1, chipY], [sx1 - sw * 0.05, chipY + sh * 0.03], [sx1 - sw * 0.08, chipY + sh * 0.025],
+    [sx1 - sw * 0.13, chipY + sh * 0.07], [sx1 - sw * 0.18, chipY + sh * 0.08], [chipX, sy1]];
+  for (let i = 0; i < chip.length - 1; i++) seg(chip[i][0], chip[i][1], chip[i + 1][0], chip[i + 1][1], 2.2);
+  seg(chipX, sy1, sx0, sy1);
+  seg(sx0, sy1, sx0, sy0 + rr);
+
+  // text grid
+  const tx0 = sx0 + sw * 0.075, tx1 = sx1 - sw * 0.075;
+  const ty0 = sy0 + rr * 0.95, ty1 = sy1 - sh * 0.05;
+  const colW = (tx1 - tx0) / COLS.length;
+  const cellH = colW * 1.14;
+  const rows = Math.floor((ty1 - ty0) / cellH);
+  const cs = colW * 0.8;
+
+  // crack: right edge -> left edge, midpoint displacement
+  let crack = [[sx1 + 4, sy0 + sh * 0.29], [sx0 - 4, sy0 + sh * 0.5]];
+  for (let k = 0; k < 6; k++) {
+    const nx = [];
+    for (let i = 0; i < crack.length - 1; i++) {
+      const [ax, ay] = crack[i], [bx, by] = crack[i + 1];
+      const len = Math.hypot(bx - ax, by - ay), d = (rnd() - 0.5) * len * 0.32;
+      nx.push(crack[i], [(ax + bx) / 2 - (by - ay) / len * d, (ay + by) / 2 + (bx - ax) / len * d]);
+    }
+    nx.push(crack[crack.length - 1]);
+    crack = nx;
+  }
+  const bi = Math.floor(crack.length * 0.58), [bx0, by0] = crack[bi];
+  let branch = [[bx0, by0], [bx0 - sw * 0.09, by0 + sh * 0.07], [bx0 - sw * 0.13, by0 + sh * 0.13]];
+  for (let k = 0; k < 3; k++) {
+    const nx = [];
+    for (let i = 0; i < branch.length - 1; i++) {
+      const [ax, ay] = branch[i], [bx, by] = branch[i + 1];
+      nx.push(branch[i], [(ax + bx) / 2 + (rnd() - .5) * 6, (ay + by) / 2 + (rnd() - .5) * 6]);
+    }
+    nx.push(branch[branch.length - 1]); branch = nx;
+  }
+  G = { sx0, sx1, sy0, sy1, sw, sh, pts, tx0, tx1, ty0, ty1, colW, cellH, rows, cs, crack, branch };
+}
+
+// ---------- masks ----------
+function buildMasks() {
+  seed = 20141; // same stone every time
+  buildGeometry();
+  const off = document.createElement('canvas'); off.width = cw; off.height = ch;
+  const c = off.getContext('2d', { willReadFrequently: true });
+
+  // stone shape
+  c.setTransform(S, 0, 0, S, 0, 0);
+  c.fillStyle = '#000'; c.fillRect(0, 0, PW, PH);
+  c.fillStyle = '#fff'; c.beginPath();
+  G.pts.forEach(([x, y], i) => i ? c.lineTo(x, y) : c.moveTo(x, y)); c.closePath(); c.fill();
+  let d = c.getImageData(0, 0, cw, ch).data;
+  let shape = new Float32Array(N);
+  for (let i = 0; i < N; i++) shape[i] = d[i * 4] / 255;
+  inS = boxBlur(shape, cw, ch, Math.round(S * 0.8));
+
+  // recessed: carved text, ruled lines, crack, pits
+  c.setTransform(1, 0, 0, 1, 0, 0); c.fillStyle = '#000'; c.fillRect(0, 0, cw, ch);
+  c.setTransform(S, 0, 0, S, 0, 0);
+  c.strokeStyle = 'rgba(255,255,255,.55)'; c.lineWidth = 1.1;
+  for (let k = 0; k <= COLS.length; k++) {
+    const x = G.tx0 + k * G.colW + (rnd() - .5);
+    c.beginPath(); c.moveTo(x, G.ty0 - 4); c.lineTo(x + (rnd() - .5) * 1.5, G.ty0 + G.rows * G.cellH + 2); c.stroke();
+  }
+  c.fillStyle = '#fff'; c.textAlign = 'center'; c.textBaseline = 'middle';
+  COLS.forEach((txt, ci) => {
+    const cx = G.tx1 - G.colW * (ci + 0.5);
+    [...txt].forEach((ch_, ri) => {
+      const cy = G.ty0 + G.cellH * (ri + 0.5);
+      c.save(); c.translate(cx + (rnd() - .5) * 1.2, cy + (rnd() - .5) * 1.2);
+      c.rotate((rnd() - .5) * 0.04);
+      const sz = G.cs * (0.96 + rnd() * 0.06);
+      c.font = `700 ${sz}px ${CARVE_FONT}`;
+      c.fillText(ch_, 0, 0);
+      c.restore();
+    });
+    // worn remains in the lower cells
+    for (let ri = txt.length; ri < G.rows; ri++) {
+      if (rnd() < 0.3) {
+        const cy = G.ty0 + G.cellH * (ri + 0.5);
+        c.save(); c.translate(cx, cy);
+        c.strokeStyle = `rgba(255,255,255,${0.22 + rnd() * 0.3})`; c.lineCap = 'round';
+        const n = 2 + (rnd() * 4 | 0);
+        for (let k = 0; k < n; k++) {
+          c.lineWidth = G.cs * (0.06 + rnd() * 0.05);
+          const ax = (rnd() - .5) * G.cs * .8, ay = (rnd() - .5) * G.cs * .8;
+          const v = rnd() < .5;
+          c.beginPath(); c.moveTo(ax, ay);
+          c.lineTo(ax + (v ? (rnd() - .5) * 4 : G.cs * (0.15 + rnd() * .35)), ay + (v ? G.cs * (0.15 + rnd() * .35) : (rnd() - .5) * 4));
+          c.stroke();
+        }
+        c.restore();
+      }
+    }
+  });
+  // crack
+  const strokePath = (p, w) => {
+    for (let i = 0; i < p.length - 1; i++) {
+      c.lineWidth = w * (0.6 + rnd() * 0.8); c.lineCap = 'round';
+      c.beginPath(); c.moveTo(p[i][0], p[i][1]); c.lineTo(p[i + 1][0], p[i + 1][1]); c.stroke();
+    }
+  };
+  c.strokeStyle = '#fff'; strokePath(G.crack, 2.6); strokePath(G.branch, 1.3);
+  c.strokeStyle = 'rgba(255,255,255,.35)'; strokePath(G.crack.map(([x, y]) => [x + 1.6, y + 1.2]), 2.2);
+  // pits & chips
+  for (let k = 0; k < 520; k++) {
+    const x = G.sx0 + rnd() * G.sw, y = G.sy0 + rnd() * G.sh, r = 0.35 + Math.pow(rnd(), 5) * 2.6;
+    c.fillStyle = `rgba(255,255,255,${0.3 + rnd() * 0.55})`;
+    c.beginPath(); c.ellipse(x, y, r, r * (0.5 + rnd() * .7), rnd() * 3, 0, 7); c.fill();
+  }
+  // shallow worn patches
+  for (let k = 0; k < 9; k++) {
+    const x = G.sx0 + rnd() * G.sw, y = G.sy0 + G.sh * (0.25 + rnd() * 0.75), r = 10 + rnd() * 26;
+    const gr = c.createRadialGradient(x, y, 0, x, y, r);
+    gr.addColorStop(0, 'rgba(255,255,255,.28)'); gr.addColorStop(1, 'rgba(255,255,255,0)');
+    c.fillStyle = gr; c.fillRect(x - r, y - r, 2 * r, 2 * r);
+  }
+  d = c.getImageData(0, 0, cw, ch).data;
+  const rec = new Float32Array(N);
+  for (let i = 0; i < N; i++) rec[i] = d[i * 4] / 255;
+  recB = boxBlur(rec, cw, ch, Math.max(1, Math.round(S * 0.7)));
+
+  // grain
+  const n1 = valueNoise(cw, ch, 70 * S), n2 = valueNoise(cw, ch, 14 * S), n3 = valueNoise(cw, ch, 3 * S);
+  grain = new Float32Array(N); relief = new Float32Array(N);
+  surfaceCount = 0;
+  for (let i = 0; i < N; i++) {
+    const g = 0.45 * n1[i] + 0.35 * n2[i] + 0.2 * n3[i];
+    grain[i] = g;
+    const r = inS[i] * Math.max(0, 1 - recB[i] * 1.08) * (0.72 + 0.28 * Math.min(1, n2[i] * 1.4));
+    relief[i] = r;
+    if (r > 0.5) surfaceCount++;
+  }
+
+  // pad texture (tileable 128)
+  seed = (Date.now() & 0xffff) + 7;
+  const pa = valueNoise(128, 128, 8, true), pb = valueNoise(128, 128, 2, true);
+  pad = new Float32Array(128 * 128);
+  for (let i = 0; i < pad.length; i++) pad[i] = Math.min(1, Math.max(0, (pa[i] * 0.65 + pb[i] * 0.35 - 0.25) * 1.6));
+
+  // paper base colour (with faint relief showing through damp paper)
+  base = new Uint8ClampedArray(N * 4);
+  const fib = valueNoise(cw, ch, 1.5 * S);
+  const o = Math.max(1, Math.round(S));
+  for (let y = 0; y < ch; y++) for (let x = 0; x < cw; x++) {
+    const i = y * cw + x;
+    let v = 236 + (fib[i] - 0.5) * 9 + (n1[i] - 0.5) * 5;
+    if (inS[i] > 0.02) {
+      const a = recB[Math.max(0, i - o * cw - o)], b = recB[Math.min(N - 1, i + o * cw + o)];
+      v += (a - b) * 30 - recB[i] * 7 - inS[i] * 2;
+    }
+    base[i * 4] = v + 1; base[i * 4 + 1] = v - 1; base[i * 4 + 2] = v - 7; base[i * 4 + 3] = 255;
+  }
+}
+
+// ---------- paper ----------
+function freshPaper() {
+  density = new Float32Array(N);
+  covered = 0;
+  ictx = ink.getContext('2d');
+  img = ictx.createImageData(cw, ch);
+  img.data.set(base);
+  ictx.putImageData(img, 0, 0);
+}
+
+const K = 2.5, TH = Math.log(2) / K; // alpha 0.5 threshold
+function render(x0, y0, x1, y1) {
+  const D = img.data;
+  for (let y = y0; y < y1; y++) for (let x = x0; x < x1; x++) {
+    const i = y * cw + x, d = density[i];
+    if (d <= 0) continue;
+    const a = 1 - Math.exp(-K * d), j = i * 4;
+    const inkV = 20 + (1 - grain[i]) * 16;
+    D[j] = base[j] * (1 - a) + (inkV - 2) * a;
+    D[j + 1] = base[j + 1] * (1 - a) + inkV * a;
+    D[j + 2] = base[j + 2] * (1 - a) + (inkV + 7) * a;
+  }
+  ictx.putImageData(img, 0, 0, x0, y0, x1 - x0, y1 - y0);
+}
+function flush() {
+  rafPending = false;
+  if (!dirty) return;
+  const [x0, y0, x1, y1] = dirty; dirty = null;
+  render(x0, y0, x1, y1);
+}
+
+const RCSS = 23;
+function stamp(xc, yc, amt) {
+  const r = RCSS * S * (0.85 + rnd() * 0.3);
+  const x0 = Math.max(0, Math.floor(xc - r)), x1 = Math.min(cw, Math.ceil(xc + r));
+  const y0 = Math.max(0, Math.floor(yc - r)), y1 = Math.min(ch, Math.ceil(yc + r));
+  if (x0 >= x1 || y0 >= y1) return;
+  const ox = rnd() * 128 | 0, oy = rnd() * 128 | 0, r2 = r * r;
+  for (let y = y0; y < y1; y++) {
+    const dy = y - yc, py = ((y + oy) & 127) * 128;
+    for (let x = x0; x < x1; x++) {
+      const dx = x - xc, dd = (dx * dx + dy * dy) / r2;
+      if (dd >= 1) continue;
+      const i = y * cw + x, rl = relief[i];
+      if (rl < 0.02) continue;
+      let f = 1 - dd; f = f * f;
+      const before = density[i];
+      const after = before + amt * f * rl * (0.3 + 0.95 * grain[i]) * (0.25 + pad[py + ((x + ox) & 127)]);
+      density[i] = after;
+      if (before < TH && after >= TH && rl > 0.5) covered++;
+    }
+  }
+  if (!dirty) dirty = [x0, y0, x1, y1];
+  else { dirty[0] = Math.min(dirty[0], x0); dirty[1] = Math.min(dirty[1], y0); dirty[2] = Math.max(dirty[2], x1); dirty[3] = Math.max(dirty[3], y1); }
+  if (!rafPending) { rafPending = true; requestAnimationFrame(flush); }
+}
+
+// ---------- stone (seen after the paper comes off) ----------
+function drawStone() {
+  const c = stoneCv.getContext('2d');
+  const im = c.createImageData(cw, ch), D = im.data;
+  const n = valueNoise(cw, ch, 9 * S), f = valueNoise(cw, ch, 1.2 * S);
+  const o = Math.max(1, Math.round(S));
+  for (let i = 0; i < N; i++) {
+    const a = inS[i]; if (a < 0.01) continue;
+    const e = recB[Math.max(0, i - o * cw - o)] - recB[Math.min(N - 1, i + o * cw + o)];
+    let v = 70 + (n[i] - .5) * 24 + (f[i] - .5) * 16 - recB[i] * 18 + e * 26;
+    const j = i * 4;
+    D[j] = v - 1; D[j + 1] = v; D[j + 2] = v + 4; D[j + 3] = a * 255;
+  }
+  c.putImageData(im, 0, 0);
+}
+
+// ---------- seal ----------
+function drawSeal() {
+  const w = Math.max(30, Math.round(PW * 0.088)), h = Math.round(w * 1.85);
+  sealCv.width = w * S; sealCv.height = h * S;
+  sealCv.style.width = w + 'px'; sealCv.style.height = h + 'px';
+  sealCv.style.left = (G.sx0 + 4) + 'px';
+  const room = PH - G.sy1;
+  sealCv.style.top = (G.sy1 + Math.max(6, (room - h) / 2)) + 'px';
+  const c = sealCv.getContext('2d');
+  c.setTransform(S, 0, 0, S, 0, 0);
+  c.clearRect(0, 0, w, h);
+  c.fillStyle = '#cf4630';
+  c.beginPath(); c.moveTo(1, 1.5); c.lineTo(w - 1.5, 1); c.lineTo(w - 1, h - 1.5); c.lineTo(1.5, h - 1); c.closePath(); c.fill();
+  c.globalCompositeOperation = 'destination-out';
+  c.fillStyle = '#000'; c.textAlign = 'center'; c.textBaseline = 'middle';
+  c.font = `700 ${w * 0.74}px ${SEAL_FONT}`;
+  c.fillText('照', w / 2, h * 0.28);
+  c.fillText('旧', w / 2, h * 0.73);
+  for (let k = 0; k < 90; k++) { // uneven press
+    c.globalAlpha = 0.25 + Math.random() * 0.6;
+    c.beginPath(); c.arc(Math.random() * w, Math.random() * h, Math.random() * 1.3, 0, 7); c.fill();
+  }
+  c.globalAlpha = 0.5;
+  c.beginPath(); c.arc(w * 0.85, h * 0.92, w * 0.22, 0, 7); c.fill();
+  c.globalAlpha = 1; c.globalCompositeOperation = 'source-over';
+}
+
+// ---------- sound ----------
+let ac = null, noiseBuf = null, lastThump = 0;
+function thump(strength) {
+  try {
+    if (!ac) {
+      ac = new (window.AudioContext || window.webkitAudioContext)();
+      noiseBuf = ac.createBuffer(1, ac.sampleRate * 0.12 | 0, ac.sampleRate);
+      const d = noiseBuf.getChannelData(0);
+      for (let i = 0; i < d.length; i++) d[i] = (Math.random() * 2 - 1) * Math.pow(1 - i / d.length, 3);
+    }
+    const t = ac.currentTime;
+    if (t - lastThump < 0.05) return; lastThump = t;
+    const s = ac.createBufferSource(); s.buffer = noiseBuf; s.playbackRate.value = 0.8 + Math.random() * 0.4;
+    const lp = ac.createBiquadFilter(); lp.type = 'lowpass'; lp.frequency.value = 380 + Math.random() * 200;
+    const g = ac.createGain(); g.gain.value = 0.55 * strength;
+    s.connect(lp); lp.connect(g); g.connect(ac.destination); s.start();
+  } catch (e) {}
+}
+
+// ---------- interaction ----------
+let down = false, last = null, pid = null;
+const pos = e => { const b = ink.getBoundingClientRect(); return [(e.clientX - b.left) / b.width * cw, (e.clientY - b.top) / b.height * ch]; };
+function progress() {
+  const p = covered / surfaceCount;
+  if (p > 0.08) hint.classList.remove('on');
+  if (p > 0.55 && state === 'rub') { state = 'ready'; btnSeal.classList.add('on'); }
+}
+ink.addEventListener('pointerdown', e => {
+  if (state !== 'rub' && state !== 'ready') return;
+  if (down) return;
+  down = true; pid = e.pointerId;
+  try { ink.setPointerCapture(pid); } catch (_) {}
+  last = pos(e);
+  stamp(last[0], last[1], 0.3);
+  thump(1);
+  if (navigator.vibrate) navigator.vibrate(4);
+  progress();
+  e.preventDefault();
+});
+ink.addEventListener('pointermove', e => {
+  if (!down || e.pointerId !== pid) return;
+  const p = pos(e), dist = Math.hypot(p[0] - last[0], p[1] - last[1]);
+  const step = RCSS * S * 0.32, n = Math.floor(dist / step);
+  for (let k = 1; k <= n; k++) {
+    const t = k / n;
+    stamp(last[0] + (p[0] - last[0]) * t, last[1] + (p[1] - last[1]) * t, 0.06);
+  }
+  if (n > 0) { last = p; progress(); }
+  e.preventDefault();
+});
+const up = e => { if (e.pointerId === pid) { down = false; pid = null; } };
+ink.addEventListener('pointerup', up);
+ink.addEventListener('pointercancel', up);
+document.addEventListener('touchmove', e => e.preventDefault(), { passive: false });
+
+btnSeal.addEventListener('click', () => {
+  if (state !== 'ready') return;
+  state = 'sealed';
+  btnSeal.classList.remove('on');
+  drawSeal();
+  requestAnimationFrame(() => sealCv.classList.add('on'));
+  setTimeout(() => thump(1.4), 170);
+  setTimeout(() => btnPeel.classList.add('on'), 1100);
+});
+btnPeel.addEventListener('click', () => {
+  if (state !== 'sealed') return;
+  state = 'peeled';
+  btnPeel.classList.remove('on');
+  placard.style.opacity = 0;
+  paper.classList.add('lift');
+  const sc = 0.8;
+  paper.style.transform = `translateY(-${Math.round(PY * 0.55)}px) rotate(-2.4deg) scale(${sc})`;
+  setTimeout(() => line.classList.add('on'), 1700);
+  setTimeout(() => btnAgain.classList.add('on'), 3200);
+});
+btnAgain.addEventListener('click', () => {
+  if (state !== 'peeled') return;
+  line.classList.remove('on'); btnAgain.classList.remove('on');
+  // the old sheet is taken away; a new one is laid on the same stone
+  paper.style.transition = 'opacity .5s ease, transform .5s ease';
+  paper.style.opacity = 0;
+  setTimeout(() => {
+    sealCv.classList.remove('on');
+    freshPaper();
+    paper.classList.remove('lift');
+    paper.style.transition = 'none';
+    paper.style.transform = 'translateY(-14px)';
+    void paper.offsetWidth;
+    paper.style.transition = '';
+    paper.style.transition = 'opacity .9s ease, transform 1.1s cubic-bezier(.3,.75,.2,1), box-shadow 1.7s ease';
+    paper.style.opacity = 1;
+    paper.style.transform = '';
+    placard.style.opacity = 1;
+    setTimeout(() => { paper.style.transition = ''; state = 'rub'; hint.classList.add('on'); }, 1100);
+  }, 900);
+});
+
+// ---------- boot ----------
+let builtW = 0, builtH = 0;
+function build() {
+  layout();
+  buildMasks();
+  drawStone();
+  freshPaper();
+  builtW = W; builtH = H;
+  state = 'rub';
+  paper.classList.remove('lift'); paper.style.transform = ''; paper.style.opacity = 1;
+  sealCv.classList.remove('on');
+  [btnSeal, btnPeel, line, btnAgain].forEach(b => b.classList.remove('on'));
+  hint.classList.add('on'); placard.style.opacity = 1;
+}
+build();
+let rt = null;
+window.addEventListener('resize', () => {
+  clearTimeout(rt);
+  rt = setTimeout(() => {
+    if (app.clientWidth !== builtW || Math.abs(window.innerHeight - builtH) > 140) build();
+  }, 250);
+});
+})();
+</script>
+</body>
+</html>

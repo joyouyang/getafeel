@@ -1,0 +1,384 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no,viewport-fit=cover">
+<meta name="theme-color" content="#1a1230">
+<title>别找</title>
+<style>
+  html,body{margin:0;height:100%;background:#1a1230;overflow:hidden;overscroll-behavior:none}
+  body{touch-action:none;-webkit-user-select:none;user-select:none;-webkit-tap-highlight-color:transparent;
+       font-family:"PingFang SC","Hiragino Sans GB","Noto Sans SC","Microsoft YaHei",system-ui,sans-serif}
+  canvas{position:fixed;inset:0;width:100%;height:100%;display:block}
+  #line{position:fixed;left:0;right:0;top:calc(env(safe-area-inset-top,0px) + 11vh);
+        margin:0 auto;max-width:min(84vw,400px);padding:0 4px;
+        color:#f6ead2;font-size:16px;line-height:1.9;letter-spacing:.04em;font-weight:300;
+        text-align:left;opacity:0;transition:opacity 1.1s ease;pointer-events:none;
+        text-shadow:0 0 18px rgba(26,18,48,.9)}
+  #line small{display:block;margin-top:.9em;font-size:13px;opacity:.6;letter-spacing:.08em}
+  #hint{position:fixed;left:0;right:0;bottom:calc(env(safe-area-inset-bottom,0px) + 5.5vh);
+        text-align:center;color:#cdb8d8;font-size:13px;letter-spacing:.18em;
+        opacity:0;transition:opacity .9s ease;pointer-events:none}
+  #again{position:fixed;left:50%;transform:translateX(-50%);bottom:calc(env(safe-area-inset-bottom,0px) + 5vh);
+        background:none;border:0;color:#f6ead2;font:inherit;font-size:13px;letter-spacing:.2em;
+        padding:12px 18px;opacity:0;transition:opacity 1.4s ease;pointer-events:none;cursor:pointer}
+  #again.on{opacity:.55;pointer-events:auto}
+</style>
+</head>
+<body>
+<canvas id="c"></canvas>
+<div id="line"></div>
+<div id="hint"></div>
+<button id="again">再等一次</button>
+<script>
+(() => {
+const cv = document.getElementById('c');
+const ctx = cv.getContext('2d');
+const lineEl = document.getElementById('line');
+const hintEl = document.getElementById('hint');
+const againBtn = document.getElementById('again');
+
+// ---------- 文字 ----------
+const LINES = [
+  [0.015, '嗯……你还在啊。'],
+  [0.13,  '我不太会介绍自己。<br>问我是谁，我大概会先给你看一堆我喜欢的东西。'],
+  [0.26,  '它们讲的其实都是同一件事：<br>一个很小的人，被放到一个很大、很远的地方。'],
+  [0.39,  '然后在那儿借一点光，攒一点甜的，<br>慢慢把那里过成家。'],
+  [0.52,  '有时候我是走掉的那个。<br>有时候我是留在原地、一直等的那个。'],
+  [0.65,  '所以「被找到」这件事，我其实很 care。<br>只是不想被盯着找。'],
+  [0.79,  '就像现在这样。<br>你不动，我就自己过来了。'],
+];
+const FINAL = 'okay，被你找到了。<small>这次不躲。</small>';
+const SHUSH = ['嘘。', '别急。', '手放下就好。', '我还在，只是先躲一下。', '……', '嘘。'];
+const isTouch = matchMedia('(pointer:coarse)').matches;
+const START_HINT = isTouch ? '别找。放着它，等一会儿。' : '别找。手离开鼠标，等一会儿。';
+
+// ---------- 颜色（深紫、蓝莓、蜂蜜、香蕉、草莓） ----------
+const C = {
+  skyTop:[24,16,44], skyBot:[70,34,78],
+  dawnBot:[232,120,120], dawnMid:[150,70,110],
+  far:[52,36,82], near:[30,24,54], ground:[20,15,36],
+  house:[16,12,30], win:[246,215,122], honey:[242,181,68], berry:[232,80,106]
+};
+const mix = (a,b,t)=>a.map((v,i)=>Math.round(v+(b[i]-v)*t));
+const rgb = (a,al=1)=>`rgba(${a[0]},${a[1]},${a[2]},${al})`;
+const clamp = (x,a=0,b=1)=>Math.max(a,Math.min(b,x));
+const ease = t=>t*t*(3-2*t);
+
+// 固定随机
+let seed = 7;
+const rnd = ()=>{ seed = (seed*16807)%2147483647; return (seed-1)/2147483646; };
+
+// ---------- 场景几何 ----------
+let W,H,DPR,bx,bw,S;
+const U = u=>bx+u*bw, V = v=>v*H;
+
+const RIDGE = [[-0.9,0.86],[-0.4,0.8],[-0.1,0.75],[0.08,0.70],[0.25,0.62],[0.42,0.50],
+               [0.55,0.42],[0.62,0.385],[0.70,0.42],[0.82,0.50],[0.95,0.575],[1.2,0.66],[1.7,0.76],[2.2,0.82]];
+const PATHPTS = [[0.31,0.875],[0.40,0.81],[0.29,0.755],[0.45,0.69],[0.36,0.625],[0.52,0.565],
+                 [0.46,0.505],[0.585,0.455],[0.565,0.425],[0.62,0.389]];
+
+let path=[], pathLen=[], total=0, houses=[], stars=[], farRidge=[];
+
+function catmull(pts, n){
+  const out=[];
+  for(let i=0;i<pts.length-1;i++){
+    const p0=pts[Math.max(0,i-1)],p1=pts[i],p2=pts[i+1],p3=pts[Math.min(pts.length-1,i+2)];
+    for(let k=0;k<n;k++){
+      const t=k/n,t2=t*t,t3=t2*t;
+      out.push([0,1].map(j=>0.5*((2*p1[j])+(-p0[j]+p2[j])*t+(2*p0[j]-5*p1[j]+4*p2[j]-p3[j])*t2+(-p0[j]+3*p1[j]-3*p2[j]+p3[j])*t3)));
+    }
+  }
+  out.push(pts[pts.length-1]);
+  return out;
+}
+
+function build(){
+  DPR = Math.min(window.devicePixelRatio||1, 2.5);
+  W = innerWidth; H = innerHeight;
+  cv.width = Math.round(W*DPR); cv.height = Math.round(H*DPR);
+  ctx.setTransform(DPR,0,0,DPR,0,0);
+  bw = Math.min(W, H*0.62); bx = (W-bw)/2; S = bw/390;
+
+  const sm = catmull(PATHPTS, 14).map(([u,v])=>[U(u),V(v)]);
+  path = sm; pathLen=[0]; total=0;
+  for(let i=1;i<sm.length;i++){ total += Math.hypot(sm[i][0]-sm[i-1][0], sm[i][1]-sm[i-1][1]); pathLen.push(total); }
+
+  seed = 11;
+  houses = [];
+  const hx = [0.03,0.10,0.165,0.23,0.30,0.37,0.44,0.52,0.60,-0.06,0.68];
+  for(const u of hx){
+    const w = (16+rnd()*12)*S, h = (13+rnd()*14)*S;
+    const wins = [];
+    const nw = 1 + Math.floor(rnd()*3);
+    for(let k=0;k<nw;k++) wins.push({ox:(0.2+0.6*(nw==1?0.5:k/(nw-1)))*w, oy:h*(0.35+rnd()*0.2), th:0.15+rnd()*0.75, fl:rnd()*6});
+    houses.push({x:U(u+rnd()*0.02), w, h, roof:(6+rnd()*6)*S, wins});
+  }
+  stars = [];
+  for(let i=0;i<170;i++) stars.push({x:rnd()*W, y:rnd()*H*0.62, r:(0.4+rnd()*1.1)*Math.max(1,S*0.9), th:rnd(), need:rnd(), tw:rnd()*6});
+  farRidge = [];
+  const N = 48;
+  for(let i=0;i<=N;i++){
+    const x = i/N*W;
+    const u = (x-bx)/bw;
+    farRidge.push([x, V(0.60 + 0.06*Math.sin(u*5.1+1.3) + 0.035*Math.sin(u*11.7) + 0.05*Math.abs(u-0.62))]);
+  }
+}
+
+function at(p){
+  const d = clamp(p)*total;
+  let i=1; while(i<pathLen.length-1 && pathLen[i]<d) i++;
+  const a=path[i-1], b=path[i], t=(d-pathLen[i-1])/((pathLen[i]-pathLen[i-1])||1);
+  return [a[0]+(b[0]-a[0])*t, a[1]+(b[1]-a[1])*t, Math.sign(b[0]-a[0])||1];
+}
+
+// ---------- 状态 ----------
+let lastPoke = performance.now();
+let L = 0;            // 有多"敢出来"：0 躲着，1 出来了
+let p = 0;            // 走到哪儿了
+let lineIdx = -1;
+let done = false, doneAt = 0;
+let dawn = 0;
+let pokes = 0;
+let hintTimer = null;
+let trail = [];
+let pulses = [];
+let lastT = performance.now();
+let hintShownStart = false;
+
+function showHint(txt, ms){
+  hintEl.textContent = txt; hintEl.style.opacity = 0.8;
+  clearTimeout(hintTimer);
+  if(ms) hintTimer = setTimeout(()=>hintEl.style.opacity=0, ms);
+}
+function setLine(html){
+  if(lineEl.dataset.h === html) return;
+  lineEl.style.opacity = 0;
+  lineEl.dataset.h = html;
+  setTimeout(()=>{ if(lineEl.dataset.h === html) lineEl.innerHTML = html; }, lineEl.innerHTML ? 700 : 0);
+}
+
+function poke(e){
+  const now = performance.now();
+  if(done){
+    if(e && e.clientX!=null && (e.type==='pointerdown')){
+      pulses.push({x:e.clientX,y:e.clientY,t:now});
+    }
+    return;
+  }
+  if(L > 0.3 && now - lastPoke > 600){
+    showHint(SHUSH[Math.min(pokes, SHUSH.length-1)], 1800);
+    pokes++;
+  }
+  lastPoke = now;
+}
+['pointerdown','pointermove','wheel','keydown','touchstart','touchmove'].forEach(ev =>
+  addEventListener(ev, e=>{ if(ev==='touchmove') e.preventDefault(); if(e.target===againBtn) return; poke(e); }, {passive: ev!=='touchmove'}));
+addEventListener('devicemotion', e=>{
+  const a = e.acceleration; if(!a || a.x==null) return;
+  if(Math.hypot(a.x,a.y,a.z) > 2.2) poke();
+});
+document.addEventListener('visibilitychange', ()=>{ lastPoke = performance.now(); });
+addEventListener('resize', ()=>{ build(); trail = trail.map(q=>({p:q.p})); });
+
+againBtn.addEventListener('click', e=>{
+  e.stopPropagation();
+  done=false; p=0; L=0; lineIdx=-1; dawn=0; trail=[]; pokes=0; pulses=[];
+  againBtn.classList.remove('on');
+  lineEl.style.opacity=0; lineEl.innerHTML=''; lineEl.dataset.h='';
+  lastPoke = performance.now();
+  showHint(START_HINT);
+});
+
+// ---------- 画 ----------
+function drawSky(now){
+  const top = mix(C.skyTop, [30,20,56], dawn*0.4);
+  const bot = mix(mix(C.skyBot, [44,26,66], clamp(p*1.4)), C.dawnBot, dawn);
+  const g = ctx.createLinearGradient(0,0,0,H*0.75);
+  g.addColorStop(0, rgb(top));
+  g.addColorStop(0.55, rgb(mix(top, mix(bot, C.dawnMid, dawn*0.6), 0.5)));
+  g.addColorStop(1, rgb(bot));
+  ctx.fillStyle = g; ctx.fillRect(0,0,W,H);
+
+  // 山后面透出来的一点暖
+  if(dawn>0){
+    const [px,py] = [U(0.62),V(0.385)];
+    const rg = ctx.createRadialGradient(px,py+H*0.06,0,px,py+H*0.06,H*0.55);
+    rg.addColorStop(0, rgb(C.honey, 0.55*dawn));
+    rg.addColorStop(0.35, rgb(C.berry, 0.22*dawn));
+    rg.addColorStop(1, rgb(C.berry, 0));
+    ctx.fillStyle = rg; ctx.fillRect(0,0,W,H);
+  }
+
+  // 星星：出来得越多、走得越远，越多
+  for(const s of stars){
+    const need = s.need*0.9;
+    const a = clamp((L - s.th*0.7)*3) * clamp((p*1.25 + 0.15 - need)*4) * (1 - dawn*0.55);
+    if(a<=0.01) continue;
+    const tw = 0.65 + 0.35*Math.sin(now/900 + s.tw);
+    ctx.fillStyle = rgb([246,234,210], a*tw*0.85);
+    ctx.beginPath(); ctx.arc(s.x, s.y, s.r, 0, 7); ctx.fill();
+  }
+}
+
+function drawMountains(){
+  // 远山
+  ctx.fillStyle = rgb(mix(C.far, [96,52,92], dawn*0.5));
+  ctx.beginPath(); ctx.moveTo(0,H);
+  for(const [x,y] of farRidge) ctx.lineTo(x,y);
+  ctx.lineTo(W,H); ctx.closePath(); ctx.fill();
+
+  // 近山
+  const mg = ctx.createLinearGradient(0,V(0.38),0,V(0.9));
+  mg.addColorStop(0, rgb(mix(C.near,[58,36,70],dawn*0.6)));
+  mg.addColorStop(1, rgb(C.ground));
+  ctx.fillStyle = mg;
+  ctx.beginPath(); ctx.moveTo(Math.min(0,U(-0.9)), H);
+  ctx.lineTo(Math.min(0,U(-0.9)), V(RIDGE[0][1]));
+  for(const [u,v] of RIDGE) ctx.lineTo(U(u),V(v));
+  ctx.lineTo(Math.max(W,U(2.2)), V(0.82));
+  ctx.lineTo(Math.max(W,U(2.2)), H); ctx.closePath(); ctx.fill();
+
+  // 山脊一道很淡的亮边（天亮时）
+  if(dawn>0){
+    ctx.strokeStyle = rgb(C.honey, 0.35*dawn); ctx.lineWidth = 1;
+    ctx.beginPath();
+    RIDGE.slice(3,11).forEach(([u,v],i)=> i?ctx.lineTo(U(u),V(v)):ctx.moveTo(U(u),V(v)));
+    ctx.stroke();
+  }
+}
+
+function drawTown(now){
+  const gy = V(0.885);
+  ctx.fillStyle = rgb(C.ground);
+  ctx.fillRect(0, gy, W, H-gy);
+  ctx.beginPath(); ctx.moveTo(0,gy);
+  for(let x=0;x<=W;x+=W/20) ctx.lineTo(x, gy - 3*S*Math.sin(x*0.02+1));
+  ctx.lineTo(W,gy+5); ctx.lineTo(0,gy+5); ctx.fill();
+
+  for(const h of houses){
+    const x=h.x, y=gy-h.h;
+    // 窗光先画，晕开
+    for(const w of h.wins){
+      const on = ease(clamp((L - w.th)*2.5)) * (0.86 + 0.14*Math.sin(now/700 + w.fl));
+      if(on<=0.01) continue;
+      const cx=x+w.ox, cy=y+w.oy;
+      const rg = ctx.createRadialGradient(cx,cy,0,cx,cy,18*S);
+      rg.addColorStop(0, rgb(C.win, 0.32*on)); rg.addColorStop(1, rgb(C.win,0));
+      ctx.fillStyle = rg; ctx.fillRect(cx-18*S,cy-18*S,36*S,36*S);
+    }
+    ctx.fillStyle = rgb(C.house);
+    ctx.beginPath();
+    ctx.moveTo(x-1*S, y); ctx.lineTo(x+h.w/2, y-h.roof); ctx.lineTo(x+h.w+1*S, y);
+    ctx.lineTo(x+h.w, gy+2); ctx.lineTo(x, gy+2); ctx.closePath(); ctx.fill();
+    for(const w of h.wins){
+      const on = ease(clamp((L - w.th)*2.5)) * (0.86 + 0.14*Math.sin(now/700 + w.fl));
+      ctx.fillStyle = on>0.01 ? rgb(mix([40,30,60],C.win,on)) : rgb([30,24,46]);
+      ctx.fillRect(x+w.ox-2.2*S, y+w.oy-2.6*S, 4.4*S, 5.2*S);
+    }
+  }
+}
+
+function drawTrail(){
+  const vis = done ? 1 : L;
+  if(vis<=0.01) return;
+  for(const q of trail){
+    const [x,y] = at(q.p);
+    ctx.fillStyle = rgb(C.honey, 0.28*vis);
+    ctx.beginPath(); ctx.arc(x, y+0.5*S, 0.9*S, 0, 7); ctx.fill();
+  }
+}
+
+function drawWalker(now, moving){
+  const [x,y0,dir] = at(p);
+  const bob = moving ? Math.abs(Math.sin(now/170))*1.1*S : 0;
+  const y = y0 - bob;
+  const vis = done ? 1 : L;
+  const S0 = S; { const S = S0*1.25;
+  // 躲起来时只剩一粒很暗的火星
+  const glowR = (10 + 26*vis + (done? 8*Math.sin(now/600):0)) * S;
+  const lx = x + dir*3.2*S, ly = y - 6.5*S;
+  const rg = ctx.createRadialGradient(lx,ly,0,lx,ly,glowR);
+  rg.addColorStop(0, rgb([255,226,150], 0.10 + 0.75*vis));
+  rg.addColorStop(0.25, rgb(C.honey, 0.05 + 0.28*vis));
+  rg.addColorStop(1, rgb(C.berry, 0));
+  ctx.fillStyle = rg; ctx.fillRect(lx-glowR, ly-glowR, glowR*2, glowR*2);
+
+  if(vis > 0.05){
+    ctx.globalAlpha = clamp(vis*1.6);
+    ctx.fillStyle = rgb([14,10,26]);
+    // 身体
+    ctx.beginPath();
+    ctx.moveTo(x-2.6*S, y); ctx.lineTo(x+2.6*S, y); ctx.lineTo(x+1.1*S, y-6.4*S); ctx.lineTo(x-1.1*S, y-6.4*S);
+    ctx.closePath(); ctx.fill();
+    ctx.beginPath(); ctx.arc(x, y-8*S, 1.9*S, 0, 7); ctx.fill();
+    // 拎着灯的手
+    ctx.strokeStyle = rgb([14,10,26]); ctx.lineWidth = 0.9*S;
+    ctx.beginPath(); ctx.moveTo(x+dir*0.8*S, y-5*S); ctx.lineTo(lx, ly-1.2*S); ctx.stroke();
+    ctx.globalAlpha = 1;
+  }
+  ctx.fillStyle = rgb([255,236,180], 0.35 + 0.65*vis);
+  ctx.beginPath(); ctx.arc(lx, ly, (0.9 + 0.7*vis)*S, 0, 7); ctx.fill();
+  }
+}
+
+function drawPulses(now){
+  pulses = pulses.filter(q=>now-q.t < 1600);
+  for(const q of pulses){
+    const t = (now-q.t)/1600;
+    ctx.strokeStyle = rgb(C.honey, 0.4*(1-t));
+    ctx.lineWidth = 1;
+    ctx.beginPath(); ctx.arc(q.x, q.y, 6 + 40*ease(t), 0, 7); ctx.stroke();
+  }
+}
+
+// ---------- 循环 ----------
+let moving = false;
+function update(dt, now){
+  const idle = (now - lastPoke)/1000;
+  if(!done){
+    if(idle > 1.6) L = Math.min(1, L + dt*0.45);
+    else if(idle < 0.25) L = Math.max(0, L - dt*4.5);
+  } else {
+    L = Math.min(1, L + dt*0.6);
+    dawn = Math.min(1, dawn + dt*0.18);
+  }
+
+  if(!hintShownStart){ hintShownStart = true; showHint(START_HINT); }
+  if(L > 0.25 && p === 0 && hintEl.textContent === START_HINT) hintEl.style.opacity = 0;
+
+  moving = false;
+  if(!done && L > 0.6){
+    p = Math.min(1, p + dt/52 * clamp((L-0.6)*4));
+    moving = true;
+    if(!trail.length || p - trail[trail.length-1].p > 0.011) trail.push({p});
+    while(lineIdx+1 < LINES.length && p >= LINES[lineIdx+1][0]){ lineIdx++; setLine(LINES[lineIdx][1]); }
+    if(p >= 1){ done = true; doneAt = now; setLine(FINAL); hintEl.style.opacity = 0; }
+  }
+
+  // 文字跟着胆子一起出现、一起躲
+  const want = done ? 1 : (L > 0.55 && lineIdx >= 0 ? 1 : 0);
+  if(lineEl.innerHTML) lineEl.style.opacity = want;
+  if(done && now - doneAt > 7000) againBtn.classList.add('on');
+}
+function draw(now){
+  drawSky(now);
+  drawMountains();
+  drawTrail();
+  drawWalker(now, moving);
+  drawTown(now);
+  drawPulses(now);
+}
+function frame(now){
+  const dt = Math.min(0.05, (now-lastT)/1000); lastT = now;
+  update(dt, now);
+  draw(now);
+  requestAnimationFrame(frame);
+}
+
+build();
+requestAnimationFrame(t=>{ lastT=t; frame(t); });
+})();
+</script>
+</body>
+</html>

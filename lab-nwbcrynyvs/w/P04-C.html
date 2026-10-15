@@ -1,0 +1,259 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no,viewport-fit=cover">
+<meta name="theme-color" content="#e8d5c3">
+<title>走平</title>
+<style>
+  html,body{margin:0;height:100%;overflow:hidden;background:#2f3226;
+    font-family:-apple-system,"PingFang SC","Hiragino Sans GB","Noto Sans CJK SC","Microsoft YaHei",sans-serif;
+    -webkit-user-select:none;user-select:none;-webkit-touch-callout:none;-webkit-tap-highlight-color:transparent}
+  #stage{position:fixed;inset:0;display:flex;align-items:center;justify-content:center;perspective:1400px}
+  #card{position:relative;width:100%;height:100%;max-width:520px;transform-style:preserve-3d;
+    transition:transform 1.8s cubic-bezier(.6,.02,.25,1)}
+  #card.flipped{transform:rotateY(180deg)}
+  .face{position:absolute;inset:0;backface-visibility:hidden;-webkit-backface-visibility:hidden;overflow:hidden}
+  @media (min-width:560px){.face{border-radius:28px;top:2vh;bottom:2vh;box-shadow:0 30px 80px rgba(0,0,0,.35)}}
+  #front{touch-action:none;cursor:pointer;
+    background:
+      radial-gradient(60% 30% at 70% 66%, rgba(201,154,84,.75), transparent 70%),
+      radial-gradient(70% 35% at 18% 80%, rgba(96,104,68,.85), transparent 70%),
+      radial-gradient(80% 28% at 50% 30%, rgba(236,214,196,.9), transparent 75%),
+      linear-gradient(180deg,#e7d3c2 0%,#eadacb 22%,#d9c6ad 40%,#a9a07a 58%,#8f8457 70%,#6d6c4b 84%,#4f5340 100%);}
+  #front::after{content:"";position:absolute;inset:0;pointer-events:none;
+    background:radial-gradient(120% 60% at 50% 0%, rgba(255,247,238,.35), transparent 60%)}
+  canvas{position:absolute;inset:0;width:100%;height:100%;display:block}
+  #hint{position:absolute;left:0;right:0;bottom:calc(9% + env(safe-area-inset-bottom));text-align:center;
+    color:rgba(255,250,240,.82);font-size:14px;letter-spacing:.25em;transition:opacity 1.2s;pointer-events:none}
+  #hint small{display:block;margin-top:10px;font-size:11px;letter-spacing:.2em;opacity:.6}
+  #snd{position:absolute;top:calc(18px + env(safe-area-inset-top));right:18px;z-index:3;width:34px;height:34px;border-radius:17px;
+    border:1px solid rgba(255,250,240,.35);background:rgba(255,250,240,.12);color:rgba(255,250,240,.85);
+    font-size:14px;display:flex;align-items:center;justify-content:center;cursor:pointer;
+    -webkit-backdrop-filter:blur(8px);backdrop-filter:blur(8px)}
+  #snd.off{opacity:.45;text-decoration:line-through}
+  #back{transform:rotateY(180deg);
+    background:
+      radial-gradient(70% 35% at 75% 18%, rgba(255,246,226,.95), transparent 70%),
+      radial-gradient(80% 40% at 20% 85%, rgba(196,206,186,.7), transparent 70%),
+      linear-gradient(180deg,#f2e8d8 0%,#efe3d0 35%,#e2dcc8 65%,#cdd2bf 100%);
+    display:flex;flex-direction:column;align-items:center;justify-content:center}
+  #face{width:min(78%,340px);height:auto;margin-top:-8vh}
+  #face path{fill:none;stroke:#565a40;stroke-linecap:round;stroke-width:3.2}
+  #face .d{stroke-dasharray:400;stroke-dashoffset:400}
+  #card.flipped #face .d{transition:stroke-dashoffset 2.4s ease 1.7s;stroke-dashoffset:0}
+  #card.flipped #face .e{transition-delay:2.6s}
+  #words{margin-top:7vh;color:#4d5139;font-size:16px;line-height:2.3;letter-spacing:.18em;text-align:center}
+  #words span{display:block;opacity:0;transform:translateY(6px);transition:opacity 1.6s ease,transform 1.6s ease}
+  #card.flipped #words span:nth-child(1){transition-delay:3.6s}
+  #card.flipped #words span:nth-child(2){transition-delay:4.6s}
+  #card.flipped #words span:nth-child(3){transition-delay:6.0s}
+  #card.flipped #words span{opacity:1;transform:none}
+  #again{position:absolute;bottom:calc(8% + env(safe-area-inset-bottom));background:none;border:none;
+    color:#6c7055;font-size:12px;letter-spacing:.3em;padding:12px 18px;cursor:pointer;opacity:0;transition:opacity 1.5s}
+  #card.flipped #again{opacity:.75;transition-delay:8s}
+</style>
+</head>
+<body>
+<div id="stage">
+  <div id="card">
+    <div class="face" id="front">
+      <canvas id="cv"></canvas>
+      <div id="hint">按住，跟着拍子走<small>松手就停</small></div>
+      <button id="snd" aria-label="声音">♪</button>
+    </div>
+    <div class="face" id="back">
+      <svg id="face" viewBox="0 0 300 190" aria-hidden="true">
+        <path class="d" d="M38 78 C 95 52, 200 50, 262 74"/>
+        <path class="d e" d="M92 136 C 125 158, 178 158, 210 136"/>
+      </svg>
+      <div id="words">
+        <span>红点先不点开，</span>
+        <span>电也先不充，</span>
+        <span>先把你的眉头走平。</span>
+      </div>
+      <button id="again">再翻回去</button>
+    </div>
+  </div>
+</div>
+<script>
+(function(){
+  const cv=document.getElementById('cv'), ctx=cv.getContext('2d');
+  const card=document.getElementById('card'), front=document.getElementById('front');
+  const hint=document.getElementById('hint'), snd=document.getElementById('snd');
+  const N=10, BEATS=4, BEAT=0.5; // 每座山一小节，四拍
+  // 每座山的高低、胖瘦都不太一样
+  const SHAPE=[.78,1,.62,.92,.7,1.05,.66,.88,.74,.96];
+  const WID=[.9,1.15,.8,1.05,1.25,.85,1.1,.75,1.0,1.15]; // 宽窄不一
+  const SKEW=[1.25,.85,1.1,.8,1.2,.9,1.3,.85,1.05,.8];  // 有的前坡陡，有的后坡陡
+  const RED=[1,3,6,8];             // 山顶上没点开的小红点
+  let W=0,H=0,dpr=1,X0=0,X1=0,BASE=0,AMP=0;
+  let flat=new Array(N).fill(0);   // 0 = 皱着, 1 = 平了
+  let step=0, shown=0, holding=false, nextBeat=0, beatCount=0, done=false, doneAt=0;
+  let started=false, soundOn=true, ac=null;
+
+  function resize(){
+    const r=front.getBoundingClientRect();
+    dpr=Math.min(window.devicePixelRatio||1,3);
+    W=r.width;H=r.height;cv.width=W*dpr;cv.height=H*dpr;ctx.setTransform(dpr,0,0,dpr,0,0);
+    X0=W*0.06;X1=W*0.94;BASE=H*0.6;AMP=Math.min(H*0.075,W*0.16);
+    const sum=WID.reduce((a,b)=>a+b,0);EDGE=[X0];
+    WID.forEach(w=>EDGE.push(EDGE[EDGE.length-1]+w/sum*(X1-X0)));
+  }
+  let EDGE=[];
+  function xOf(p){ // 走到第几座山（小数）对应的横坐标
+    p=Math.max(0,Math.min(N,p));const i=Math.min(N-1,Math.floor(p));
+    return EDGE[i]+(EDGE[i+1]-EDGE[i])*(p-i);
+  }
+  window.addEventListener('resize',resize);
+
+  function hillH(i){ // 当前这座山有多高
+    const f=flat[i]; const tense=SHAPE[i]*AMP; const calm=AMP*0.07;
+    return tense+(calm-tense)*f;
+  }
+  function yAt(x){
+    if(x<X0||x>=X1) return BASE;
+    let i=0;while(i<N-1&&x>=EDGE[i+1]) i++;
+    const f=flat[i];
+    let t=(x-EDGE[i])/(EDGE[i+1]-EDGE[i]);
+    t=Math.pow(t,SKEW[i]+(1-SKEW[i])*f);
+    // 皱着的时候尖一点，平了就圆
+    const k=1.9-0.9*f;
+    let s=Math.pow(Math.sin(Math.PI*t),k);
+    return BASE-hillH(i)*s;
+  }
+
+  // ---- 声音：节拍器 ----
+  function tick(accent){
+    if(!soundOn||!ac) return;
+    const t=ac.currentTime, o=ac.createOscillator(), g=ac.createGain();
+    o.type='sine';o.frequency.value=accent?1560:1040;
+    g.gain.setValueAtTime(0,t);g.gain.linearRampToValueAtTime(accent?.22:.13,t+.003);
+    g.gain.exponentialRampToValueAtTime(.0001,t+.07);
+    o.connect(g).connect(ac.destination);o.start(t);o.stop(t+.09);
+  }
+  function chord(){
+    if(!soundOn||!ac) return;
+    const t=ac.currentTime;
+    [392,493.9,587.3,740].forEach((f,j)=>{
+      const o=ac.createOscillator(),g=ac.createGain();o.type='sine';o.frequency.value=f;
+      g.gain.setValueAtTime(0,t+j*.12);g.gain.linearRampToValueAtTime(.06,t+j*.12+.05);
+      g.gain.exponentialRampToValueAtTime(.0001,t+j*.12+2.8);
+      o.connect(g).connect(ac.destination);o.start(t+j*.12);o.stop(t+j*.12+3);
+    });
+  }
+  snd.addEventListener('pointerdown',e=>e.stopPropagation());
+  snd.addEventListener('click',e=>{e.stopPropagation();soundOn=!soundOn;snd.classList.toggle('off',!soundOn);});
+
+  function press(e){
+    if(done) return;
+    if(e) e.preventDefault();
+    if(!ac){try{ac=new (window.AudioContext||window.webkitAudioContext)();}catch(_){}}
+    if(ac&&ac.state==='suspended') ac.resume();
+    holding=true;
+    const now=performance.now()/1000;
+    if(nextBeat<now) nextBeat=now;
+    if(!started){started=true;hint.style.opacity=0;}
+  }
+  function release(){holding=false;}
+  front.addEventListener('pointerdown',press);
+  window.addEventListener('pointerup',release);
+  window.addEventListener('pointercancel',release);
+  window.addEventListener('blur',release);
+  window.addEventListener('keydown',e=>{if(e.code==='Space'&&!e.repeat){press(e);}});
+  window.addEventListener('keyup',e=>{if(e.code==='Space')release();});
+
+  document.getElementById('again').addEventListener('click',()=>{
+    card.classList.remove('flipped');
+    setTimeout(()=>{
+      flat.fill(0);step=0;shown=0;beatCount=0;done=false;started=false;nextBeat=0;
+      hint.style.opacity=1;
+    },1900);
+  });
+
+  const TOTAL=N*BEATS;
+  let last=performance.now()/1000, stepT=1;
+
+  function frame(){
+    const now=performance.now()/1000, dt=Math.min(.05,now-last);last=now;
+    if(holding&&!done&&now>=nextBeat){
+      tick(beatCount%BEATS===0);
+      beatCount++;step=Math.min(TOTAL,step+1);stepT=0;
+      nextBeat+=BEAT; if(nextBeat<now) nextBeat=now+BEAT;
+      if(step>=TOTAL){done=true;doneAt=now;holding=false;}
+    }
+    // 一步：先迈出去，再落稳
+    stepT=Math.min(1,stepT+dt/0.32);
+    const target=step/BEATS;
+    const e=1-Math.pow(1-stepT,3);
+    shown=shown+(target-shown)*Math.min(1,e*0.5+dt*9);
+    if(Math.abs(target-shown)<.002) shown=target;
+
+    // 走过的山，慢慢松下来
+    for(let i=0;i<N;i++){
+      const want=Math.max(0,Math.min(1,(shown-i-0.45)/0.55));
+      flat[i]+= (want-flat[i])*Math.min(1,dt*2.2);
+    }
+    if(done&&now-doneAt>1.4&&!card.classList.contains('flipped')){
+      chord();card.classList.add('flipped');
+    }
+    draw(now);
+    requestAnimationFrame(frame);
+  }
+
+  function draw(now){
+    ctx.clearRect(0,0,W,H);
+    // 眉间的细纹：在主线上方，走过就淡掉
+    for(let L=1;L<=2;L++){
+      for(let i=0;i<N;i++){
+        const a=(1-flat[i])*(L===1?.32:.18);
+        if(a<.01) continue;
+        ctx.beginPath();
+        const xa=EDGE[i],xb=Math.min(X1-0.01,EDGE[i+1]);
+        for(let x=xa;x<=xb+1.9;x+=2){
+          const xx=Math.min(x,xb);
+          const y=BASE-(BASE-yAt(xx))*(L===1?.62:.36)-L*AMP*0.42;
+          x===xa?ctx.moveTo(xx,y):ctx.lineTo(xx,y);
+        }
+        ctx.strokeStyle=`rgba(255,248,236,${a})`;ctx.lineWidth=1.2;ctx.lineCap='round';ctx.stroke();
+      }
+    }
+    // 主线
+    ctx.beginPath();
+    ctx.moveTo(0,BASE);
+    for(let x=X0;x<=X1;x+=1.5) ctx.lineTo(x,yAt(x));
+    ctx.lineTo(W,BASE);
+    ctx.strokeStyle='rgba(255,249,238,.92)';ctx.lineWidth=2.2;ctx.lineJoin='round';ctx.stroke();
+    // 线下面一点点影子
+    ctx.lineTo(W,H);ctx.lineTo(0,H);ctx.closePath();
+    const g=ctx.createLinearGradient(0,BASE-AMP,0,H);
+    g.addColorStop(0,'rgba(60,62,40,.10)');g.addColorStop(1,'rgba(40,42,30,.0)');
+    ctx.fillStyle=g;ctx.fill();
+
+    // 山顶的小红点，路过，不点
+    RED.forEach(i=>{
+      let x=EDGE[i],best=BASE;
+      for(let xx=EDGE[i];xx<EDGE[i+1];xx+=1){const yy=yAt(xx);if(yy<best){best=yy;x=xx;}}
+      const y=best-6;
+      ctx.beginPath();ctx.arc(x,y,3.4,0,Math.PI*2);
+      ctx.fillStyle='rgba(232,64,52,.95)';ctx.fill();
+      ctx.beginPath();ctx.arc(x,y,7,0,Math.PI*2);
+      ctx.fillStyle='rgba(232,64,52,.12)';ctx.fill();
+    });
+
+    // 走路的那个小光点
+    const px=xOf(shown);
+    const bob=(1-stepT)*Math.sin(stepT*Math.PI)*5;
+    const py=yAt(Math.min(X1-0.1,px))-8-bob;
+    const pulse=holding?(.5+.5*Math.cos(((now-(nextBeat-BEAT))/BEAT)*Math.PI*2)):0.3;
+    const r=18+pulse*6;
+    const rg=ctx.createRadialGradient(px,py,0,px,py,r);
+    rg.addColorStop(0,'rgba(255,252,240,.9)');rg.addColorStop(.25,'rgba(255,240,205,.45)');rg.addColorStop(1,'rgba(255,230,190,0)');
+    ctx.fillStyle=rg;ctx.beginPath();ctx.arc(px,py,r,0,Math.PI*2);ctx.fill();
+    ctx.fillStyle='#fffaf0';ctx.beginPath();ctx.arc(px,py,4.2,0,Math.PI*2);ctx.fill();
+  }
+  resize();requestAnimationFrame(frame);
+})();
+</script>
+</body>
+</html>

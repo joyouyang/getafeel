@@ -1,0 +1,555 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>静音，表还开着</title>
+<style>
+  :root{
+    --paper:#e8f0dc;
+    --ink:#3d4636;
+    --soft:#7d8873;
+    --here:#e8a33a;
+    --a:#e0705f;
+    --b:#9a72b8;
+    --c:#4f94d0;
+  }
+  *{box-sizing:border-box;margin:0;padding:0;-webkit-tap-highlight-color:transparent}
+  html,body{height:100%}
+  body{
+    background:var(--paper);
+    color:var(--ink);
+    font-family:-apple-system,"PingFang SC","Hiragino Sans GB","Microsoft YaHei","Noto Sans CJK SC",sans-serif;
+    overflow-x:hidden;
+    -webkit-font-smoothing:antialiased;
+  }
+  #paper{position:fixed;inset:0;width:100%;height:100%;pointer-events:none;z-index:0}
+
+  /* ---------- 开场 ---------- */
+  #intro{
+    position:fixed;inset:0;z-index:20;display:flex;flex-direction:column;
+    align-items:center;justify-content:center;gap:22px;padding:40px;
+    background:var(--paper);cursor:pointer;transition:opacity 1.1s ease;
+    text-align:center;
+  }
+  #intro.gone{opacity:0;pointer-events:none}
+  #intro .bell{width:34px;height:34px;opacity:0;animation:fade 1.2s .3s forwards}
+  #intro p{font-size:19px;letter-spacing:.06em;line-height:1.9;opacity:0}
+  #intro p.l1{animation:fade 1.2s 1s forwards}
+  #intro p.l2{animation:fade 1.2s 2.4s forwards;color:var(--soft)}
+  #intro small{position:absolute;bottom:calc(46px + env(safe-area-inset-bottom));font-size:13px;color:var(--soft);
+    letter-spacing:.2em;opacity:0;animation:fade 1s 4s forwards, breathe 2.6s 5s infinite}
+  @keyframes fade{to{opacity:1}}
+  @keyframes breathe{50%{opacity:.35}}
+
+  /* ---------- 主体 ---------- */
+  main{
+    position:relative;z-index:1;max-width:480px;margin:0 auto;
+    padding:calc(18px + env(safe-area-inset-top)) 18px calc(40px + env(safe-area-inset-bottom));
+    min-height:100%;
+  }
+  header{display:flex;align-items:center;gap:8px;color:var(--soft);font-size:13px;letter-spacing:.08em;height:22px}
+  header svg{width:15px;height:15px}
+  #hint{margin-left:auto;transition:opacity .6s}
+
+  #dialWrap{position:relative;width:min(92vw,420px,62vh);margin:6px auto 0;aspect-ratio:1}
+  #dial{width:100%;height:100%;display:block;touch-action:none;user-select:none;-webkit-user-select:none;cursor:grab;overflow:visible}
+  #dial:active{cursor:grabbing}
+  .tick{font-size:11px;fill:var(--soft);text-anchor:middle;dominant-baseline:middle;letter-spacing:.05em}
+  #centerTime{font-size:30px;font-weight:300;fill:var(--ink);text-anchor:middle;dominant-baseline:middle;letter-spacing:.02em;font-variant-numeric:tabular-nums}
+  #centerSub{font-size:11px;fill:var(--soft);text-anchor:middle;letter-spacing:.2em}
+  #glow{transition:opacity .9s ease}
+
+  ul#rows{list-style:none;margin:6px 0 0;padding:0}
+  #rows li{
+    display:grid;grid-template-columns:20px 72px 1fr;align-items:center;column-gap:10px;
+    padding:9px 4px;border-bottom:1px dashed rgba(61,70,54,.14);
+    transition:background .6s;
+  }
+  #rows li:last-child{border-bottom:none}
+  #rows .dot{width:14px;height:14px;border-radius:50% 45% 55% 48%;opacity:.8}
+  #rows .who{font-size:12px;color:var(--soft);letter-spacing:.04em;line-height:1.3}
+  #rows .who b{display:block;font-weight:400;color:var(--ink);font-size:17px;font-variant-numeric:tabular-nums;letter-spacing:.02em}
+  #rows .what{font-size:14.5px;line-height:1.5;transition:opacity .35s}
+  #rows li.asleep .what{color:var(--soft)}
+  body.together #rows li{background:rgba(255,236,170,.28)}
+
+  /* ---------- 对话框 ---------- */
+  #sheet{
+    position:fixed;left:0;right:0;bottom:0;z-index:10;
+    display:flex;justify-content:center;
+    transform:translateY(110%);transition:transform .7s cubic-bezier(.2,.8,.2,1);
+    pointer-events:none;
+  }
+  #sheet.show{transform:none;pointer-events:auto}
+  #sheetIn{
+    width:100%;max-width:480px;
+    background:rgba(250,251,245,.94);
+    -webkit-backdrop-filter:blur(10px);backdrop-filter:blur(10px);
+    border-radius:22px 22px 0 0;
+    box-shadow:0 -6px 30px rgba(60,80,40,.12);
+    padding:18px 20px calc(22px + env(safe-area-inset-bottom));
+  }
+  #sheet .cap{font-size:12.5px;color:var(--soft);letter-spacing:.1em;margin-bottom:12px;text-align:center}
+  #composer{display:flex;align-items:flex-end;gap:10px}
+  #draft{
+    flex:1;min-height:44px;border-radius:14px;background:#fff;border:1px solid rgba(61,70,54,.12);
+    padding:11px 13px;font-size:16px;line-height:1.55;white-space:pre-wrap;word-break:break-all;
+  }
+  #draft .caret{display:inline-block;width:1.5px;height:1.05em;background:#3a9d4c;vertical-align:-2px;margin-left:1px;animation:blink 1s steps(1) infinite}
+  @keyframes blink{50%{opacity:0}}
+  #send{
+    flex:none;height:44px;padding:0 16px;border:none;border-radius:14px;
+    background:#57b26a;color:#fff;font-size:15px;letter-spacing:.1em;font-family:inherit;
+    opacity:.35;transition:opacity .4s, transform .2s;
+  }
+  #send.ready{opacity:1}
+  #send:active{transform:scale(.96)}
+  #sent{display:none;text-align:right}
+  #sent .bubble{
+    display:inline-block;max-width:86%;text-align:left;background:#9fe08f;border-radius:14px 14px 4px 14px;
+    padding:10px 13px;font-size:16px;line-height:1.55;white-space:pre-wrap;animation:pop .5s cubic-bezier(.2,1.4,.4,1);
+  }
+  @keyframes pop{from{transform:translateY(16px) scale(.9);opacity:0}}
+  #ending{display:none;text-align:center;margin-top:18px}
+  #ending p{font-size:16px;line-height:2;opacity:0;letter-spacing:.04em}
+  #ending p.dim{color:var(--soft);font-size:14px}
+  #ending p.on{animation:fade 1.4s forwards}
+  #again{
+    margin-top:14px;background:none;border:1px solid rgba(61,70,54,.25);border-radius:999px;
+    padding:7px 18px;font-size:13px;color:var(--soft);letter-spacing:.15em;font-family:inherit;opacity:0
+  }
+  #again.on{animation:fade 1s forwards}
+
+  @media (min-width:700px){
+    #dialWrap{width:min(420px,60vh)}
+  }
+</style>
+</head>
+<body>
+
+<svg id="paper" aria-hidden="true">
+  <filter id="grain">
+    <feTurbulence type="fractalNoise" baseFrequency="0.9" numOctaves="2" seed="7"/>
+    <feColorMatrix values="0 0 0 0 0.3  0 0 0 0 0.35  0 0 0 0 0.25  0 0 0 0.09 0"/>
+  </filter>
+  <filter id="blot">
+    <feTurbulence type="fractalNoise" baseFrequency="0.006" numOctaves="3" seed="11"/>
+    <feColorMatrix values="0 0 0 0 1  0 0 0 0 1  0 0 0 0 0.95  0 0 0 0.9 -0.35"/>
+  </filter>
+  <rect width="100%" height="100%" filter="url(#blot)"/>
+  <rect width="100%" height="100%" filter="url(#grain)"/>
+</svg>
+
+<div id="intro">
+  <svg class="bell" viewBox="0 0 24 24" fill="none" stroke="#3d4636" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round">
+    <path d="M6 16V11a6 6 0 0 1 9.5-4.9"/><path d="M18 10.5V16l1.5 2H6.5"/><path d="M10 20.5a2 2 0 0 0 4 0"/><path d="M4 4l16 16"/>
+  </svg>
+  <p class="l1">手机一直是静音的。</p>
+  <p class="l2">但第一屏上，有几只表一直开着。</p>
+  <small>点一下</small>
+</div>
+
+<main>
+  <header>
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+      <path d="M6 16V11a6 6 0 0 1 9.5-4.9"/><path d="M18 10.5V16l1.5 2H6.5"/><path d="M10 20.5a2 2 0 0 0 4 0"/><path d="M4 4l16 16"/>
+    </svg>
+    <span>静音</span>
+    <span id="hint">拖着指针转一转 →</span>
+  </header>
+
+  <div id="dialWrap">
+    <svg id="dial" viewBox="0 0 400 400" aria-label="四个人的一天">
+      <defs>
+        <filter id="wc" x="-15%" y="-15%" width="130%" height="130%">
+          <feTurbulence type="fractalNoise" baseFrequency="0.04" numOctaves="3" seed="4" result="n"/>
+          <feDisplacementMap in="SourceGraphic" in2="n" scale="10" xChannelSelector="R" yChannelSelector="G" result="d"/>
+          <feGaussianBlur in="d" stdDeviation="0.9"/>
+        </filter>
+        <filter id="wc2" x="-15%" y="-15%" width="130%" height="130%">
+          <feTurbulence type="fractalNoise" baseFrequency="0.02" numOctaves="2" seed="9" result="n"/>
+          <feDisplacementMap in="SourceGraphic" in2="n" scale="16" xChannelSelector="G" yChannelSelector="R" result="d"/>
+          <feGaussianBlur in="d" stdDeviation="2.2"/>
+        </filter>
+        <filter id="soft" x="-30%" y="-30%" width="160%" height="160%">
+          <feTurbulence type="fractalNoise" baseFrequency="0.02" numOctaves="2" seed="2" result="n"/>
+          <feDisplacementMap in="SourceGraphic" in2="n" scale="18" xChannelSelector="G" yChannelSelector="R" result="d"/>
+          <feGaussianBlur in="d" stdDeviation="7"/>
+        </filter>
+        <radialGradient id="glowGrad" cx="200" cy="200" r="190" gradientUnits="userSpaceOnUse">
+          <stop offset="0" stop-color="#fff3bf" stop-opacity=".5"/>
+          <stop offset=".6" stop-color="#ffe28a" stop-opacity="1"/>
+          <stop offset="1" stop-color="#ffe9a0" stop-opacity="0"/>
+        </radialGradient>
+      </defs>
+      <g id="glow" opacity="0"></g>
+      <g id="nights"></g>
+      <g id="arcs" style="mix-blend-mode:multiply"></g>
+      <g id="ticks"></g>
+      <g id="hand">
+        <line id="handLine" x1="200" y1="200" x2="200" y2="20" stroke="#3d4636" stroke-width="1.6" stroke-linecap="round"/>
+        <circle id="knob" cx="200" cy="20" r="11" fill="#fdfcf6" stroke="#3d4636" stroke-width="1.6"/>
+        <circle cx="200" cy="200" r="3.5" fill="#3d4636"/>
+      </g>
+      <circle cx="200" cy="200" r="44" fill="var(--paper)" opacity=".92"/>
+      <text id="centerTime" x="200" y="196">--:--</text>
+      <text id="centerSub" x="200" y="222">这儿</text>
+    </svg>
+  </div>
+
+  <ul id="rows"></ul>
+</main>
+
+<div id="sheet">
+  <div id="sheetIn">
+    <div class="cap" id="cap">这一会儿，大家都醒着</div>
+    <div id="composer">
+      <div id="draft"><span id="draftText"></span><span class="caret"></span></div>
+      <button id="send" type="button">发送</button>
+    </div>
+    <div id="sent"><span class="bubble" id="bubble"></span></div>
+    <div id="ending">
+      <p id="e1">一天里就这么一小会儿，四边都醒着。</p>
+      <p id="e2" class="dim"></p>
+      <p id="e3">手机可以一直静音。</p>
+      <p id="e4">反正你一直知道，他们那边几点。</p>
+      <button id="again" type="button">再转一圈</button>
+    </div>
+  </div>
+</div>
+
+<script>
+(() => {
+  const DAY = 1440;
+  const AWAKE_FROM = 7 * 60;      // 当地 7:00 起床
+  const AWAKE_TO = 24 * 60;       // 当地 24:00 睡
+
+  /* ---- 时差（不写地名，只算偏移） ---- */
+  function lastSunday(y, m) {           // m: 0-based
+    const d = new Date(Date.UTC(y, m + 1, 0));
+    return d.getUTCDate() - d.getUTCDay();
+  }
+  function nthSunday(y, m, n) {
+    const first = new Date(Date.UTC(y, m, 1)).getUTCDay();
+    return 1 + ((7 - first) % 7) + 7 * (n - 1);
+  }
+  function euSummer(t) {
+    const y = new Date(t).getUTCFullYear();
+    const s = Date.UTC(y, 2, lastSunday(y, 2), 1);
+    const e = Date.UTC(y, 9, lastSunday(y, 9), 1);
+    return t >= s && t < e;
+  }
+  function usSummer(t) {
+    const y = new Date(t).getUTCFullYear();
+    const s = Date.UTC(y, 2, nthSunday(y, 2, 2), 10);
+    const e = Date.UTC(y, 10, nthSunday(y, 10, 1), 9);
+    return t >= s && t < e;
+  }
+  const HERE = 8;
+  function offsets(t) {
+    const eu = euSummer(t), us = usSummer(t);
+    return [HERE, eu ? 2 : 1, eu ? 1 : 0, us ? -7 : -8];
+  }
+
+  /* ---- 每个人这时候大概在干嘛 ---- */
+  const HERE_LINES = h => {
+    if (h < 1) return '该睡了。表还开着。';
+    if (h < 7) return '睡着。手机静音。';
+    if (h < 9) return '闹钟响到第二遍了。';
+    if (h < 12) return '在忙，消息先攒着。';
+    if (h < 14) return '午饭。想不出吃啥，就还是那碗肉多的。';
+    if (h < 18) return '下午，有点困。';
+    if (h < 21) return '到家，换上最松的那条裤子。';
+    return '躺下了，刷一会儿别人的路。';
+  };
+  const FAR = [
+    [0, 7,  ['睡着呢。', '睡得正香，不吵。', '梦里大概在赶路。']],
+    [7, 9,  ['刚醒，在找另一只袜子。', '刚起，咖啡还没好。', '还赖着，再五分钟。']],
+    [9, 12, ['在上班。', '开会中，假装在听。', '忙，回头说。']],
+    [12,14, ['吃午饭。', '排队买饭。', '啃着冷三明治，想一碗热饭。']],
+    [14,18, ['下午，犯困。', '下午茶，饼干有点硬。', '在等下班。']],
+    [18,21, ['下班路上。', '做饭，又做多了。', '在散步，天快黑了。']],
+    [21,24, ['躺着刷手机。', '刚洗完澡。', '说要睡了，又拿起手机。']],
+  ];
+  const farLine = (h, i) => {
+    for (const [a, b, arr] of FAR) if (h >= a && h < b) return arr[i % arr.length];
+    return '';
+  };
+
+  /* ---- 状态 ---- */
+  const COLORS = ['var(--here)', 'var(--a)', 'var(--b)', 'var(--c)'];
+  const HEX = ['#e8a33a', '#e0705f', '#9a72b8', '#4f94d0'];
+  const RADII = [74, 102, 130, 158];
+  const now = Date.now();
+  const offs = offsets(now);
+  const diffs = offs.map(o => HERE - o);           // 比这儿慢几小时
+  const hereNow = (() => {
+    const d = new Date(now + HERE * 3600e3);
+    return d.getUTCHours() * 60 + d.getUTCMinutes();
+  })();
+  let cur = hereNow;
+  let together = false, typingToken = 0, sentDone = false, everFound = false, started = false;
+
+  const mod = (x, n) => ((x % n) + n) % n;
+  const localOf = (m, i) => mod(m - diffs[i] * 60, DAY);
+  const isAwake = (m, i) => { const l = localOf(m, i); return l >= AWAKE_FROM && l < AWAKE_TO; };
+  const allAwake = m => diffs.every((_, i) => isAwake(m, i));
+
+  // 重叠的那一段（这儿的时间）
+  const overlap = [];
+  for (let m = 0; m < DAY; m++) if (allAwake(m)) overlap.push(m);
+  const overlapLen = overlap.length;
+  const segs = [];                                   // [起点, 长度]
+  overlap.forEach(m => {
+    if (!allAwake(mod(m - 1, DAY))) {
+      let len = 0;
+      while (len < DAY && allAwake(mod(m + len, DAY))) len++;
+      segs.push([m, len]);
+    }
+  });
+
+  /* ---- 画 ---- */
+  const NS = 'http://www.w3.org/2000/svg';
+  const C = 200;
+  const el = (tag, attrs, parent) => {
+    const e = document.createElementNS(NS, tag);
+    for (const k in attrs) e.setAttribute(k, attrs[k]);
+    parent && parent.appendChild(e);
+    return e;
+  };
+  const pt = (m, r) => {
+    const a = (m / DAY) * Math.PI * 2 - Math.PI / 2;
+    return [C + r * Math.cos(a), C + r * Math.sin(a)];
+  };
+  const arcPath = (m0, len, r) => {
+    const [x0, y0] = pt(m0, r), [x1, y1] = pt(m0 + len, r);
+    const large = len > DAY / 2 ? 1 : 0;
+    return `M${x0.toFixed(2)} ${y0.toFixed(2)} A${r} ${r} 0 ${large} 1 ${x1.toFixed(2)} ${y1.toFixed(2)}`;
+  };
+
+  const gArcs = document.getElementById('arcs');
+  const gNights = document.getElementById('nights');
+  diffs.forEach((d, i) => {
+    const r = RADII[i];
+    el('circle', { cx: C, cy: C, r, fill: 'none', stroke: HEX[i], 'stroke-opacity': .35,
+      'stroke-width': 1.2, 'stroke-dasharray': '1.5 5', 'stroke-linecap': 'round' }, gNights);
+    const start = mod(AWAKE_FROM + d * 60, DAY);
+    const len = AWAKE_TO - AWAKE_FROM;
+    const p = arcPath(start, len, r);
+    el('path', { d: p, fill: 'none', stroke: HEX[i], 'stroke-width': 22, 'stroke-opacity': .32,
+      'stroke-linecap': 'round', filter: 'url(#wc2)' }, gArcs);
+    el('path', { d: p, fill: 'none', stroke: HEX[i], 'stroke-width': 13, 'stroke-opacity': .55,
+      'stroke-linecap': 'round', filter: 'url(#wc)' }, gArcs);
+  });
+
+  const gGlow = document.getElementById('glow');
+  segs.forEach(([m0, len]) => {
+    const [x0, y0] = pt(m0 - 10, 196), [x1, y1] = pt(m0 + len + 10, 196);
+    el('path', { d: `M${C} ${C} L${x0} ${y0} A196 196 0 0 1 ${x1} ${y1} Z`,
+      fill: 'url(#glowGrad)', filter: 'url(#soft)' }, gGlow);
+  });
+
+  const gTicks = document.getElementById('ticks');
+  for (let h = 0; h < 24; h++) {
+    const [x, y] = pt(h * 60, 182);
+    if (h % 6 === 0) {
+      const t = el('text', { x, y, class: 'tick' }, gTicks);
+      t.textContent = h;
+    } else {
+      const [a, b] = pt(h * 60, 178), [c2, d2] = pt(h * 60, 184);
+      el('line', { x1: a, y1: b, x2: c2, y2: d2, stroke: '#7d8873', 'stroke-opacity': .45, 'stroke-width': 1 }, gTicks);
+    }
+  }
+
+  /* ---- 列表 ---- */
+  const rowsEl = document.getElementById('rows');
+  const rows = diffs.map((d, i) => {
+    const li = document.createElement('li');
+    li.innerHTML = `<span class="dot" style="background:${HEX[i]}"></span>
+      <span class="who"><b>--:--</b>${i === 0 ? '这儿' : '慢 ' + d + ' 小时'}</span>
+      <span class="what"></span>`;
+    rowsEl.appendChild(li);
+    return { li, time: li.querySelector('b'), what: li.querySelector('.what') };
+  });
+
+  const fmt = m => String(Math.floor(m / 60)).padStart(2, '0') + ':' + String(m % 60).padStart(2, '0');
+
+  const handLine = document.getElementById('handLine');
+  const knob = document.getElementById('knob');
+  const centerTime = document.getElementById('centerTime');
+  const centerSub = document.getElementById('centerSub');
+
+  function render() {
+    const [x, y] = pt(cur, 172);
+    handLine.setAttribute('x2', x); handLine.setAttribute('y2', y);
+    knob.setAttribute('cx', x); knob.setAttribute('cy', y);
+    centerTime.textContent = fmt(cur);
+    const tog = allAwake(cur);
+    rows.forEach((r, i) => {
+      const l = localOf(cur, i), h = Math.floor(l / 60);
+      r.time.textContent = fmt(l);
+      let txt = i === 0 ? HERE_LINES(h) : farLine(h, i - 1);
+      if (i === 0 && tog) txt = '看了一眼，大家都醒着。';
+      if (r.what.textContent !== txt) r.what.textContent = txt;
+      r.li.classList.toggle('asleep', !isAwake(cur, i));
+    });
+    centerSub.textContent = tog ? '都醒着' : '这儿';
+    if (started && tog !== together) {
+      together = tog;
+      document.body.classList.toggle('together', tog);
+      document.getElementById('glow').setAttribute('opacity', tog ? 1 : (everFound ? .35 : 0));
+      if (tog) { everFound = true; openSheet(); } else if (!sentDone) closeSheet();
+    }
+  }
+
+  /* ---- 拖动 ---- */
+  const dial = document.getElementById('dial');
+  let dragging = false, lastM = null;
+  function angleToMinute(ev) {
+    const r = dial.getBoundingClientRect();
+    const x = ev.clientX - (r.left + r.width / 2);
+    const y = ev.clientY - (r.top + r.height / 2);
+    let a = Math.atan2(y, x) + Math.PI / 2;
+    if (a < 0) a += Math.PI * 2;
+    return Math.round((a / (Math.PI * 2)) * DAY / 5) * 5 % DAY;
+  }
+  dial.addEventListener('pointerdown', e => {
+    dragging = true; dial.setPointerCapture(e.pointerId);
+    lastM = angleToMinute(e); cur = lastM; render(); hideHint();
+  });
+  dial.addEventListener('pointermove', e => {
+    if (!dragging) return;
+    cur = angleToMinute(e); render();
+  });
+  const end = () => { dragging = false; };
+  dial.addEventListener('pointerup', end);
+  dial.addEventListener('pointercancel', end);
+
+  const hint = document.getElementById('hint');
+  function hideHint() { hint.style.opacity = 0; }
+
+  /* ---- 写一句话 ---- */
+  const sheet = document.getElementById('sheet');
+  const draftText = document.getElementById('draftText');
+  const sendBtn = document.getElementById('send');
+  const composer = document.getElementById('composer');
+  const sentBox = document.getElementById('sent');
+  const bubble = document.getElementById('bubble');
+  const ending = document.getElementById('ending');
+  const FINAL = '没什么事。\n就是突然觉得，能碰上你们，运气挺好的。';
+  const SCRIPT = [
+    ['type', '在吗'], ['wait', 700], ['erase'],
+    ['type', '最近怎么样呀'], ['wait', 900], ['erase'],
+    ['type', '要说点啥呢……'], ['wait', 1300], ['erase'],
+    ['wait', 500],
+    ['type', FINAL],
+  ];
+  const sleep = ms => new Promise(r => setTimeout(r, ms));
+
+  async function runScript(token) {
+    draftText.textContent = '';
+    sendBtn.classList.remove('ready');
+    await sleep(900);
+    for (const [op, arg] of SCRIPT) {
+      if (token !== typingToken) return;
+      if (op === 'wait') await sleep(arg);
+      if (op === 'type') {
+        for (const ch of arg) {
+          if (token !== typingToken) return;
+          draftText.textContent += ch;
+          await sleep(ch === '\n' ? 380 : ch === '。' || ch === '，' ? 320 : 95 + Math.random() * 90);
+        }
+      }
+      if (op === 'erase') {
+        while (draftText.textContent.length) {
+          if (token !== typingToken) return;
+          draftText.textContent = draftText.textContent.slice(0, -1);
+          await sleep(45);
+        }
+      }
+    }
+    if (token === typingToken) sendBtn.classList.add('ready');
+  }
+
+  function openSheet() {
+    if (sentDone) return;
+    sheet.classList.add('show');
+    typingToken++;
+    runScript(typingToken);
+  }
+  function closeSheet() {
+    typingToken++;
+    sheet.classList.remove('show');
+  }
+
+  sendBtn.addEventListener('click', async () => {
+    if (!sendBtn.classList.contains('ready')) return;
+    sentDone = true;
+    composer.style.display = 'none';
+    bubble.textContent = FINAL;
+    sentBox.style.display = 'block';
+    document.getElementById('cap').textContent = '已送达 · 四边都醒着';
+    pulseRings();
+    await sleep(1400);
+    ending.style.display = 'block';
+    const CN = ['零', '一', '两', '三', '四', '五', '六'];
+    const h = overlapLen / 60;
+    const lenTxt = Number.isInteger(h) ? (CN[h] ? `${CN[h]}个小时` : `${h} 个小时`) : `${overlapLen} 分钟`;
+    document.getElementById('e1').textContent =
+      segs.length > 1 ? `一天里就这么${CN[segs.length] || segs.length}小段，四边都醒着。` : '一天里就这么一小会儿，四边都醒着。';
+    document.getElementById('e2').textContent = `加起来，${lenTxt}。`;
+    const ps = ['e1', 'e2', 'e3', 'e4'];
+    for (let i = 0; i < ps.length; i++) {
+      document.getElementById(ps[i]).classList.add('on');
+      await sleep(i === 1 ? 2000 : 1500);
+    }
+    document.getElementById('again').classList.add('on');
+  });
+
+  function pulseRings() {
+    const paths = gArcs.querySelectorAll('path');
+    paths.forEach((p, k) => {
+      p.animate([
+        { strokeOpacity: p.getAttribute('stroke-opacity') },
+        { strokeOpacity: .95 },
+        { strokeOpacity: p.getAttribute('stroke-opacity') }
+      ], { duration: 1100, delay: Math.floor(k / 2) * 220, easing: 'ease-in-out' });
+    });
+  }
+
+  document.getElementById('again').addEventListener('click', () => {
+    sentDone = false;
+    ending.style.display = 'none';
+    ending.querySelectorAll('.on').forEach(e => e.classList.remove('on'));
+    sentBox.style.display = 'none';
+    composer.style.display = 'flex';
+    document.getElementById('cap').textContent = '这一会儿，大家都醒着';
+    closeSheet();
+    together = false;
+    document.body.classList.remove('together');
+    document.getElementById('glow').setAttribute('opacity', .35);
+    // 指针慢慢回到现在
+    const from = cur, to = hereNow, dist = mod(to - from, DAY), t0 = performance.now();
+    const step = t => {
+      const k = Math.min(1, (t - t0) / 1800), e = 1 - Math.pow(1 - k, 3);
+      cur = Math.round(mod(from + dist * e, DAY));
+      render();
+      if (k < 1) requestAnimationFrame(step);
+    };
+    requestAnimationFrame(step);
+  });
+
+  /* ---- 开场 ---- */
+  const intro = document.getElementById('intro');
+  intro.addEventListener('click', () => {
+    intro.classList.add('gone');
+    setTimeout(() => { intro.remove(); started = true; together = null; render(); }, 1100);
+  });
+
+  together = false;
+  render();
+})();
+</script>
+</body>
+</html>

@@ -1,0 +1,437 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover,user-scalable=no">
+<title>关于今晚</title>
+<style>
+  :root{
+    --cream:#f6f0dd;
+    --ink:#1f2a6b;
+    --ink2:#7a80b0;
+    --pink:#e07aa8;
+    --mag:#b8245a;
+  }
+  *{box-sizing:border-box;margin:0;padding:0;-webkit-tap-highlight-color:transparent}
+  html,body{height:100%;background:#ece4cc;overflow:hidden}
+  body{font-family:-apple-system,"PingFang SC","Hiragino Sans GB","Microsoft YaHei",sans-serif;color:var(--ink);
+    -webkit-user-select:none;user-select:none;touch-action:manipulation}
+  #app{position:relative;margin:0 auto;width:100%;max-width:480px;height:100vh;height:100dvh;overflow:hidden;background:var(--cream);cursor:pointer}
+  canvas{position:absolute;inset:0;width:100%;height:100%;display:block}
+
+  .top{position:absolute;left:0;right:0;top:0;padding:calc(env(safe-area-inset-top) + 18px) 26px 46px;
+    background:linear-gradient(var(--cream) 0%,var(--cream) 72%,rgba(246,240,221,0) 100%);pointer-events:none}
+  .bar{display:flex;justify-content:space-between;align-items:center;height:16px}
+  .dots{display:flex;gap:7px}
+  .dots i{width:7px;height:7px;border-radius:50%;border:1.3px solid var(--ink2);opacity:.75}
+  .dots i.on{background:var(--pink);border-color:var(--pink);opacity:1}
+  .dots i.now{border-color:var(--ink);opacity:1}
+  .bat{position:relative;width:25px;height:12px;border:1.4px solid var(--ink);border-radius:3.5px;opacity:.8}
+  .bat:after{content:"";position:absolute;right:-4px;top:3px;width:2px;height:4px;border-radius:0 1px 1px 0;background:var(--ink)}
+  .bat b{position:absolute;left:1.5px;top:1.5px;bottom:1.5px;border-radius:1.5px;background:var(--ink);transition:width .6s ease,background .6s}
+  .bat.low b{background:#e5484d}
+
+  .label{margin-top:26px;font-size:13px;letter-spacing:.18em;color:var(--ink2)}
+  .planbox{position:relative;height:84px;margin-top:6px}
+  .plan{position:absolute;left:0;bottom:0;font-weight:800;line-height:1;white-space:nowrap;color:var(--ink);
+    transition:font-size .55s cubic-bezier(.3,.7,.2,1),opacity .45s,transform .45s}
+  .plan .s{position:absolute;left:-4px;right:-4px;top:52%;height:.11em;background:var(--mag);border-radius:9px;
+    transform-origin:left center;transform:scaleX(0) rotate(-2deg);transition:transform .32s ease-in}
+  .plan.strike .s{transform:scaleX(1) rotate(-2deg)}
+  .plan.gone{opacity:0;transform:translateY(-34px) scale(.85);transition:opacity .3s,transform .4s}
+  .plan.enter{opacity:0;transform:translateY(14px)}
+
+  .bottom{position:absolute;left:0;right:0;bottom:0;padding:54px 26px calc(env(safe-area-inset-bottom) + 26px);
+    background:linear-gradient(rgba(246,240,221,0) 0%,var(--cream) 30%,var(--cream) 100%);pointer-events:none;min-height:30%}
+  #sentence{font-size:17px;line-height:1.85;letter-spacing:.03em;word-break:break-all}
+  #sentence span{color:var(--ink2);transition:color .8s}
+  #sentence span.new{color:var(--ink);animation:in .6s ease both}
+  #sentence span.end{color:var(--mag);font-weight:700}
+  @keyframes in{from{opacity:0;filter:blur(3px)}to{opacity:1;filter:none}}
+  .hint{margin-top:14px;font-size:12.5px;letter-spacing:.2em;color:var(--ink2);opacity:.85;animation:breathe 2.2s ease-in-out infinite}
+  .hint.off{visibility:hidden}
+  @keyframes breathe{50%{opacity:.3}}
+
+  /* 卡片 */
+  #card{position:absolute;inset:0;display:flex;align-items:flex-end;pointer-events:none;opacity:0;transition:opacity .5s}
+  #card.show{pointer-events:auto;opacity:1}
+  #card .veil{position:absolute;inset:0;background:rgba(246,240,221,.55);backdrop-filter:blur(2px);-webkit-backdrop-filter:blur(2px)}
+  .sheet{position:relative;width:100%;background:var(--cream);padding:30px 26px calc(env(safe-area-inset-bottom) + 26px);
+    border-radius:22px 22px 0 0;box-shadow:0 -10px 40px rgba(31,42,107,.12);transform:translateY(40px);transition:transform .6s cubic-bezier(.2,.8,.2,1);cursor:default;
+    max-height:92%;overflow:auto}
+  #card.show .sheet{transform:none}
+  .kick{font-size:12.5px;letter-spacing:.22em;color:var(--ink2)}
+  .full{margin-top:14px;font-size:21px;line-height:1.7;font-weight:600;letter-spacing:.02em;word-break:break-all}
+  .full em{font-style:normal;color:var(--mag)}
+  .stroke{height:10px;margin:22px 0 18px;border-radius:8px;opacity:.85;
+    background:linear-gradient(90deg,#3d5bd0,#6f86e0 40%,#e07aa8 75%,#c9a23f)}
+  .prop{display:flex;align-items:center;gap:12px;font-size:15px;color:var(--ink)}
+  .prop .e{font-size:30px;line-height:1}
+  .prop small{display:block;font-size:12px;letter-spacing:.15em;color:var(--ink2);margin-bottom:3px}
+  .shelfT{margin-top:22px;font-size:12px;letter-spacing:.15em;color:var(--ink2)}
+  .shelf{margin-top:8px;display:flex;gap:10px;flex-wrap:wrap;font-size:24px;min-height:30px}
+  .shelf span{display:inline-block;animation:pop .5s cubic-bezier(.3,1.6,.5,1) both}
+  .shelf span.ghost{opacity:.18;filter:grayscale(1)}
+  @keyframes pop{from{transform:scale(.2) rotate(-30deg);opacity:0}}
+  button{margin-top:26px;width:100%;height:52px;border:0;border-radius:26px;background:var(--ink);color:var(--cream);
+    font:600 16px/1 inherit;font-family:inherit;letter-spacing:.2em;cursor:pointer}
+  button:active{transform:scale(.98)}
+  .fin p{font-size:20px;line-height:1.75;font-weight:600}
+  .fin p.soft{margin-top:18px;font-size:16px;font-weight:400;color:var(--ink2)}
+  .fin p.last{margin-top:22px;color:var(--mag)}
+  .face{display:block;margin:0 0 8px -4px}
+</style>
+</head>
+<body>
+<div id="app">
+  <canvas id="cv"></canvas>
+  <div class="top">
+    <div class="bar"><div class="dots" id="dots"></div><div class="bat" id="bat"><b id="batb"></b></div></div>
+    <div class="label">今晚的计划</div>
+    <div class="planbox" id="planbox"></div>
+  </div>
+  <div class="bottom">
+    <div id="sentence"></div>
+    <div class="hint" id="hint">轻点屏幕</div>
+  </div>
+  <div id="card"><div class="veil"></div><div class="sheet" id="sheet"></div></div>
+</div>
+
+<script>
+(function(){
+// ---------- 每一晚 ----------
+const NIGHTS = [
+  {steps:[
+    ['看沙漠','关于想去看一次沙漠'],
+    ['看海','结果比了一圈机票决定先去看海'],
+    ['楼下走走','出门前又改成去楼下走走'],
+    ['门口站站','走到便利店门口吹了会儿风'],
+    ['回家','什么也没买就回家了'],
+    ['躺下','睡前还认认真真涂了层防晒才躺下']],
+   prop:['🧴','一层防晒']},
+  {steps:[
+    ['早睡','关于发誓今晚一定要早睡'],
+    ['马上睡','结果先郑重地开了睡眠模式'],
+    ['看一眼就睡','躺下顺手点开了购物软件'],
+    ['再看一眼','把一条和衣柜里差不多的黑裤子来回看了好久'],
+    ['付完就睡','塞进了早就塞满的购物车也没付钱'],
+    ['睡','最后定了三个闹钟才肯闭眼']],
+   prop:['🌙','开了一整晚的睡眠模式']},
+  {steps:[
+    ['练一小时','关于想从今晚开始练普拉提'],
+    ['练半小时','结果换好了衣服'],
+    ['练十分钟','铺好了垫子'],
+    ['拉伸一下','然后就在垫子上躺着看别人练'],
+    ['躺着也算','顺手收藏了一堆教程'],
+    ['睡','最后穿着运动裤直接睡着了']],
+   prop:['👖','没换下来的运动裤']},
+  {steps:[
+    ['做一桌菜','关于想好好给自己做顿饭'],
+    ['做一个菜','结果先看了一晚上别人做饭'],
+    ['买点菜','下楼只买回来一把葱'],
+    ['煮碗面','回家煮了包面'],
+    ['吃饱就行','葱忘了放'],
+    ['睡','把它好好地收进冰箱等下次']],
+   prop:['🌱','一把还没用上的葱']},
+  {steps:[
+    ['读完一本','关于想把那本很喜欢的书再读一遍'],
+    ['读一章','结果翻到第二页'],
+    ['读几页','就去搜了写它的那个人'],
+    ['读一页','看了一晚上她年轻时候的照片'],
+    ['看看她','越看越觉得她好自由'],
+    ['睡','书签就一直夹在第二页']],
+   prop:['🔖','夹在第二页的书签']},
+  {steps:[
+    ['整理桌面','关于想把手机桌面好好整理一下'],
+    ['整理一页','结果拖了两个图标'],
+    ['整理一排','发现有两个长得一模一样的银行'],
+    ['删一个','盯着它们想了半天该删哪个'],
+    ['不删了','最后决定都留着'],
+    ['睡','电量也刚好红了']],
+   prop:['🏦','两个一模一样的银行']}
+];
+
+const PAL = [['#3d5bd0',5],['#6f86e0',5],['#8fa3ea',3],['#e07aa8',3],['#f0a9c8',2],['#b8245a',1.3],['#c9a23f',1.5],['#3a9ec2',1.4],['#a58bd6',1.6]];
+const PALW = PAL.reduce((a,b)=>a+b[1],0);
+
+const app=document.getElementById('app'), cv=document.getElementById('cv'), ctx=cv.getContext('2d');
+const planbox=document.getElementById('planbox'), sentence=document.getElementById('sentence'), hint=document.getElementById('hint');
+const dotsEl=document.getElementById('dots'), batb=document.getElementById('batb'), bat=document.getElementById('bat');
+const card=document.getElementById('card'), sheet=document.getElementById('sheet');
+
+let W=0,H=0,DPR=1, bg=null;
+let queued=false;
+let night=0, step=0, busy=false, collected=[], stops=[];
+let fig={x:0,y:0,ang:0,walk:0,hop:0,blanket:0,z:0};
+let seed=1;
+function rnd(){seed=(seed*16807)%2147483647;return (seed-1)/2147483646}
+function pick(){let r=rnd()*PALW;for(const p of PAL){if((r-=p[1])<=0)return p[0]}return PAL[0][0]}
+
+// ---------- 干笔刷 ----------
+function brush(c,x,y,len,th,col,bow){
+  c.fillStyle=col;
+  const s0=rnd()*10, e0=rnd()*14;
+  for(let k=0;k<th;k++){
+    const edge=Math.abs(k-th/2)/(th/2);
+    const a0=x+s0*edge+rnd()*6, a1=x+len-e0*edge-rnd()*8;
+    const base=.55+rnd()*.42-edge*.2;
+    for(let xx=a0;xx<a1;xx+=1.6){
+      if(rnd()<.05+edge*.3)continue;
+      const t=(xx-x)/len;
+      const yy=y+k-bow*4*t*(1-t);
+      c.globalAlpha=Math.max(.05,base*(.7+rnd()*.3)*(((xx|0)%3===0)?.6:1));
+      c.fillRect(xx,yy,2.3,1.25);
+    }
+  }
+  c.globalAlpha=1;
+}
+
+function buildBG(){
+  seed=7919+night*104729;
+  bg=document.createElement('canvas');bg.width=W*DPR;bg.height=H*DPR;
+  const c=bg.getContext('2d');c.scale(DPR,DPR);
+  c.fillStyle='#f6f0dd';c.fillRect(0,0,W,H);
+  // 画布纹理
+  c.globalAlpha=.05;c.fillStyle='#8a7a50';
+  for(let y=0;y<H;y+=3)for(let x=(y/3)%2*1.5;x<W;x+=3)c.fillRect(x,y,1,1);
+  c.globalAlpha=1;
+  let y=-6;
+  while(y<H+10){
+    const th=7+rnd()*5;
+    let x=-30+rnd()*30;
+    while(x<W+10){
+      const len=50+rnd()*170;
+      if(rnd()<.86)brush(c,x,y,len,th,pick(),2+rnd()*5);
+      x+=len+6+rnd()*34;
+    }
+    y+=th+3+rnd()*6;
+  }
+  // 站脚的台阶
+  const n=NIGHTS[night].steps.length;
+  stops=[];
+  const yTop=H*.34, yBot=H*.64;
+  let side=rnd()<.5?0:1;
+  for(let i=0;i<n;i++){
+    const yy=yTop+(yBot-yTop)*i/(n-1);
+    const xx=W*(side?(.58+rnd()*.24):(.18+rnd()*.24));
+    side=1-side;
+    stops.push({x:xx,y:yy});
+    const sc=i===n-1?'#e07aa8':(rnd()<.5?'#3d5bd0':'#6f86e0');
+    brush(c,xx-48-rnd()*20,yy-3,110+rnd()*40,11,'#f6f0dd',2);
+    brush(c,xx-46-rnd()*14,yy-4,96+rnd()*40,9,sc,3);
+  }
+}
+
+// ---------- 小人 ----------
+function person(c,s){
+  // 以脚底为原点
+  const sw=Math.sin(fig.walk)*.12*s;
+  c.lineCap='round';c.lineJoin='round';
+  // 黑色喇叭裤
+  c.fillStyle='#1b1b22';
+  c.beginPath();
+  c.moveTo(-.07*s,-.46*s);c.lineTo(-.02*s,-.46*s);c.lineTo(-.03*s+sw*.4,-.12*s);c.lineTo(-.01*s+sw,0);c.lineTo(-.13*s+sw,0);c.lineTo(-.08*s+sw*.4,-.12*s);c.closePath();c.fill();
+  c.beginPath();
+  c.moveTo(.02*s,-.46*s);c.lineTo(.08*s,-.46*s);c.lineTo(.08*s-sw*.4,-.12*s);c.lineTo(.13*s-sw,0);c.lineTo(.01*s-sw,0);c.lineTo(.03*s-sw*.4,-.12*s);c.closePath();c.fill();
+  // 上衣
+  c.fillStyle='#e8592b';
+  c.beginPath();c.moveTo(-.1*s,-.78*s);c.lineTo(.1*s,-.78*s);c.lineTo(.09*s,-.44*s);c.lineTo(-.09*s,-.44*s);c.closePath();c.fill();
+  // 手臂
+  c.strokeStyle='#d24a22';c.lineWidth=.055*s;
+  c.beginPath();c.moveTo(-.1*s,-.74*s);c.lineTo(-.13*s-sw*.5,-.52*s);c.stroke();
+  c.beginPath();c.moveTo(.1*s,-.74*s);c.lineTo(.13*s+sw*.5,-.52*s);c.stroke();
+  // 头
+  c.fillStyle='#e9b38c';c.beginPath();c.arc(0,-.88*s,.085*s,0,Math.PI*2);c.fill();
+  c.fillStyle='#3b2a20';c.beginPath();c.arc(-.01*s,-.91*s,.09*s,Math.PI*.95,Math.PI*2.1);c.fill();
+}
+
+function draw(){
+  ctx.setTransform(DPR,0,0,DPR,0,0);
+  ctx.clearRect(0,0,W,H);
+  if(bg)ctx.drawImage(bg,0,0,W,H);
+  const s=Math.max(34,Math.min(48,H*.05));
+  ctx.save();
+  ctx.translate(fig.x,fig.y-fig.hop);
+  // 影子
+  ctx.globalAlpha=.18;ctx.fillStyle='#1f2a6b';ctx.beginPath();ctx.ellipse(0,1,s*.17,s*.035,0,0,Math.PI*2);ctx.fill();ctx.globalAlpha=1;
+  ctx.rotate(fig.ang);
+  person(ctx,s);
+  ctx.restore();
+  if(fig.blanket>0){
+    // 被子：一笔粉色
+    ctx.save();ctx.translate(fig.x,fig.y);
+    ctx.globalAlpha=.92*fig.blanket;
+    const L=s*.78*fig.blanket;
+    for(let k=0;k<12;k++){
+      ctx.fillStyle=k%3===0?'#f0a9c8':'#e07aa8';
+      ctx.globalAlpha=(.55+((k*37)%10)/25)*fig.blanket;
+      ctx.fillRect(-s*.62,-s*.2+k*1.3,L,1.1);
+    }
+    ctx.restore();
+  }
+  if(fig.z>0){
+    ctx.save();ctx.fillStyle='#1f2a6b';ctx.font='600 13px -apple-system,sans-serif';
+    for(let i=0;i<3;i++){
+      const t=((fig.z+i/3)%1);
+      ctx.globalAlpha=Math.sin(t*Math.PI)*.7;
+      ctx.fillText('z',fig.x-s*.9-t*8-i*2,fig.y-s*.35-t*34);
+    }
+    ctx.restore();
+  }
+}
+
+let raf=0, anims=[];
+function tween(dur,fn,done){anims.push({t0:performance.now(),dur,fn,done});if(!raf)raf=requestAnimationFrame(loop)}
+let zLoop=false;
+function loop(now){
+  raf=0;
+  const fin=[];
+  anims=anims.filter(a=>{let t=Math.min(1,(now-a.t0)/a.dur);a.fn(t);if(t>=1){a.done&&fin.push(a.done);return false}return true});
+  fin.forEach(f=>f());
+  if(zLoop)fig.z=(now/2600)%1;
+  draw();
+  if(anims.length||zLoop)raf=requestAnimationFrame(loop);
+}
+const ease=t=>t<.5?2*t*t:1-Math.pow(-2*t+2,2)/2;
+
+// ---------- 文字 ----------
+const SIZES=[54,42,33,26,21,17];
+function setPlan(text,i,animate){
+  const old=planbox.querySelector('.plan:not(.gone)');
+  const el=document.createElement('div');el.className='plan'+(animate?' enter':'');
+  el.style.fontSize=SIZES[Math.min(i,SIZES.length-1)]+'px';
+  el.innerHTML='<span class="s"></span>';el.prepend(document.createTextNode(text));
+  if(old&&animate){
+    old.classList.add('strike');
+    setTimeout(()=>{old.classList.add('gone');planbox.appendChild(el);requestAnimationFrame(()=>requestAnimationFrame(()=>el.classList.remove('enter')));setTimeout(()=>old.remove(),500)},340);
+  }else{planbox.innerHTML='';planbox.appendChild(el)}
+}
+function addClause(t,cls){
+  sentence.querySelectorAll('span.new').forEach(s=>s.classList.remove('new'));
+  const sp=document.createElement('span');sp.className=cls||'new';sp.textContent=t;sentence.appendChild(sp);
+}
+function setBattery(){
+  const n=NIGHTS[night].steps.length;
+  const lv=Math.max(.1,1-step/(n-1)*.88);
+  batb.style.width=(lv*19)+'px';
+  bat.classList.toggle('low',lv<.25);
+}
+function renderDots(){
+  dotsEl.innerHTML='';
+  NIGHTS.forEach((_,i)=>{const d=document.createElement('i');if(collected.includes(i))d.className='on';else if(i===night)d.className='now';dotsEl.appendChild(d)});
+}
+
+// ---------- 流程 ----------
+function startNight(n){
+  night=n;step=0;busy=false;queued=false;zLoop=false;
+  fig={x:0,y:0,ang:0,walk:0,hop:0,blanket:0,z:0};
+  buildBG();
+  fig.x=stops[0].x;fig.y=stops[0].y;
+  sentence.innerHTML='';
+  setPlan(NIGHTS[night].steps[0][0],0,false);
+  addClause(NIGHTS[night].steps[0][1]);
+  hint.textContent=n===0&&collected.length===0?'轻点屏幕':'轻点 继续';
+  hint.classList.remove('off');
+  setBattery();renderDots();
+  draw();
+}
+
+function advance(){
+  if(card.classList.contains('show'))return;
+  if(busy){queued=true;return}
+  const N=NIGHTS[night];
+  if(step>=N.steps.length-1)return;
+  busy=true;
+  if(step===0)hint.classList.add('off');
+  step++;
+  const from={x:fig.x,y:fig.y}, to=stops[step];
+  setPlan(N.steps[step][0],step,true);
+  setTimeout(()=>addClause(N.steps[step][1]),260);
+  setBattery();
+  const tired=step/(N.steps.length-1);
+  const dur=650+tired*450;
+  tween(dur,t=>{
+    const e=ease(t);
+    fig.x=from.x+(to.x-from.x)*e;fig.y=from.y+(to.y-from.y)*e;
+    fig.hop=Math.sin(t*Math.PI)*(14-tired*8);
+    fig.walk=t*Math.PI*(6-tired*2);
+  },()=>{
+    fig.walk=0;fig.hop=0;
+    if(step===N.steps.length-1){
+      setTimeout(endNight,500);
+    }else{busy=false;draw();if(queued){queued=false;setTimeout(advance,120)}}
+  });
+}
+
+function endNight(){
+  addClause('这件事','end');
+  tween(900,t=>{fig.ang=-Math.PI/2*ease(t)},()=>{
+    tween(700,t=>{fig.blanket=ease(t)},()=>{
+      zLoop=true;if(!raf)raf=requestAnimationFrame(loop);
+      setTimeout(showCard,1900);
+    });
+  });
+}
+
+function showCard(){
+  const N=NIGHTS[night];
+  if(!collected.includes(night))collected.push(night);
+  renderDots();
+  const full=N.steps.map(s=>s[1]).join('');
+  const all=collected.length===NIGHTS.length;
+  sheet.innerHTML=
+    '<div class="kick">今晚</div>'+
+    '<p class="full">'+full+'<em>这件事</em></p>'+
+    '<div class="stroke"></div>'+
+    '<div class="prop"><span class="e">'+N.prop[0]+'</span><div><small>顺手带上床的</small>'+N.prop[1]+'</div></div>'+
+    '<div class="shelfT">床头已经攒了</div>'+
+    '<div class="shelf">'+NIGHTS.map((n,i)=>'<span class="'+(collected.includes(i)?'':'ghost')+'" style="animation-delay:'+(i*.06)+'s">'+(collected.includes(i)?n.prop[0]:'·')+'</span>').join('')+'</div>'+
+    '<button id="nx">'+(all?'关灯':'再过一晚')+'</button>';
+  card.classList.add('show');
+  document.getElementById('nx').onclick=e=>{
+    e.stopPropagation();
+    if(all){showFinal();return}
+    card.classList.remove('show');
+    let nx=(night+1)%NIGHTS.length;while(collected.includes(nx))nx=(nx+1)%NIGHTS.length;
+    setTimeout(()=>startNight(nx),350);
+  };
+}
+
+function showFinal(){
+  sheet.innerHTML=
+    '<div class="fin">'+
+    '<svg class="face" width="64" height="58" viewBox="0 0 64 58"><g fill="none" stroke="#1f2a6b" stroke-width="2.6" stroke-linecap="round">'+
+      '<path d="M12 22 q8 4 16 0"/><path d="M36 22 q8 4 16 0"/>'+
+      '<path d="M24 38 q8 3 16 -1"/></g>'+
+      '<path d="M27 38.5 q1 12 8 10 q6 -2 3 -11 z" fill="#e07aa8"/>'+
+      '<circle cx="12" cy="31" r="4" fill="#f0a9c8" opacity=".6"/><circle cx="52" cy="31" r="4" fill="#f0a9c8" opacity=".6"/></svg>'+
+    '<p>这么多个晚上<br>一件正事都没干成</p>'+
+    '<p class="soft">但每一件讲出来<br>都挺好笑的</p>'+
+    '<p class="last">原来你祝别人的那种快乐<br>你自己每天晚上都在收</p>'+
+    '<div class="shelf" style="margin-top:22px">'+NIGHTS.map((n,i)=>'<span style="animation-delay:'+(i*.08)+'s">'+n.prop[0]+'</span>').join('')+'</div>'+
+    '<button id="again">从头再过一遍</button></div>';
+  document.getElementById('again').onclick=e=>{
+    e.stopPropagation();collected=[];card.classList.remove('show');setTimeout(()=>startNight(0),350);
+  };
+}
+
+// ---------- 尺寸 ----------
+function resize(){
+  const r=app.getBoundingClientRect();W=r.width;H=r.height;DPR=Math.min(3,window.devicePixelRatio||1);
+  cv.width=W*DPR;cv.height=H*DPR;
+  const keep=step;
+  buildBG();
+  const p=stops[Math.min(keep,stops.length-1)];fig.x=p.x;fig.y=p.y;
+  draw();
+}
+let rt=0;window.addEventListener('resize',()=>{clearTimeout(rt);rt=setTimeout(resize,150)});
+app.addEventListener('click',e=>{if(e.target.closest('#card'))return;advance()});
+document.addEventListener('keydown',e=>{if(e.key===' '||e.key==='Enter'||e.key==='ArrowRight'){e.preventDefault();advance()}});
+
+const r=app.getBoundingClientRect();W=r.width;H=r.height;DPR=Math.min(3,window.devicePixelRatio||1);
+cv.width=W*DPR;cv.height=H*DPR;
+startNight(0);
+})();
+</script>
+</body>
+</html>

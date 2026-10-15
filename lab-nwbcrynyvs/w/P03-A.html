@@ -1,0 +1,280 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no,viewport-fit=cover">
+<meta name="theme-color" content="#070b1a">
+<title>同一张钟面</title>
+<style>
+  html,body{margin:0;height:100%;background:#070b1a;overflow:hidden;}
+  body{
+    touch-action:none;-webkit-user-select:none;user-select:none;
+    -webkit-touch-callout:none;-webkit-tap-highlight-color:transparent;
+    font-family:"Songti SC","STSong","Noto Serif SC","Source Han Serif SC","SimSun",serif;
+    cursor:pointer;
+  }
+  canvas{position:fixed;inset:0;width:100%;height:100%;display:block;}
+  #say{
+    position:fixed;left:0;right:0;top:40%;
+    text-align:center;pointer-events:none;
+    color:var(--ink,#e9ecf5);
+    font-size:clamp(17px,4.6vw,23px);
+    letter-spacing:.18em;line-height:2.1;
+    transition:opacity 1.1s ease;
+    text-shadow:0 0 18px var(--halo,rgba(0,0,0,.35));
+  }
+  #say span{display:block;opacity:0;transform:translateY(6px);transition:opacity 1.2s ease,transform 1.2s ease;}
+  #say span.on{opacity:1;transform:none;}
+  #hint{
+    position:fixed;left:0;right:0;bottom:calc(9% + env(safe-area-inset-bottom));
+    text-align:center;pointer-events:none;
+    color:var(--ink,#e9ecf5);opacity:0;
+    font-size:13px;letter-spacing:.6em;padding-left:.6em;
+    transition:opacity 1s ease;
+  }
+  #hint i{display:block;width:6px;height:6px;margin:0 auto 14px;border-radius:50%;
+    background:var(--ink,#e9ecf5);animation:p 2.4s ease-in-out infinite;}
+  @keyframes p{0%,100%{transform:scale(1);opacity:.35}50%{transform:scale(2.2);opacity:.9}}
+</style>
+</head>
+<body>
+<canvas id="c"></canvas>
+<div id="say"></div>
+<div id="hint"><i></i>按住</div>
+<script>
+(function(){
+const cv=document.getElementById('c'),cx=cv.getContext('2d');
+const say=document.getElementById('say'),hint=document.getElementById('hint');
+let moonC=null,W,H,D,horizon,sky=null,cityN=null,cityD=null,stars=[],boatX=0;
+
+function rng(s){return function(){s|=0;s=s+0x6D2B79F5|0;let t=Math.imul(s^s>>>15,1|s);t=t+Math.imul(t^t>>>7,61|t)^t;return((t^t>>>14)>>>0)/4294967296;}}
+
+/* ---------- city ---------- */
+function buildCity(){
+  const r=rng(7);
+  const h=Math.round(H*0.30);
+  const mk=()=>{const c=document.createElement('canvas');c.width=W*D;c.height=h*D;const g=c.getContext('2d');g.scale(D,D);return [c,g];};
+  const [cn,gn]=mk(),[cd,gd]=mk();
+  const blds=[];
+  let x=-10;
+  while(x<W+10){
+    const bw=14+r()*38;
+    let bh=h*(0.18+r()*0.42);
+    if(r()<0.12)bh=h*(0.62+r()*0.34);
+    blds.push({x,w:bw,h:bh,spire:r()<0.15,seed:r()*1e9,depth:r()<0.45});
+    x+=bw-(r()<0.4?6:0)+(r()<0.2?4:0);
+  }
+  // back layer first
+  blds.sort((a,b)=>(b.depth?1:0)-(a.depth?1:0));
+  for(const b of blds){
+    const y=h-b.h, rr=rng(b.seed|0);
+    // night
+    gn.fillStyle=b.depth?'#0d1328':'#080c1c';
+    gn.fillRect(b.x,y,b.w,b.h);
+    // day
+    gd.fillStyle=b.depth?'#9fb1c6':'#7d91a8';
+    gd.fillRect(b.x,y,b.w,b.h);
+    gd.fillStyle='rgba(255,255,255,.18)';gd.fillRect(b.x,y,b.w*0.28,b.h);
+    if(b.spire){
+      [gn,gd].forEach((g,i)=>{g.fillStyle=i?'#7d91a8':'#080c1c';
+        g.beginPath();g.moveTo(b.x+b.w*0.4,y);g.lineTo(b.x+b.w*0.5,y-b.h*0.22);g.lineTo(b.x+b.w*0.6,y);g.fill();});
+      gn.fillStyle='rgba(255,90,80,.9)';gn.fillRect(b.x+b.w*0.5-1,y-b.h*0.22-2,2,2);
+    }
+    // windows
+    const cw=3,chh=3,gx=6,gy=7;
+    const lit=b.depth?0.18:0.34;
+    for(let wy=y+6;wy<h-4;wy+=gy){
+      for(let wx=b.x+4;wx<b.x+b.w-4;wx+=gx){
+        const v=rr();
+        if(v<lit){
+          const warm=rr();
+          gn.fillStyle=warm<0.75?`rgba(255,${200+warm*40|0},${120+warm*60|0},${b.depth?.45:.85})`:'rgba(190,220,255,.7)';
+          gn.fillRect(wx,wy,cw,chh);
+        }
+        gd.fillStyle=`rgba(225,238,250,${0.12+rr()*0.25})`;
+        gd.fillRect(wx,wy,cw,chh);
+      }
+    }
+  }
+  cityN=cn;cityD=cd;cityN.h=h;
+}
+
+function resize(){
+  D=Math.min(window.devicePixelRatio||1,2);
+  W=innerWidth;H=innerHeight;
+  cv.width=W*D;cv.height=H*D;cx.setTransform(D,0,0,D,0,0);
+  horizon=Math.round(H*0.74);
+  buildCity();
+  const r=rng(31);stars=[];
+  const n=Math.round(W*H/2600);
+  for(let i=0;i<n;i++)stars.push({x:r()*W,y:r()*horizon*0.95,s:r()*1.3+0.3,p:r()*6.28,f:0.6+r()*1.8});
+}
+addEventListener('resize',resize);resize();
+
+/* ---------- colour ---------- */
+function mix(a,b,t){return a.map((v,i)=>v+(b[i]-v)*t);}
+function tri(a,b,c,t){return t<0.5?mix(a,b,t*2):mix(b,c,(t-0.5)*2);}
+const rgb=(c,a)=>`rgba(${c[0]|0},${c[1]|0},${c[2]|0},${a===undefined?1:a})`;
+const TOP=[[7,11,26],[42,52,104],[86,150,214]];
+const MID=[[16,22,52],[120,96,150],[150,196,232]];
+const LOW=[[28,34,72],[246,160,118],[214,232,244]];
+const ease=t=>t<.5?2*t*t:1-Math.pow(-2*t+2,2)/2;
+
+/* ---------- state ---------- */
+let t=0,holding=false,last=performance.now(),clockKick=0,kickV=0,nextKick=0;
+const beats=[
+  ['钟停在最上面。'],
+  ['同一张钟面；','换了一片天。'],
+  ['正午和午夜，','指针摆的是同一个姿势。'],
+  ['分得出来的，','是谁站在那儿。'],
+  ['一个月的最后一天，','一天的最开头；','你从这条缝里进来。'],
+  ['所以天黑不黑，','跟你关系不大。']
+];
+let beat=0,want='day',idle=0;
+function show(i){
+  say.innerHTML='';
+  beats[i].forEach((l,k)=>{const s=document.createElement('span');s.textContent=l;say.appendChild(s);
+    setTimeout(()=>s.classList.add('on'),250+k*900);});
+}
+setTimeout(()=>show(0),900);
+
+function down(e){holding=true;if(e&&e.preventDefault)e.preventDefault();}
+function up(){holding=false;}
+addEventListener('pointerdown',down,{passive:false});
+addEventListener('pointerup',up);addEventListener('pointercancel',up);
+addEventListener('blur',up);
+addEventListener('contextmenu',e=>e.preventDefault());
+addEventListener('keydown',e=>{if(e.code==='Space'||e.code==='Enter'){holding=true;e.preventDefault();}});
+addEventListener('keyup',e=>{if(e.code==='Space'||e.code==='Enter')holding=false;});
+
+/* ---------- draw ---------- */
+function frame(now){
+  const dt=Math.min(0.05,(now-last)/1000);last=now;
+  t+=holding?dt/2.0:-dt/2.6;t=Math.max(0,Math.min(1,t));
+  const e=ease(t);
+
+  // beats
+  if(beat<beats.length-1){
+    if(want==='day'&&t>0.97){beat++;show(beat);want='night';}
+    else if(want==='night'&&t<0.03&&!holding){beat++;show(beat);want='day';}
+  }
+  idle=holding?0:idle+dt;
+  hint.style.opacity=(beat===0||(beat<beats.length-1&&want==='day'&&idle>4))&&t<0.05&&!holding?0.55:0;
+
+  // ink colour
+  const ink=mix([233,236,245],[28,38,58],Math.max(0,(e-0.45)/0.55));
+  document.body.style.setProperty('--ink',rgb(ink));
+  document.body.style.setProperty('--halo',e>0.6?'rgba(255,255,255,.35)':'rgba(0,0,0,.4)');
+
+  // sky
+  const g=cx.createLinearGradient(0,0,0,horizon);
+  g.addColorStop(0,rgb(tri(...TOP,e)));g.addColorStop(0.6,rgb(tri(...MID,e)));g.addColorStop(1,rgb(tri(...LOW,e)));
+  cx.fillStyle=g;cx.fillRect(0,0,W,horizon+1);
+
+  // stars
+  const sa=Math.max(0,1-e*2.2);
+  if(sa>0){for(const s of stars){
+    const a=sa*(0.45+0.55*Math.sin(now/1000*s.f+s.p));
+    if(a<=0)continue;cx.fillStyle=`rgba(255,255,255,${a})`;cx.fillRect(s.x,s.y,s.s,s.s);}}
+
+  const R=Math.min(W,H);
+  // moon: high on the left, sinks as day comes
+  const mx=W*0.2, my=horizon*0.42+e*horizon*0.85;
+  if(my<horizon+R*0.05){
+    const mr=R*0.035;
+    const mg=cx.createRadialGradient(mx,my,0,mx,my,mr*6);
+    mg.addColorStop(0,`rgba(220,228,255,${0.25*(1-e*0.7)})`);mg.addColorStop(1,'rgba(220,228,255,0)');
+    cx.fillStyle=mg;cx.beginPath();cx.arc(mx,my,mr*6,0,7);cx.fill();
+    const S=Math.ceil(mr*2+4);
+    if(!moonC||moonC.width!==S*D){moonC=document.createElement('canvas');moonC.width=moonC.height=S*D;
+      const m=moonC.getContext('2d');m.scale(D,D);m.fillStyle='#f0f2ff';
+      m.beginPath();m.arc(S/2,S/2,mr,0,7);m.fill();
+      m.globalCompositeOperation='destination-out';
+      m.beginPath();m.arc(S/2+mr*0.45,S/2-mr*0.2,mr*0.92,0,7);m.fill();}
+    cx.globalAlpha=1-e*0.55;cx.drawImage(moonC,mx-S/2,my-S/2,S,S);cx.globalAlpha=1;
+  }
+  // sun: rises on the right
+  const sx=W*0.76, sy=horizon+R*0.08-e*(horizon*0.62+R*0.08);
+  if(e>0.01){
+    const sr=R*0.05;
+    const warm=mix([255,150,90],[255,250,235],Math.min(1,e*1.4));
+    const sg=cx.createRadialGradient(sx,sy,0,sx,sy,sr*9);
+    sg.addColorStop(0,rgb(warm,0.55*Math.min(1,e*3)));sg.addColorStop(0.25,rgb(warm,0.18*Math.min(1,e*3)));sg.addColorStop(1,rgb(warm,0));
+    cx.fillStyle=sg;cx.beginPath();cx.arc(sx,sy,sr*9,0,7);cx.fill();
+    cx.fillStyle=rgb(warm);cx.beginPath();cx.arc(sx,sy,sr,0,7);cx.fill();
+  }
+
+  // city
+  const ch=cityN.h, cy=horizon-ch;
+  cx.globalAlpha=1;cx.drawImage(cityN,0,cy,W,ch);
+  cx.globalAlpha=e;cx.drawImage(cityD,0,cy,W,ch);cx.globalAlpha=1;
+
+  // river
+  const rg=cx.createLinearGradient(0,horizon,0,H);
+  rg.addColorStop(0,rgb(mix([12,16,36],[118,150,180],e)));
+  rg.addColorStop(1,rgb(mix([4,6,16],[70,100,132],e)));
+  cx.fillStyle=rg;cx.fillRect(0,horizon,W,H-horizon);
+  // reflection, rippled
+  const rh=Math.min(ch,H-horizon);
+  for(let y=0;y<rh;y+=2){
+    const off=Math.sin(y*0.16+now/700)*(1+y*0.04)+Math.sin(y*0.05-now/1100)*1.5;
+    const sy0=(ch-1-y)*(cityN.height/ch);
+    const a=0.32*Math.pow(1-y/rh,1.4);
+    cx.globalAlpha=a*(1-e);cx.drawImage(cityN,0,sy0,cityN.width,2*D,off,horizon+y,W,2);
+    cx.globalAlpha=a*e*0.7;cx.drawImage(cityD,0,sy0,cityD.width,2*D,off,horizon+y,W,2);
+  }
+  cx.globalAlpha=1;
+  // sun / moon glitter on water
+  if(e>0.05){
+    for(let i=0;i<14;i++){
+      const yy=horizon+6+i*i*1.4;if(yy>H)break;
+      const w=(8+i*3)*(0.6+0.4*Math.sin(now/300+i*1.7));
+      cx.fillStyle=`rgba(255,240,215,${0.35*e*(1-i/14)})`;cx.fillRect(sx-w/2,yy,w,1.2);
+    }
+  }
+  if(e<0.9){
+    for(let i=0;i<9;i++){
+      const yy=horizon+8+i*i*2;if(yy>H)break;
+      const w=(5+i*2)*(0.6+0.4*Math.sin(now/410+i*2.3));
+      cx.fillStyle=`rgba(225,232,255,${0.22*(1-e)*(1-i/9)})`;cx.fillRect(mx-w/2,yy,w,1);
+    }
+  }
+  // a small boat light crossing, night only
+  boatX=(boatX+dt*9)%(W+60);
+  if(e<0.7){
+    const bx=boatX-30,by=horizon+(H-horizon)*0.38;
+    cx.fillStyle=`rgba(255,214,150,${0.9*(1-e/0.7)})`;cx.fillRect(bx,by,3,2);
+    cx.fillStyle=`rgba(255,214,150,${0.25*(1-e/0.7)})`;cx.fillRect(bx-1,by+4,5,1);cx.fillRect(bx,by+8,3,1);
+  }
+
+  // ---------- the clock: never moves ----------
+  const cr=Math.max(26,R*0.085), ccx=W/2, ccy=Math.max(cr+28,H*0.15);
+  const line=rgb(ink,0.9);
+  cx.strokeStyle=line;cx.lineWidth=1.2;
+  cx.beginPath();cx.arc(ccx,ccy,cr,0,7);cx.stroke();
+  for(let i=0;i<12;i++){
+    const a=i/12*Math.PI*2, l=i===0?cr*0.2:cr*0.09;
+    cx.lineWidth=i===0?2:1;
+    cx.beginPath();cx.moveTo(ccx+Math.sin(a)*(cr-3),ccy-Math.cos(a)*(cr-3));
+    cx.lineTo(ccx+Math.sin(a)*(cr-3-l),ccy-Math.cos(a)*(cr-3-l));cx.stroke();
+  }
+  // hour + minute, stacked straight up
+  cx.lineCap='round';
+  cx.lineWidth=3.2;cx.beginPath();cx.moveTo(ccx,ccy+cr*0.08);cx.lineTo(ccx,ccy-cr*0.52);cx.stroke();
+  cx.lineWidth=1.8;cx.beginPath();cx.moveTo(ccx,ccy+cr*0.12);cx.lineTo(ccx,ccy-cr*0.82);cx.stroke();
+  // second hand: keeps trying to tick past the top, springs back
+  if(now>nextKick){kickV+=0.9;nextKick=now+1000;}
+  kickV+=(-clockKick*180-kickV*9)*dt;clockKick+=kickV*dt;
+  const ang=clockKick*0.06;
+  cx.strokeStyle=rgb(mix([255,120,90],[214,70,50],e));cx.lineWidth=1;
+  cx.beginPath();cx.moveTo(ccx-Math.sin(ang)*cr*0.18,ccy+Math.cos(ang)*cr*0.18);
+  cx.lineTo(ccx+Math.sin(ang)*cr*0.9,ccy-Math.cos(ang)*cr*0.9);cx.stroke();
+  cx.fillStyle=line;cx.beginPath();cx.arc(ccx,ccy,2.4,0,7);cx.fill();
+
+  requestAnimationFrame(frame);
+}
+requestAnimationFrame(frame);
+})();
+</script>
+</body>
+</html>

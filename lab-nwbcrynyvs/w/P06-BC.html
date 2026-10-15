@@ -1,0 +1,477 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no,viewport-fit=cover">
+<title>拓</title>
+<style>
+  :root{
+    --bg:#26292d;
+    --paper:#ebe9e3;
+    --ink:#1a1e25;
+    --dim:#8c9097;
+    --serif:"Songti SC","STSong","Noto Serif SC","Noto Serif CJK SC","Source Han Serif SC","Source Han Serif CN",serif;
+  }
+  *{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+  html,body{margin:0;height:100%;background:var(--bg);color:#d8d9dc;font-family:var(--serif);overflow:hidden;
+    -webkit-user-select:none;user-select:none;-webkit-touch-callout:none}
+  body{background:radial-gradient(120% 80% at 50% 30%,#30343a 0%,#24272b 55%,#1c1e21 100%)}
+  #wrap{position:fixed;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;
+    padding:max(14px,env(safe-area-inset-top)) 12px max(14px,env(safe-area-inset-bottom))}
+  #stage{position:relative;flex:none;box-shadow:0 18px 40px rgba(0,0,0,.45),0 2px 6px rgba(0,0,0,.3)}
+  #stage canvas{position:absolute;left:0;top:0;display:block}
+  #ink{touch-action:none;cursor:none}
+  #pad{position:absolute;left:0;top:0;width:44px;height:44px;margin:-22px 0 0 -22px;border-radius:50%;
+    pointer-events:none;opacity:0;transition:opacity .25s;
+    background:radial-gradient(circle at 40% 35%,#4a4f57 0%,#23272e 55%,#14171c 100%);
+    box-shadow:0 4px 10px rgba(0,0,0,.35), inset 0 -3px 6px rgba(0,0,0,.4)}
+  #hint{position:absolute;left:0;right:0;top:22px;text-align:center;font-size:13px;letter-spacing:.35em;color:#7d8087;
+    pointer-events:none;transition:opacity 1.2s}
+  #below{position:relative;flex:none;height:96px;width:100%;max-width:440px;display:flex;flex-direction:column;align-items:center;
+    justify-content:flex-start;padding-top:16px}
+  #label{opacity:0;transition:opacity 2s;text-align:center;line-height:1.75}
+  #label .t{font-size:13px;letter-spacing:.3em;color:#b9bbbf}
+  #label .s{font-size:11px;letter-spacing:.2em;color:var(--dim)}
+  #btns{margin-top:10px;display:flex;gap:22px;opacity:0;transition:opacity 2s 1s;pointer-events:none}
+  #btns.on{pointer-events:auto}
+  button{font-family:var(--serif);background:none;border:none;color:#a7aab0;font-size:12px;letter-spacing:.35em;
+    padding:6px 2px;border-bottom:1px solid #4a4e55;cursor:pointer}
+  button:active{color:#fff}
+  #shiwen{position:fixed;inset:0;z-index:10;background:rgba(22,24,27,.975);display:flex;align-items:flex-start;justify-content:center;overflow-y:auto;
+    opacity:0;pointer-events:none;transition:opacity .6s;padding:28px}
+  #shiwen.on{opacity:1;pointer-events:auto}
+  #shiwen .box{max-width:340px;width:100%;margin:auto 0}
+  #shiwen .h{font-size:12px;letter-spacing:.4em;color:var(--dim);margin-bottom:22px}
+  #shiwen p{margin:0;font-size:16px;line-height:2.15;letter-spacing:.12em;color:#d4d5d8}
+  #shiwen p.gap{margin-top:14px}
+  #shiwen .miss{display:inline-block;width:1em;height:1em;border:1px solid #9a9da3;vertical-align:-0.12em;margin:0 .05em}
+  #shiwen .n{margin-top:26px;font-size:11px;letter-spacing:.2em;color:#73777e;line-height:1.9}
+  #shiwen .x{margin-top:26px}
+</style>
+</head>
+<body>
+<div id="wrap">
+  <div id="stage">
+    <canvas id="paper"></canvas>
+    <canvas id="ink"></canvas>
+    <div id="pad"></div>
+  </div>
+  <div id="below">
+    <div id="hint">纸已铺好　按住　慢慢拓</div>
+    <div id="label">
+      <div class="t">无名刻石　拓本</div>
+      <div class="s">右起竖读　石中一裂　末字未刻</div>
+    </div>
+    <div id="btns"><button id="bShi">释文</button><button id="bRe">重拓</button></div>
+  </div>
+</div>
+
+<div id="shiwen">
+  <div class="box">
+    <div class="h">释　文</div>
+    <p>维年无考，风自海来。</p>
+    <p>有人垂首，不看镜头。</p>
+    <p>乱发随风，衣宽如帆。</p>
+    <p>手中削物，一圈一圈。</p>
+    <p class="gap">曾见古石，欲传万世。</p>
+    <p>一道裂痕，横贯其中。</p>
+    <p>字半漫漶，犹自端立。</p>
+    <p class="gap">明知必裂，照刻不误。</p>
+    <p>刻错几笔，也不重来。</p>
+    <p class="gap">问何以留，未及回答，</p>
+    <p>腹已先鸣。</p>
+    <p class="gap">平生之作，尚待寻觅。</p>
+    <p>石有余地。先去吃<span class="miss"></span>。</p>
+    <div class="n">末字只起了一笔，刀痕尚新。<br>刻者中途离开，凿子还搁在石边。</div>
+    <div class="x"><button id="bClose">合上</button></div>
+  </div>
+</div>
+
+<script>
+(function(){
+  const TEXT = '维年无考风自海来有人垂首不看镜头乱发随风衣宽如帆手中削物一圈一圈曾见古石欲传万世一道裂痕横贯其中字半漫漶犹自端立明知必裂照刻不误刻错几笔也不重来问何以留未及回答腹已先鸣平生之作尚待寻觅石有余地先去吃';
+  const COLS = 10, ROWS = 10;
+  const FONT = '"Songti SC","STSong","Noto Serif SC","Noto Serif CJK SC","Source Han Serif SC","Source Han Serif CN",serif';
+
+  const stage = document.getElementById('stage');
+  const paperC = document.getElementById('paper');
+  const inkC = document.getElementById('ink');
+  const pad = document.getElementById('pad');
+  const hint = document.getElementById('hint');
+  const label = document.getElementById('label');
+  const btns = document.getElementById('btns');
+  const shiwen = document.getElementById('shiwen');
+
+  // seeded random so the stone is the same stone every time
+  let seed = 7;
+  function rnd(){ seed = (seed * 16807) % 2147483647; return (seed - 1) / 2147483646; }
+
+  let W, H, dpr, stone, cell, allowed, brushes = [], hits, cov, revealed = false;
+
+  function layout(){
+    dpr = Math.min(window.devicePixelRatio || 1, 3);
+    const vw = window.innerWidth, vh = window.innerHeight;
+    const availW = Math.min(vw - 24, 440);
+    const availH = vh - 96 - 40;
+    // paper margin + stone with head margin
+    // stone width = cols*cell + 2*side ; stone height = rows*cell + top + bottom
+    const sideK = 0.55, topK = 1.0, botK = 0.6, marginK = 0.75;
+    let c1 = availW / (COLS + 2*sideK + 2*marginK);
+    let c2 = availH / (ROWS + topK + botK + 2*marginK);
+    cell = Math.floor(Math.min(c1, c2));
+    const m = cell * marginK;
+    const sw = COLS*cell + 2*sideK*cell, sh = ROWS*cell + (topK+botK)*cell;
+    W = Math.round(sw + 2*m); H = Math.round(sh + 2*m);
+    stone = { x: m, y: m, w: sw, h: sh, gx: m + sideK*cell, gy: m + topK*cell };
+    stage.style.width = W + 'px'; stage.style.height = H + 'px';
+    for (const c of [paperC, inkC]){
+      c.width = Math.round(W*dpr); c.height = Math.round(H*dpr);
+      c.style.width = W + 'px'; c.style.height = H + 'px';
+    }
+  }
+
+  function stonePath(ctx){
+    // slightly chipped rectangle
+    seed = 11;
+    const {x,y,w,h} = stone;
+    const pts = [];
+    const n = 9;
+    const j = cell*0.12;
+    for(let i=0;i<=n;i++) pts.push([x + w*i/n + (rnd()-.5)*j, y + (rnd())*j]);
+    for(let i=1;i<=n;i++) pts.push([x + w - rnd()*j, y + h*i/n + (rnd()-.5)*j]);
+    for(let i=1;i<=n;i++) pts.push([x + w - w*i/n + (rnd()-.5)*j, y + h - rnd()*j]);
+    for(let i=1;i<n;i++) pts.push([x + rnd()*j, y + h - h*i/n + (rnd()-.5)*j]);
+    // a broken corner, top left
+    pts[0] = [x + cell*0.5, y + cell*0.15];
+    pts.splice(pts.length, 0, [x + cell*0.08, y + cell*0.7]);
+    ctx.beginPath();
+    ctx.moveTo(pts[0][0], pts[0][1]);
+    for (const p of pts) ctx.lineTo(p[0], p[1]);
+    ctx.closePath();
+  }
+
+  function crackPts(){
+    seed = 23;
+    const {x,y,w} = stone;
+    const pts = [];
+    let px = x - 4, py = stone.gy + cell*3.6;
+    const ex = x + w + 4, ey = stone.gy + cell*5.9;
+    const steps = 26;
+    for (let i=0;i<=steps;i++){
+      const t = i/steps;
+      const bx = px + (ex-px)*t, by = py + (ey-py)*t + Math.sin(t*5.3)*cell*0.35;
+      pts.push([bx + (rnd()-.5)*cell*0.25, by + (rnd()-.5)*cell*0.3]);
+    }
+    return pts;
+  }
+
+  function buildAllowed(){
+    // opaque where ink can land: stone surface, minus carved recesses
+    allowed = document.createElement('canvas');
+    allowed.width = inkC.width; allowed.height = inkC.height;
+    const a = allowed.getContext('2d');
+    a.setTransform(dpr,0,0,dpr,0,0);
+    a.fillStyle = '#000';
+    stonePath(a); a.fill();
+
+    a.globalCompositeOperation = 'destination-out';
+
+    // grid (界格), shallow
+    a.strokeStyle = 'rgba(0,0,0,.55)';
+    a.lineWidth = Math.max(0.8, cell*0.03);
+    for (let i=0;i<=COLS;i++){
+      const gx = stone.gx + i*cell;
+      a.beginPath(); a.moveTo(gx + (rnd()-.5), stone.gy - cell*0.1); a.lineTo(gx + (rnd()-.5), stone.gy + ROWS*cell + cell*0.1); a.stroke();
+    }
+
+    // characters, carved
+    a.fillStyle = '#000';
+    a.textAlign = 'center'; a.textBaseline = 'middle';
+    const fs = Math.round(cell*0.8);
+    a.font = `700 ${fs}px ${FONT}`;
+    for (let i=0;i<TEXT.length;i++){
+      const col = Math.floor(i/ROWS), row = i%ROWS;
+      const cx = stone.gx + (COLS - 1 - col)*cell + cell/2;
+      const cy = stone.gy + row*cell + cell/2;
+      a.save();
+      a.translate(cx + (rnd()-.5)*cell*0.05, cy + (rnd()-.5)*cell*0.05);
+      a.rotate((rnd()-.5)*0.04);
+      a.fillText(TEXT[i], 0, fs*0.04);
+      a.restore();
+    }
+
+    // the last cell: one first stroke, then nothing
+    {
+      const cx = stone.gx + 0*cell, cy = stone.gy + 9*cell;
+      a.lineCap = 'round';
+      a.strokeStyle = '#000';
+      a.lineWidth = cell*0.085;
+      a.beginPath();
+      a.moveTo(cx + cell*0.36, cy + cell*0.17);
+      a.quadraticCurveTo(cx + cell*0.30, cy + cell*0.30, cx + cell*0.2, cy + cell*0.39);
+      a.stroke();
+      // a few test nicks of the chisel
+      a.lineWidth = cell*0.03;
+      a.beginPath(); a.moveTo(cx + cell*0.5, cy + cell*0.2); a.lineTo(cx + cell*0.53, cy + cell*0.24); a.stroke();
+    }
+
+    // re-ink weathered spots (漫漶): partially fill back carvings near the crack
+    a.globalCompositeOperation = 'source-over';
+    const cp = crackPts();
+    for (let k=0;k<70;k++){
+      const p = cp[Math.floor(rnd()*cp.length)];
+      const r = cell*(0.08 + rnd()*0.22);
+      const ox = p[0] + (rnd()-.5)*cell*1.6, oy = p[1] + (rnd()-.5)*cell*1.6;
+      a.fillStyle = `rgba(0,0,0,${0.35 + rnd()*0.45})`;
+      blob(a, ox, oy, r);
+    }
+    // general wear
+    for (let k=0;k<90;k++){
+      const ox = stone.x + rnd()*stone.w, oy = stone.y + rnd()*stone.h;
+      a.fillStyle = `rgba(0,0,0,${0.2 + rnd()*0.4})`;
+      blob(a, ox, oy, cell*(0.03 + rnd()*0.09));
+    }
+    // clip back to stone shape
+    a.globalCompositeOperation = 'destination-in';
+    stonePath(a); a.fillStyle='#000'; a.fill();
+
+    a.globalCompositeOperation = 'destination-out';
+    // crack
+    a.lineJoin = 'round'; a.lineCap = 'round';
+    a.strokeStyle = '#000';
+    a.lineWidth = Math.max(1.6, cell*0.09);
+    a.beginPath(); a.moveTo(cp[0][0], cp[0][1]);
+    for (const p of cp) a.lineTo(p[0], p[1]);
+    a.stroke();
+    // thin branches
+    a.lineWidth = Math.max(0.9, cell*0.035);
+    for (const bi of [9, 17]){
+      let [bx, by] = cp[bi];
+      a.beginPath(); a.moveTo(bx, by);
+      const dir = bi===9 ? -1 : 1;
+      for (let s=0;s<7;s++){ bx += cell*(0.25 + rnd()*0.2); by += dir*cell*(0.12 + rnd()*0.18); a.lineTo(bx, by); }
+      a.stroke();
+    }
+    // pits
+    for (let k=0;k<700;k++){
+      const ox = stone.x + rnd()*stone.w, oy = stone.y + rnd()*stone.h;
+      a.fillStyle = `rgba(0,0,0,${0.15 + rnd()*0.6})`;
+      const r = cell*(0.006 + rnd()*rnd()*0.05);
+      a.beginPath(); a.arc(ox, oy, r, 0, 6.283); a.fill();
+    }
+    // stone edge chips
+    for (let k=0;k<60;k++){
+      const side = Math.floor(rnd()*4);
+      let ox, oy;
+      if (side===0){ ox = stone.x + rnd()*stone.w; oy = stone.y; }
+      else if (side===1){ ox = stone.x + stone.w; oy = stone.y + rnd()*stone.h; }
+      else if (side===2){ ox = stone.x + rnd()*stone.w; oy = stone.y + stone.h; }
+      else { ox = stone.x; oy = stone.y + rnd()*stone.h; }
+      a.fillStyle = '#000';
+      blob(a, ox, oy, cell*(0.04 + rnd()*0.12));
+    }
+  }
+
+  function blob(ctx, x, y, r){
+    ctx.beginPath();
+    const n = 9;
+    for (let i=0;i<n;i++){
+      const ang = i/n*6.283, rr = r*(0.6 + rnd()*0.6);
+      const px = x + Math.cos(ang)*rr, py = y + Math.sin(ang)*rr;
+      i ? ctx.lineTo(px,py) : ctx.moveTo(px,py);
+    }
+    ctx.closePath(); ctx.fill();
+  }
+
+  function drawPaper(){
+    const p = paperC.getContext('2d');
+    p.setTransform(dpr,0,0,dpr,0,0);
+    p.fillStyle = '#ebe9e3';
+    p.fillRect(0,0,W,H);
+    // fibres
+    seed = 101;
+    for (let k=0;k<1400;k++){
+      const x = rnd()*W, y = rnd()*H, l = 2 + rnd()*9, ang = rnd()*6.283;
+      p.strokeStyle = rnd() < .5 ? 'rgba(255,255,255,.35)' : 'rgba(120,112,100,.07)';
+      p.lineWidth = 0.4 + rnd()*0.5;
+      p.beginPath(); p.moveTo(x,y); p.lineTo(x + Math.cos(ang)*l, y + Math.sin(ang)*l); p.stroke();
+    }
+    // the paper is pressed onto the stone: faint relief of what's beneath
+    const relief = document.createElement('canvas');
+    relief.width = paperC.width; relief.height = paperC.height;
+    const r = relief.getContext('2d');
+    r.drawImage(allowed, 0, 0);
+    r.globalCompositeOperation = 'source-in';
+    r.fillStyle = '#000'; r.fillRect(0,0,relief.width,relief.height);
+    p.save();
+    p.setTransform(1,0,0,1,0,0);
+    p.globalAlpha = 0.035;
+    p.filter = `blur(${(cell*0.12*dpr).toFixed(1)}px)`;
+    p.drawImage(relief, 0, 0);
+    p.filter = 'none';
+    p.restore();
+    // the outline of the stone, where the paper folds over the edge
+    p.save();
+    p.strokeStyle = 'rgba(70,64,56,.10)'; p.lineWidth = 1.2;
+    stonePath(p); p.stroke();
+    p.restore();
+  }
+
+  function makeBrushes(){
+    brushes = [];
+    for (let b=0;b<4;b++){
+      const s = 96;
+      const c = document.createElement('canvas'); c.width = c.height = s;
+      const g = c.getContext('2d');
+      const img = g.createImageData(s, s);
+      const d = img.data;
+      seed = 300 + b*17;
+      for (let y=0;y<s;y++) for (let x=0;x<s;x++){
+        const dx = (x - s/2)/(s/2), dy = (y - s/2)/(s/2);
+        const dist = Math.sqrt(dx*dx + dy*dy);
+        let fall = Math.max(0, 1 - Math.pow(dist, 2.2));
+        const n = rnd();
+        // cloth grain: some pores stay light
+        let v = fall * (n < 0.18 ? 0.15 : 0.55 + n*0.45);
+        const i = (y*s + x)*4;
+        d[i] = 26; d[i+1] = 30; d[i+2] = 37; d[i+3] = Math.round(v*255);
+      }
+      g.putImageData(img, 0, 0);
+      brushes.push(c);
+    }
+  }
+
+  let ictx;
+  function resetInk(){
+    ictx = inkC.getContext('2d');
+    ictx.setTransform(1,0,0,1,0,0);
+    ictx.clearRect(0,0,inkC.width,inkC.height);
+    const gw = 12, gh = 16;
+    hits = { gw, gh, a: new Uint8Array(gw*gh) };
+    cov = 0;
+  }
+
+  function stamp(x, y, strength){
+    const R = cell*0.95;
+    const b = brushes[(Math.random()*brushes.length)|0];
+    const px = x*dpr, py = y*dpr, pr = R*dpr;
+    ictx.save();
+    ictx.globalAlpha = strength;
+    ictx.translate(px, py);
+    ictx.rotate(Math.random()*6.283);
+    ictx.drawImage(b, -pr, -pr, pr*2, pr*2);
+    ictx.restore();
+    // ink only stays where paper touches flat stone
+    ictx.save();
+    ictx.beginPath(); ictx.rect(px - pr - 2, py - pr - 2, pr*2 + 4, pr*2 + 4); ictx.clip();
+    ictx.globalCompositeOperation = 'destination-in';
+    ictx.drawImage(allowed, 0, 0);
+    ictx.restore();
+
+    // coverage bookkeeping
+    const gx = Math.floor((x - stone.x)/stone.w*hits.gw), gy = Math.floor((y - stone.y)/stone.h*hits.gh);
+    for (let oy=-1;oy<=1;oy++) for (let ox=-1;ox<=1;ox++){
+      const cx = gx+ox, cy = gy+oy;
+      if (cx<0||cy<0||cx>=hits.gw||cy>=hits.gh) continue;
+      const k = cy*hits.gw + cx;
+      if (hits.a[k] < 255){ hits.a[k]++; if (hits.a[k] === 9) cov++; }
+    }
+    if (!revealed && cov >= hits.gw*hits.gh*0.82) reveal();
+  }
+
+  function reveal(){
+    revealed = true;
+    setTimeout(()=>{ label.style.opacity = 1; btns.style.opacity = 1; btns.classList.add('on'); }, 600);
+  }
+
+  // pointer
+  let down = false, last = null, started = false;
+  function pos(e){
+    const r = inkC.getBoundingClientRect();
+    return [e.clientX - r.left, e.clientY - r.top];
+  }
+  function movePad(p, pressed){
+    pad.style.transform = `translate(${p[0]}px,${p[1]}px) scale(${pressed ? 0.88 : 1})`;
+  }
+  inkC.addEventListener('pointerdown', e=>{
+    e.preventDefault();
+    try{ inkC.setPointerCapture(e.pointerId); }catch(_){}
+    down = true;
+    const p = pos(e); last = p;
+    pad.style.width = pad.style.height = (cell*1.5) + 'px';
+    pad.style.margin = (-cell*0.75) + 'px 0 0 ' + (-cell*0.75) + 'px';
+    pad.style.opacity = e.pointerType === 'touch' ? 0 : 0.95;
+    movePad(p, true);
+    if (!started){ started = true; hint.style.opacity = 0; }
+    stamp(p[0], p[1], 0.22);
+  });
+  inkC.addEventListener('pointermove', e=>{
+    const p = pos(e);
+    if (e.pointerType !== 'touch'){ pad.style.opacity = 0.95; movePad(p, down); }
+    if (!down) return;
+    e.preventDefault();
+    const dx = p[0]-last[0], dy = p[1]-last[1];
+    const d = Math.hypot(dx, dy);
+    const step = cell*0.35;
+    if (d < step) return;
+    const n = Math.floor(d/step);
+    for (let i=1;i<=n;i++){
+      stamp(last[0] + dx*i/n + (Math.random()-.5)*cell*0.2, last[1] + dy*i/n + (Math.random()-.5)*cell*0.2, 0.13);
+    }
+    last = p;
+  });
+  function up(){ down = false; if (last) movePad(last, false); }
+  inkC.addEventListener('pointerup', up);
+  inkC.addEventListener('pointercancel', up);
+  inkC.addEventListener('pointerleave', e=>{ if (e.pointerType !== 'touch') pad.style.opacity = 0; });
+
+  document.getElementById('bShi').onclick = ()=> shiwen.classList.add('on');
+  document.getElementById('bClose').onclick = ()=> shiwen.classList.remove('on');
+  shiwen.addEventListener('click', e=>{ if (e.target === shiwen) shiwen.classList.remove('on'); });
+  document.getElementById('bRe').onclick = ()=>{
+    resetInk(); revealed = false;
+    label.style.opacity = 0; btns.style.opacity = 0; btns.classList.remove('on');
+  };
+
+  function build(keepInk){
+    let old = null;
+    if (keepInk && inkC.width){ old = document.createElement('canvas'); old.width = inkC.width; old.height = inkC.height; old.getContext('2d').drawImage(inkC,0,0); }
+    layout();
+    buildAllowed();
+    drawPaper();
+    makeBrushes();
+    const prevCov = hits ? hits.a.slice() : null, prevC = cov;
+    resetInk();
+    if (old){
+      ictx.drawImage(old, 0, 0, inkC.width, inkC.height);
+      ictx.globalCompositeOperation = 'destination-in'; ictx.drawImage(allowed,0,0); ictx.globalCompositeOperation = 'source-over';
+      if (prevCov){ hits.a.set(prevCov); cov = prevC; }
+    }
+  }
+
+  build(false);
+  let rt;
+  let lastW = window.innerWidth, lastH = window.innerHeight;
+  window.addEventListener('resize', ()=>{
+    clearTimeout(rt);
+    rt = setTimeout(()=>{
+      if (Math.abs(window.innerWidth - lastW) < 2 && Math.abs(window.innerHeight - lastH) < 120) return;
+      lastW = window.innerWidth; lastH = window.innerHeight;
+      build(true);
+    }, 200);
+  });
+
+  // debug hook for testing: ?full=1 rubs everything
+  if (/full=1/.test(location.search)){
+    for (let y = stone.y; y < stone.y + stone.h; y += cell*0.3)
+      for (let x = stone.x; x < stone.x + stone.w; x += cell*0.3) { stamp(x, y, 0.16); stamp(x+cell*.15, y+cell*.15, 0.12); }
+    label.style.transition = btns.style.transition = 'none'; hint.style.opacity = 0;
+  }
+  if (/half=1/.test(location.search)){
+    for (let y = stone.y; y < stone.y + stone.h*0.5; y += cell*0.3)
+      for (let x = stone.x; x < stone.x + stone.w*0.7; x += cell*0.3) stamp(x + Math.sin(y)*cell, y, 0.14);
+  }
+})();
+</script>
+</body>
+</html>

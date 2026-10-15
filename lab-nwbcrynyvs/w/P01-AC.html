@@ -1,0 +1,263 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no,viewport-fit=cover">
+<title>随便</title>
+<style>
+  *{box-sizing:border-box;margin:0;padding:0;-webkit-tap-highlight-color:transparent}
+  html,body{height:100%;overflow:hidden;overscroll-behavior:none}
+  body{
+    font-family:-apple-system,BlinkMacSystemFont,"PingFang SC","Hiragino Sans GB","Noto Sans SC","Microsoft YaHei",sans-serif;
+    color:#3a3a40;user-select:none;-webkit-user-select:none;touch-action:none;
+    background:#eef0f3;
+  }
+  #bg,#night{position:fixed;inset:0;pointer-events:none}
+  #bg{
+    background:
+      radial-gradient(120% 60% at 20% 45%, rgba(176,196,236,.55), transparent 60%),
+      radial-gradient(90% 50% at 85% 62%, rgba(214,196,232,.55), transparent 65%),
+      radial-gradient(120% 55% at 30% 88%, rgba(238,206,220,.6), transparent 65%),
+      linear-gradient(180deg,#f1f2f4 0%,#eceef3 30%,#e6e4ef 60%,#efe3ea 100%);
+  }
+  #night{background:linear-gradient(180deg,#2b2d36,#3a3646);opacity:0;transition:opacity 4s ease}
+  body.done #night{opacity:.62}
+  #stage{position:fixed;inset:0}
+  #cap{
+    position:fixed;left:0;right:0;top:calc(env(safe-area-inset-top) + 13vh);
+    text-align:center;font-size:clamp(17px,4.6vw,22px);letter-spacing:.06em;
+    padding:0 28px;line-height:1.7;pointer-events:none;
+    transition:opacity .45s ease, color 3s ease;min-height:2em;
+  }
+  #sub{
+    position:fixed;left:0;right:0;top:calc(env(safe-area-inset-top) + 13vh + 2.6em);
+    text-align:center;font-size:clamp(13px,3.6vw,16px);color:#8a8a94;letter-spacing:.08em;
+    pointer-events:none;opacity:0;transition:opacity 1.2s ease, color 3s ease;
+  }
+  body.done #cap{color:#eeeef3}
+  body.done #sub{color:#b9b9c6}
+  .ring{position:absolute;left:0;top:0;will-change:transform;touch-action:none;cursor:grab}
+  .ring svg{display:block;width:100%;height:100%;overflow:visible}
+  .ring .face{
+    position:absolute;inset:14%;border-radius:50%;
+    background:rgba(255,255,255,.55);backdrop-filter:blur(6px);-webkit-backdrop-filter:blur(6px);
+    transition:background 3s ease;
+  }
+  body.done .ring .face{background:rgba(255,255,255,.14)}
+  .ring .trk{stroke:rgba(150,150,160,.28)}
+  .ring .arc{stroke:#34c759;transition:stroke 3s ease}
+  body.done .ring .arc{stroke:#7fa98a}
+  .ring .dot{
+    position:absolute;right:2%;top:2%;width:24%;height:24%;border-radius:50%;
+    background:#ff3b30;transform:scale(0);transition:transform .35s cubic-bezier(.3,1.6,.5,1);
+    box-shadow:0 1px 3px rgba(0,0,0,.15);cursor:pointer;
+  }
+  .ring .dot.on{transform:scale(1)}
+  body.done .ring .dot{background:#e26a62}
+  .pop{animation:pop .38s cubic-bezier(.3,1.5,.5,1)}
+  @keyframes pop{from{opacity:0}to{opacity:1}}
+  #again{
+    position:fixed;left:50%;bottom:calc(env(safe-area-inset-bottom) + 7vh);transform:translateX(-50%);
+    font-size:14px;color:#c9c9d4;letter-spacing:.12em;padding:10px 22px;border-radius:999px;
+    background:rgba(255,255,255,.08);border:1px solid rgba(255,255,255,.18);
+    opacity:0;pointer-events:none;transition:opacity 1.5s ease;font-family:inherit;
+  }
+  #again.on{opacity:1;pointer-events:auto}
+  #hint{
+    position:fixed;width:14px;height:14px;border-radius:50%;left:50%;top:58%;
+    margin:-7px 0 0 -7px;background:rgba(52,199,89,.5);pointer-events:none;
+    animation:breathe 2.4s ease-in-out infinite;
+  }
+  #hint.off{display:none}
+  @keyframes breathe{0%,100%{transform:scale(.6);opacity:.25}50%{transform:scale(1.4);opacity:.7}}
+</style>
+</head>
+<body>
+<div id="bg"></div>
+<div id="night"></div>
+<div id="stage"></div>
+<div id="hint"></div>
+<div id="cap"></div>
+<div id="sub"></div>
+<button id="again">再随便一次</button>
+<script>
+(() => {
+  const N = 4, TOTAL = N * N;
+  const stage = document.getElementById('stage');
+  const cap = document.getElementById('cap');
+  const sub = document.getElementById('sub');
+  const hint = document.getElementById('hint');
+  const again = document.getElementById('again');
+  const RED = new Set([2, 8, 13]);           // 有几个，就是先放着
+  const LINES = {
+    1:'好。', 2:'再随便点一个。', 3:'……它自己站好了。', 4:'一排。',
+    5:'其实乱一点也可以的。', 6:'真的可以。', 7:'嗯。', 8:'又一排。看着挺舒服。',
+    9:'点远一点试试。', 10:'远一点也一样。', 11:'那几个红点，先放着。', 12:'差不多了。',
+    13:'不急。', 14:'', 15:'还剩一个。', 16:'满了。'
+  };
+  const C = 2 * Math.PI * 42;
+  let rings = [], count = 0, ended = false, timers = [], dragTold = 0, dotTold = 0, fullTold = 0;
+
+  function say(t, s) {
+    cap.style.opacity = 0;
+    setTimeout(() => { cap.textContent = t; cap.style.opacity = 1; }, 220);
+    if (s !== undefined) { sub.textContent = s; sub.style.opacity = s ? 1 : 0; }
+  }
+  function fill(rg, to, ms) {
+    const from = rg.off == null ? C : rg.off, t0 = performance.now();
+    const step = now => {
+      const k = Math.min(1, (now - t0) / ms), e = 1 - Math.pow(1 - k, 3);
+      rg.off = from + (to - from) * e;
+      rg.arc.setAttribute('stroke-dashoffset', rg.off.toFixed(2));
+      if (k < 1) requestAnimationFrame(step);
+    };
+    requestAnimationFrame(step);
+  }
+  function later(fn, ms) { const id = setTimeout(fn, ms); timers.push(id); return id; }
+
+  function geo() {
+    const w = innerWidth, h = innerHeight;
+    const g = Math.min(w * 0.8, h * 0.46, 420);
+    const cell = g / N, d = cell * 0.74;
+    const cx = w / 2, cy = Math.max(h * 0.58, h * 0.13 + 110 + g / 2);
+    return { cell, d, x0: cx - g / 2, y0: Math.min(cy, h - g / 2 - 40) - g / 2 };
+  }
+  function slot(i) {
+    const G = geo(), r = Math.floor(i / N), c = i % N;
+    return { x: G.x0 + c * G.cell + G.cell / 2, y: G.y0 + r * G.cell + G.cell / 2, d: G.d };
+  }
+  function place(rg, x, y, ms, ease) {
+    rg.x = x; rg.y = y;
+    rg.el.style.transition = ms ? `transform ${ms}ms ${ease || 'cubic-bezier(.55,.05,.25,1)'}` : 'none';
+    rg.el.style.transform = `translate(${x - rg.d / 2}px,${y - rg.d / 2}px)`;
+  }
+
+  function makeRing(x, y, idx) {
+    const G = geo();
+    const el = document.createElement('div');
+    el.className = 'ring pop';
+    el.style.width = el.style.height = G.d + 'px';
+    el.innerHTML = `<div class="face"></div>
+      <svg viewBox="0 0 100 100"><circle class="trk" cx="50" cy="50" r="42" fill="none" stroke-width="9"/>
+      <circle class="arc" cx="50" cy="50" r="42" fill="none" stroke-width="9" stroke-linecap="round"
+        transform="rotate(-90 50 50)" stroke-dasharray="${C}" stroke-dashoffset="${C}"/></svg>
+      <div class="dot"></div>`;
+    stage.appendChild(el);
+    const rg = { el, idx, d: G.d, x, y, settled: false, arc: el.querySelector('.arc'), dot: el.querySelector('.dot') };
+    place(rg, x, y, 0);
+    // 先在你点的地方待一下
+    fill(rg, C * 0.86, 400);
+    later(() => {
+      const s = slot(idx);
+      const dist = Math.hypot(s.x - x, s.y - y);
+      place(rg, s.x, s.y, Math.min(1100, 520 + dist * 0.9));
+      later(() => {
+        rg.settled = true;
+        fill(rg, 0, 1300);
+        if (navigator.vibrate) try { navigator.vibrate(6); } catch (e) {}
+        if (RED.has(idx)) later(() => rg.dot.classList.add('on'), 1500);
+        if (idx === TOTAL - 1) later(finish, 2400);
+      }, Math.min(1100, 520 + dist * 0.9));
+    }, 520);
+    bindDrag(rg);
+    return rg;
+  }
+
+  function bindDrag(rg) {
+    let sx, sy, ox, oy, moved = false, active = false;
+    rg.dot.addEventListener('pointerdown', e => {
+      e.stopPropagation();
+      const t = ['先放着。', '……先放着。', '明天再说。', '嗯，它就在那儿，没事的。'];
+      say(t[Math.min(dotTold++, t.length - 1)]);
+    });
+    rg.el.addEventListener('pointerdown', e => {
+      e.stopPropagation();
+      if (!rg.settled) return;
+      active = true; moved = false;
+      sx = e.clientX; sy = e.clientY; ox = rg.x; oy = rg.y;
+      try { rg.el.setPointerCapture(e.pointerId); } catch (_) {}
+      rg.el.style.cursor = 'grabbing';
+    });
+    rg.el.addEventListener('pointermove', e => {
+      if (!active) return;
+      const dx = e.clientX - sx, dy = e.clientY - sy;
+      if (Math.hypot(dx, dy) > 6) moved = true;
+      // 越拉越拉不动
+      const k = v => Math.sign(v) * Math.pow(Math.abs(v), 0.78) * 1.1;
+      rg.el.style.transition = 'none';
+      rg.el.style.transform = `translate(${ox + k(dx) - rg.d / 2}px,${oy + k(dy) - rg.d / 2}px)`;
+    });
+    const up = () => {
+      if (!active) return;
+      active = false; rg.el.style.cursor = 'grab';
+      const s = slot(rg.idx);
+      place(rg, s.x, s.y, 650, 'cubic-bezier(.3,1.45,.45,1)');
+      if (moved && !ended) {
+        const t = ['又回去了。', '它还是回去了。', '那个位置是它的。'];
+        say(t[Math.min(dragTold++, t.length - 1)]);
+      }
+    };
+    rg.el.addEventListener('pointerup', up);
+    rg.el.addEventListener('pointercancel', up);
+  }
+
+  stage.addEventListener('pointerdown', e => {
+    if (ended) return;
+    if (count >= TOTAL) {
+      const t = ['没位置了。', '真的没位置了。'];
+      say(t[Math.min(fullTold++, 1)]);
+      return;
+    }
+    hint.classList.add('off');
+    rings.push(makeRing(e.clientX, e.clientY, count));
+    count++;
+    if (count === 1) sub.style.opacity = 0;
+    if (LINES[count]) say(LINES[count]);
+  });
+
+  function finish() {
+    ended = true;
+    document.body.classList.add('done');
+    say('');
+    later(() => say('到点了。'), 1400);
+    later(() => { sub.textContent = '自己定的。'; sub.style.opacity = 1; }, 3600);
+    later(() => { sub.style.opacity = 0; }, 7200);
+    later(() => { sub.textContent = '明天的事，明天再排。'; sub.style.opacity = 1; }, 8200);
+    later(() => again.classList.add('on'), 10500);
+  }
+
+  function reset() {
+    timers.forEach(clearTimeout); timers = [];
+    again.classList.remove('on');
+    document.body.classList.remove('done');
+    // 再随便一次：先散开，再说
+    const w = innerWidth, h = innerHeight;
+    rings.forEach((rg, i) => {
+      rg.settled = false;
+      rg.dot.classList.remove('on');
+      place(rg, w * (0.1 + Math.random() * 0.8), h * (0.15 + Math.random() * 0.75), 700);
+      rg.el.style.opacity = 1;
+      setTimeout(() => { rg.el.style.transition = 'opacity .6s'; rg.el.style.opacity = 0; }, 900 + i * 25);
+    });
+    setTimeout(() => {
+      rings.forEach(rg => rg.el.remove()); rings = []; count = 0; ended = false;
+      dragTold = dotTold = fullTold = 0;
+      say('随便点一下。哪里都行。', '');
+      hint.classList.remove('off');
+    }, 1700);
+  }
+  again.addEventListener('pointerdown', e => { e.stopPropagation(); reset(); });
+
+  addEventListener('resize', () => {
+    const G = geo();
+    rings.forEach(rg => {
+      rg.d = G.d; rg.el.style.width = rg.el.style.height = G.d + 'px';
+      if (rg.settled) { const s = slot(rg.idx); place(rg, s.x, s.y, 0); }
+    });
+  });
+
+  say('随便点一下。哪里都行。');
+})();
+</script>
+</body>
+</html>

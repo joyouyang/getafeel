@@ -1,0 +1,369 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, user-scalable=no">
+<meta name="theme-color" content="#04050a">
+<title>，</title>
+<style>
+  html, body {
+    margin: 0; padding: 0; height: 100%; overflow: hidden;
+    background: #04050a; color: #dfe4ee;
+    -webkit-tap-highlight-color: transparent;
+    -webkit-user-select: none; user-select: none;
+    touch-action: none;
+  }
+  canvas { position: fixed; inset: 0; width: 100%; height: 100%; display: block; }
+  #words {
+    position: fixed; left: 0; right: 0;
+    top: 30%;
+    padding: 0 8vw;
+    font-family: "Songti SC", "STSong", "Noto Serif SC", "Source Han Serif SC", "SimSun", serif;
+    font-size: clamp(17px, 4.6vw, 23px);
+    line-height: 1.9;
+    letter-spacing: 0.08em;
+    pointer-events: none;
+    max-width: 30em; margin: 0 auto;
+  }
+  .line {
+    display: block;
+    transition: opacity 2.4s ease, transform 2.4s ease, filter 2.4s ease;
+    text-shadow: 0 0 18px rgba(170, 195, 235, 0.25);
+  }
+  .line.old1 { opacity: .42; }
+  .line.old2 { opacity: .18; filter: blur(.4px); }
+  .line.gone { opacity: 0; transform: translateY(-14px); filter: blur(1.5px); }
+  .ch { opacity: 0; transition: opacity .5s ease; }
+  .ch.on { opacity: 1; }
+  .comma { display: inline-block; }
+  .last .comma.tail { animation: breathe 3.2s ease-in-out infinite; }
+  @keyframes breathe { 0%,100% { opacity: 1; } 50% { opacity: .25; } }
+  #hint {
+    position: fixed; left: 0; right: 0; bottom: calc(5vh + env(safe-area-inset-bottom));
+    text-align: center; font-family: inherit;
+    font-family: "Songti SC", "STSong", "Noto Serif SC", serif;
+    font-size: 12px; letter-spacing: .4em; color: rgba(200, 212, 235, .45);
+    opacity: 0; transition: opacity 1.6s ease; pointer-events: none;
+  }
+  #hint.show { opacity: 1; }
+</style>
+</head>
+<body>
+<canvas id="c"></canvas>
+<div id="words"></div>
+<div id="hint">轻 点 一 下</div>
+<script>
+(() => {
+  const LINES = [
+    "那会儿天还黑透着，",
+    "说是夜里也对，说是早上也对，",
+    "差不多就行，",
+    "冬天，冷，冷得特别干，",
+    "干到星星一颗一颗都是硬的，",
+    "远处一道山，把风挡掉一半，",
+    "近处一条河，",
+    "在缺水的地上，偏偏流得很宽，",
+    "然后你来了，",
+    "然后有人给你起了个名字，",
+    "意思是，",
+    "你一生下来，就泡在别人的好里，",
+    "那么干的地方，起这么湿的名字，",
+    "后来你长成了一个，",
+    "不太用句号的人，",
+    "问什么答什么，不绕，也不藏，",
+    "一句后面跟着一个然后，",
+    "好像一直知道，后面还有，"
+  ];
+
+  const cv = document.getElementById('c');
+  const ctx = cv.getContext('2d');
+  const words = document.getElementById('words');
+  const hint = document.getElementById('hint');
+  const reduce = window.matchMedia && matchMedia('(prefers-reduced-motion: reduce)').matches;
+
+  let W = 0, H = 0, DPR = 1, horizon = 0;
+  let stars = [], ridge = [], river = null;
+  let dawn = 0, dawnTarget = 0;
+  const dust = [];
+
+  // ---------- seeded random so the sky is the same every time ----------
+  let seed = 7741;
+  const rnd = () => { seed = (seed * 16807) % 2147483647; return (seed - 1) / 2147483646; };
+
+  function build() {
+    DPR = Math.min(window.devicePixelRatio || 1, 2.5);
+    W = innerWidth; H = innerHeight;
+    cv.width = Math.round(W * DPR); cv.height = Math.round(H * DPR);
+    ctx.setTransform(DPR, 0, 0, DPR, 0, 0);
+    horizon = H * 0.76;
+
+    seed = 7741;
+    stars = [];
+    const n = Math.round((W * horizon) / 1500);
+    for (let i = 0; i < n; i++) {
+      const y = Math.pow(rnd(), 1.15) * horizon * 0.98;
+      const big = rnd();
+      stars.push({
+        x: rnd() * W, y,
+        r: big > 0.985 ? 1.5 + rnd() * 0.6 : big > 0.9 ? 0.95 + rnd() * 0.4 : 0.35 + rnd() * 0.5,
+        a: big > 0.9 ? 0.85 + rnd() * 0.15 : 0.25 + rnd() * 0.55,
+        hue: rnd() < 0.18 ? 'warm' : rnd() < 0.3 ? 'blue' : 'white',
+        tw: rnd() * Math.PI * 2,
+        ts: 0.2 + rnd() * 0.5
+      });
+    }
+
+    // long, low, slightly jagged ridge far off on the west side
+    ridge = [];
+    const steps = Math.ceil(W / 2) + 2;
+    let h = 0;
+    for (let i = 0; i <= steps; i++) {
+      const x = (i / steps) * W;
+      const t = i / steps;
+      h += (rnd() - 0.5) * 1.6; h *= 0.85;
+      const env = t < 0.35 ? 1 : t < 0.8 ? 1 - 0.88 * ((t - 0.35) / 0.45) : 0.12;
+      const shape = H * 0.04 + Math.sin(t * 9 + 1.2) * H * 0.006 + Math.sin(t * 23) * H * 0.003 + h;
+      ridge.push([x, horizon - Math.max(1.5, shape * env)]);
+    }
+
+    // a wide river crossing the dark plain
+    river = [];
+    for (let i = 0; i <= 80; i++) {
+      const t = i / 80;
+      const y = horizon + 2 + Math.pow(t, 1.9) * (H - horizon + 30);
+      const cx = W * (0.6 + 0.16 * Math.sin(t * 3.4 + 0.2) * (0.3 + t) - 0.1 * t);
+      const half = 1.5 + Math.pow(t, 1.4) * W * 0.3;
+      river.push([cx, y, half]);
+    }
+  }
+
+  function starColor(s, a) {
+    if (s.hue === 'warm') return `rgba(255,226,196,${a})`;
+    if (s.hue === 'blue') return `rgba(196,214,255,${a})`;
+    return `rgba(238,242,255,${a})`;
+  }
+
+  // ---------- diamond dust: grace, as it falls in a dry cold place ----------
+  function addDust(x, y, count, spread) {
+    for (let i = 0; i < count; i++) {
+      dust.push({
+        x: x + (Math.random() - 0.5) * spread,
+        y: y + (Math.random() - 0.5) * spread * 0.6,
+        vx: (Math.random() - 0.5) * 0.12,
+        vy: 0.12 + Math.random() * 0.28,
+        s: 0.6 + Math.random() * 1.3,
+        ph: Math.random() * Math.PI * 2,
+        sp: 0.6 + Math.random() * 2.2,
+        life: 1,
+        decay: 0.0009 + Math.random() * 0.0016
+      });
+    }
+    if (dust.length > 900) dust.splice(0, dust.length - 900);
+  }
+
+  let last = performance.now();
+  function frame(now) {
+    const dt = Math.min(50, now - last); last = now;
+    const t = now / 1000;
+    dawn += (dawnTarget - dawn) * Math.min(1, dt / 2600);
+
+    // sky
+    const g = ctx.createLinearGradient(0, 0, 0, horizon);
+    g.addColorStop(0, `rgb(${3 + dawn * 6},${4 + dawn * 9},${10 + dawn * 22})`);
+    g.addColorStop(0.55, `rgb(${7 + dawn * 16},${10 + dawn * 22},${22 + dawn * 40})`);
+    g.addColorStop(0.88, `rgb(${12 + dawn * 46},${17 + dawn * 38},${34 + dawn * 52})`);
+    g.addColorStop(1, `rgb(${16 + dawn * 92},${20 + dawn * 60},${38 + dawn * 52})`);
+    ctx.fillStyle = g; ctx.fillRect(0, 0, W, horizon + 2);
+
+    // the faintest warmth low in the east (right), only near the end
+    if (dawn > 0.02) {
+      const rg = ctx.createRadialGradient(W * 0.92, horizon, 0, W * 0.92, horizon, W * 0.9);
+      rg.addColorStop(0, `rgba(214,150,112,${0.42 * dawn})`);
+      rg.addColorStop(0.5, `rgba(120,100,150,${0.14 * dawn})`);
+      rg.addColorStop(1, 'rgba(0,0,0,0)');
+      ctx.fillStyle = rg; ctx.fillRect(0, 0, W, horizon + 2);
+    }
+
+    // stars — dry air: sharp, barely twinkling
+    for (const s of stars) {
+      const fadeLow = Math.min(1, (horizon - s.y) / (H * 0.08));
+      const tw = reduce ? 1 : 0.88 + 0.12 * Math.sin(t * s.ts + s.tw);
+      const a = s.a * tw * fadeLow * (1 - dawn * 0.55 * (s.y / horizon + 0.3));
+      if (a <= 0.01) continue;
+      ctx.fillStyle = starColor(s, a);
+      if (s.r > 1.4) {
+        ctx.beginPath(); ctx.arc(s.x, s.y, s.r, 0, Math.PI * 2); ctx.fill();
+        ctx.strokeStyle = starColor(s, a * 0.35); ctx.lineWidth = 0.5;
+        ctx.beginPath();
+        ctx.moveTo(s.x - s.r * 3.2, s.y); ctx.lineTo(s.x + s.r * 3.2, s.y);
+        ctx.moveTo(s.x, s.y - s.r * 3.2); ctx.lineTo(s.x, s.y + s.r * 3.2);
+        ctx.stroke();
+      } else {
+        ctx.fillRect(s.x - s.r, s.y - s.r, s.r * 2, s.r * 2);
+      }
+    }
+
+    // ground
+    const gg = ctx.createLinearGradient(0, horizon, 0, H);
+    gg.addColorStop(0, `rgb(${7 + dawn * 10},${8 + dawn * 9},${12 + dawn * 10})`);
+    gg.addColorStop(1, `rgb(4,5,8)`);
+    ctx.fillStyle = gg; ctx.fillRect(0, horizon, W, H - horizon);
+
+    // river: carries the sky
+    ctx.save();
+    ctx.beginPath();
+    for (let i = 0; i < river.length; i++) { const [x, y, h] = river[i]; i ? ctx.lineTo(x - h, y) : ctx.moveTo(x - h, y); }
+    for (let i = river.length - 1; i >= 0; i--) { const [x, y, h] = river[i]; ctx.lineTo(x + h, y); }
+    ctx.closePath();
+    const rgv = ctx.createLinearGradient(0, horizon, 0, H);
+    rgv.addColorStop(0, `rgba(${40 + dawn * 120},${52 + dawn * 80},${82 + dawn * 60},0.75)`);
+    rgv.addColorStop(1, `rgba(${16 + dawn * 30},${22 + dawn * 26},${40 + dawn * 30},0.55)`);
+    ctx.fillStyle = rgv; ctx.fill();
+    ctx.clip();
+    // reflected stars, stretched and wavering
+    for (let i = 0; i < stars.length; i += 3) {
+      const s = stars[i];
+      const ry = horizon + (horizon - s.y) * 0.32 + 8;
+      if (ry > H) continue;
+      const wob = reduce ? 0 : Math.sin(t * 1.3 + i) * 1.6;
+      ctx.fillStyle = starColor(s, s.a * 0.32);
+      ctx.fillRect(s.x + wob, ry, s.r * 2.6, s.r * 0.8);
+    }
+    // slow glints across the water
+    if (!reduce) for (let i = 4; i < river.length; i += 2) {
+      const [x, y, h] = river[i];
+      const k = Math.sin(t * 0.9 + i * 1.7);
+      if (k < 0.55) continue;
+      const a = (k - 0.55) * 0.5 * (0.5 + dawn);
+      ctx.fillStyle = `rgba(200,215,240,${a})`;
+      const off = Math.sin(i * 12.9898) * h * 0.6;
+      ctx.fillRect(x + off - h * 0.08, y, h * 0.16, 0.8);
+    }
+    ctx.restore();
+    // banks catch a little light
+    ctx.strokeStyle = `rgba(120,140,180,${0.12 + dawn * 0.2})`; ctx.lineWidth = 0.6;
+    ctx.beginPath(); river.forEach(([x, y, h], i) => i ? ctx.lineTo(x - h, y) : ctx.moveTo(x - h, y)); ctx.stroke();
+    ctx.beginPath(); river.forEach(([x, y, h], i) => i ? ctx.lineTo(x + h, y) : ctx.moveTo(x + h, y)); ctx.stroke();
+
+    // ridge (west, left side heavier)
+    ctx.beginPath();
+    ctx.moveTo(0, horizon + 1);
+    for (const [x, y] of ridge) ctx.lineTo(x, y);
+    ctx.lineTo(W, horizon + 1); ctx.closePath();
+    ctx.fillStyle = `rgb(${13 + dawn * 30},${16 + dawn * 24},${27 + dawn * 30})`;
+    ctx.fill();
+
+    // ambient dust, very sparse
+    if (!reduce && Math.random() < 0.05 + dawn * 0.05) addDust(Math.random() * W, Math.random() * H * 0.3, 1, 0);
+
+    // dust
+    for (let i = dust.length - 1; i >= 0; i--) {
+      const d = dust[i];
+      if (!reduce) {
+        d.x += d.vx * dt * 0.06 + Math.sin(t * 0.7 + d.ph) * 0.05;
+        d.y += d.vy * dt * 0.06;
+      }
+      d.life -= d.decay * dt * 0.06;
+      if (d.life <= 0 || d.y > H + 10) { dust.splice(i, 1); continue; }
+      const glint = Math.pow(Math.max(0, Math.sin(t * d.sp + d.ph)), 14);
+      const a = Math.min(1, d.life * 1.4) * (0.18 + 0.82 * glint);
+      ctx.fillStyle = `rgba(232,240,255,${a})`;
+      const s = d.s * (0.6 + glint * 0.9);
+      ctx.fillRect(d.x - s / 2, d.y - s / 2, s, s);
+      if (glint > 0.6) {
+        ctx.strokeStyle = `rgba(232,240,255,${a * 0.5})`; ctx.lineWidth = 0.5;
+        ctx.beginPath();
+        ctx.moveTo(d.x - s * 2.5, d.y); ctx.lineTo(d.x + s * 2.5, d.y);
+        ctx.moveTo(d.x, d.y - s * 2.5); ctx.lineTo(d.x, d.y + s * 2.5);
+        ctx.stroke();
+      }
+    }
+
+    requestAnimationFrame(frame);
+  }
+
+  // ---------- speech: unhurried, never closes a sentence ----------
+  let idx = -1, typing = false, timer = null, lineEl = null, chars = [], done = false, hintTimer = null;
+
+  function showHint(delay) {
+    clearTimeout(hintTimer);
+    hintTimer = setTimeout(() => { if (!typing && !done) hint.classList.add('show'); }, delay);
+  }
+
+  function nextLine() {
+    if (idx >= LINES.length - 1) return;
+    idx++;
+    hint.classList.remove('show');
+    const prev = [...words.querySelectorAll('.line')];
+    prev.forEach(el => {
+      if (el.classList.contains('old2')) { el.classList.add('gone'); setTimeout(() => el.remove(), 2400); }
+      else if (el.classList.contains('old1')) { el.classList.remove('old1'); el.classList.add('old2'); }
+      else el.classList.add('old1');
+    });
+    const text = LINES[idx];
+    lineEl = document.createElement('span');
+    lineEl.className = 'line';
+    chars = [];
+    [...text].forEach((c, i) => {
+      const s = document.createElement('span');
+      s.className = 'ch' + (c === '，' || c === '：' ? ' comma' : '') + (i === text.length - 1 ? ' tail' : '');
+      s.textContent = c;
+      lineEl.appendChild(s);
+      chars.push(s);
+    });
+    words.appendChild(lineEl);
+    dawnTarget = Math.pow(idx / (LINES.length - 1), 1.6) * 0.75;
+    typing = true;
+    let k = 0;
+    const step = () => {
+      if (k >= chars.length) { finishLine(); return; }
+      const c = chars[k]; c.classList.add('on'); k++;
+      const ch = c.textContent;
+      const isTail = k === chars.length;
+      const wait = isTail ? 0 : (ch === '，' || ch === '：') ? 420 : 105 + Math.random() * 60;
+      timer = setTimeout(step, wait);
+    };
+    timer = setTimeout(step, 250);
+  }
+
+  function finishLine() {
+    clearTimeout(timer);
+    chars.forEach(c => c.classList.add('on'));
+    typing = false;
+    if (idx === LINES.length - 1) {
+      done = true;
+      lineEl.classList.add('last');
+      // the last thing: a long, slow fall of light
+      let n = 0;
+      const rain = setInterval(() => { addDust(Math.random() * W, -10 + Math.random() * H * 0.2, 3, 0); if (++n > 70) clearInterval(rain); }, 120);
+    } else {
+      showHint(idx === 0 ? 1600 : 5200);
+    }
+  }
+
+  function onTap(x, y) {
+    addDust(x, y, 10, 46);
+    if (done) return;
+    if (typing) { finishLine(); return; }
+    nextLine();
+  }
+
+  let lastTrail = 0;
+  cv.addEventListener('pointerdown', e => { onTap(e.clientX, e.clientY); });
+  window.addEventListener('pointermove', e => {
+    if (e.pressure === 0 && e.pointerType === 'mouse' && e.buttons === 0) return;
+    const now = performance.now();
+    if (now - lastTrail > 30) { addDust(e.clientX, e.clientY, 2, 14); lastTrail = now; }
+  });
+  window.addEventListener('keydown', e => {
+    if (e.key === ' ' || e.key === 'Enter' || e.key === 'ArrowRight') { e.preventDefault(); onTap(W / 2, H * 0.3); }
+  });
+
+  addEventListener('resize', build);
+  build();
+  requestAnimationFrame(frame);
+  setTimeout(nextLine, 1800);
+})();
+</script>
+</body>
+</html>

@@ -1,0 +1,475 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name="theme-color" content="#f3eee3">
+<title>此刻</title>
+<style>
+:root{--paper:#f3eee3;--ink:#3d3b36;--soft:#8d877b;--sage:#bcd6aa;--sage-d:#8fb57c}
+*{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+html,body{margin:0;background:var(--paper);color:var(--ink)}
+body{
+  font-family:-apple-system,"PingFang SC","Hiragino Sans GB","Noto Sans CJK SC","Microsoft YaHei",sans-serif;
+  min-height:100vh;min-height:100svh;
+  background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='220' height='220'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.9' numOctaves='3' stitchTiles='stitch'/%3E%3CfeColorMatrix values='0 0 0 0 .45 0 0 0 0 .4 0 0 0 0 .3 0 0 0 .09 0'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
+  -webkit-user-select:none;user-select:none;overflow-x:hidden;
+}
+main{
+  width:min(100%,440px);margin:0 auto;
+  padding:max(22px,env(safe-area-inset-top)) 18px max(28px,env(safe-area-inset-bottom));
+  display:flex;flex-direction:column;gap:12px;min-height:100vh;min-height:100svh;
+}
+.serif{font-family:"Songti SC","STSong","Noto Serif SC","Source Han Serif SC",serif}
+.win{position:relative}
+.win canvas{position:absolute;inset:0;width:100%;height:100%;display:block}
+#here{aspect-ratio:1/1}
+.row{display:grid;grid-template-columns:repeat(3,1fr);gap:8px}
+.row .win{aspect-ratio:2/3}
+.lab{position:absolute;left:18px;top:16px;color:#fff;text-shadow:0 1px 6px rgba(30,30,60,.35);pointer-events:none}
+.lab .k{font-size:12px;letter-spacing:.2em;opacity:.85}
+.lab .big{font-size:52px;line-height:1.05;letter-spacing:.02em;margin-top:4px;font-weight:300}
+.lab .say{font-size:14px;margin-top:6px;opacity:.95}
+.row .lab{left:12px;top:11px}
+.row .lab .big{font-size:22px;margin-top:0}
+.row .lab .say{font-size:12px;margin-top:3px}
+.stamp{
+  position:absolute;left:11px;bottom:12px;right:8px;
+  border-left:3px solid #f2c45a;padding-left:6px;
+  color:#fff;font-size:10.5px;line-height:1.45;letter-spacing:.04em;
+  text-shadow:0 1px 3px rgba(0,0,0,.45);
+  opacity:0;transform:translateY(4px);transition:opacity .9s ease,transform .9s ease;pointer-events:none;
+}
+.stamp.on{opacity:1;transform:none}
+.drift{animation:drift 14s ease-in-out infinite alternate}
+@keyframes drift{from{transform:translateX(-5px)}to{transform:translateX(5px)}}
+
+.chat{margin-top:6px;display:flex;flex-direction:column;gap:10px}
+.sent{display:flex;justify-content:flex-end;min-height:0}
+.bubble{
+  max-width:82%;background:var(--sage);color:#2e3a28;padding:9px 13px;border-radius:16px 16px 4px 16px;
+  font-size:15px;line-height:1.5;opacity:0;transform:translateY(10px) scale(.96);transition:all .45s cubic-bezier(.2,.8,.2,1)
+}
+.bubble.on{opacity:1;transform:none}
+.bubble .meta{display:block;font-size:10.5px;color:#6d7f61;text-align:right;margin-top:2px}
+.bar{display:flex;gap:8px;align-items:stretch}
+.field{
+  flex:1;min-height:46px;border-radius:23px;background:rgba(255,255,255,.62);
+  border:1px solid rgba(120,110,90,.18);padding:12px 16px;font-size:15px;line-height:1.4;cursor:pointer;position:relative;
+  box-shadow:inset 0 1px 2px rgba(80,70,50,.06)
+}
+.field .ph{color:var(--soft)}
+.caret{display:none;width:1.5px;height:1.05em;background:#5d8c4a;vertical-align:-2px;margin-left:1px;animation:blink 1s steps(1) infinite}
+.typing .caret{display:inline-block}
+.typing .ph{display:none}
+@keyframes blink{50%{opacity:0}}
+button{
+  font:inherit;border:0;border-radius:23px;padding:0 18px;font-size:15px;
+  background:#e2ddd2;color:#a9a397;transition:background .3s,color .3s,transform .15s
+}
+button.ready{background:var(--sage-d);color:#fff;animation:nudge 1.6s ease-in-out infinite}
+button.ready:active{transform:scale(.94)}
+@keyframes nudge{0%,100%{box-shadow:0 0 0 0 rgba(143,181,124,.0)}50%{box-shadow:0 0 0 6px rgba(143,181,124,.25)}}
+.dot{position:fixed;width:12px;height:12px;margin:-6px 0 0 -6px;border-radius:50%;background:#f3c27a;
+  box-shadow:0 0 10px 3px rgba(243,194,122,.55);pointer-events:none;z-index:9}
+.end{padding:18px 4px 0;text-align:center;color:var(--ink)}
+.end p{margin:0;font-size:17px;line-height:1.9;opacity:0;transform:translateY(6px);transition:opacity 1.4s ease,transform 1.4s ease}
+.end p.on{opacity:1;transform:none}
+.end p.gap{margin-top:16px}
+.again{display:inline-block;margin-top:22px;font-size:12px;color:var(--soft);letter-spacing:.15em;opacity:0;transition:opacity 1s;cursor:pointer;padding:6px 10px}
+.again.on{opacity:1}
+</style>
+</head>
+<body>
+<main>
+  <div class="win" id="here">
+    <canvas></canvas>
+    <div class="lab serif"><div class="k">这里</div><div class="big" id="hereT">--:--</div><div class="say" id="hereS"></div></div>
+  </div>
+  <div class="row" id="row"></div>
+
+  <div class="chat">
+    <div class="sent" id="sent"></div>
+    <div class="bar">
+      <div class="field" id="field"><span id="txt"></span><i class="caret"></i><span class="ph">想说点什么…</span></div>
+      <button id="send" disabled>发送</button>
+    </div>
+  </div>
+
+  <div class="end serif" id="end">
+    <p>说出来就好了</p>
+    <p>回不回，几点回，都不急</p>
+    <p class="gap">有人可以惦记</p>
+    <p>本身就挺走运的</p>
+    <div><span class="again" id="again">再写一条</span></div>
+  </div>
+</main>
+
+<script>
+(function(){
+"use strict";
+const HOME = {tz:'Asia/Shanghai', off:8};
+const AWAY = [
+  {tz:'America/Los_Angeles', off:-7},
+  {tz:'Europe/Amsterdam', off:2},
+  {tz:'Europe/London', off:1}
+];
+
+/* ---------- time ---------- */
+function hm(z, d){
+  d = d || new Date();
+  try{
+    const p = new Intl.DateTimeFormat('en-GB',{timeZone:z.tz,hour:'2-digit',minute:'2-digit',hourCycle:'h23'}).formatToParts(d);
+    return {h:(+p.find(x=>x.type==='hour').value)%24, m:+p.find(x=>x.type==='minute').value};
+  }catch(e){
+    const u = d.getUTCHours()+d.getUTCMinutes()/60 + z.off;
+    const t = ((u%24)+24)%24;
+    return {h:Math.floor(t), m:Math.round((t%1)*60)%60};
+  }
+}
+const pad = n => String(n).padStart(2,'0');
+const fmt = t => pad(t.h)+':'+pad(t.m);
+
+function hereSay(h){
+  if(h<5)  return '这么晚了，还没睡啊';
+  if(h<8)  return '天刚亮';
+  if(h<11) return '上午，先把事干了';
+  if(h<14) return '中午了，吃点实在的';
+  if(h<17) return '下午，有点犯困';
+  if(h<20) return '傍晚，往家走';
+  return '晚上了，换条松垮的裤子';
+}
+function awayState(h){
+  if(h<6)  return ['睡着呢','先放枕头边，醒了再看'];
+  if(h<9)  return ['刚醒','睁眼就能看到'];
+  if(h<12) return ['在忙吧','不用急着回'];
+  if(h<14) return ['吃饭呢','边吃边看'];
+  if(h<18) return ['下午','摸鱼的时候看'];
+  if(h<21) return ['在路上','路上瞄一眼'];
+  return ['快睡了','睡前看一眼'];
+}
+
+/* ---------- color ---------- */
+const SKY = [ // hour, top, bottom
+  [0,  '#1c2346','#383d69'],
+  [4,  '#232a52','#544a78'],
+  [5.5,'#55609a','#c99aa6'],
+  [6.5,'#8496c8','#f3bea2'],
+  [8,  '#8db6e2','#f2e4ca'],
+  [12, '#6aa1dc','#cfe2f3'],
+  [16, '#7aa5d6','#f0dcb9'],
+  [17.6,'#7473ad','#f2a77c'],
+  [18.8,'#4a4f8a','#c98292'],
+  [20, '#2b3461','#55507e'],
+  [24, '#1c2346','#383d69']
+];
+const hex = h => [1,3,5].map(i=>parseInt(h.substr(i,2),16));
+const mix = (a,b,t) => a.map((v,i)=>Math.round(v+(b[i]-v)*t));
+const rgb = (c,a) => a==null ? `rgb(${c[0]},${c[1]},${c[2]})` : `rgba(${c[0]},${c[1]},${c[2]},${a})`;
+function skyAt(hf){
+  for(let i=0;i<SKY.length-1;i++){
+    const A=SKY[i], B=SKY[i+1];
+    if(hf>=A[0] && hf<=B[0]){
+      const t=(hf-A[0])/(B[0]-A[0]);
+      return {top:mix(hex(A[1]),hex(B[1]),t), bot:mix(hex(A[2]),hex(B[2]),t)};
+    }
+  }
+  return {top:hex(SKY[0][1]),bot:hex(SKY[0][2])};
+}
+
+/* ---------- watercolor ---------- */
+function rng(seed){
+  return function(){
+    seed |= 0; seed = seed + 0x6D2B79F5 | 0;
+    let t = Math.imul(seed ^ seed >>> 15, 1 | seed);
+    t = t + Math.imul(t ^ t >>> 7, 61 | t) ^ t;
+    return ((t ^ t >>> 14) >>> 0) / 4294967296;
+  };
+}
+function gauss(r){const u=1-r(), v=r(); return Math.sqrt(-2*Math.log(u))*Math.cos(2*Math.PI*v);}
+function poly(cx,cy,rx,ry,n,r){
+  const p=[]; for(let i=0;i<n;i++){const a=i/n*Math.PI*2, k=1+gauss(r)*0.1; p.push([cx+Math.cos(a)*rx*k, cy+Math.sin(a)*ry*k]);} return p;
+}
+function deform(p,depth,v,r){
+  if(depth<=0) return p;
+  const o=[];
+  for(let i=0;i<p.length;i++){
+    const a=p[i], b=p[(i+1)%p.length], len=Math.hypot(b[0]-a[0],b[1]-a[1]);
+    o.push(a);
+    o.push([(a[0]+b[0])/2+gauss(r)*len*v, (a[1]+b[1])/2+gauss(r)*len*v]);
+  }
+  return deform(o,depth-1,v*0.85,r);
+}
+function fillP(ctx,p){ctx.beginPath();ctx.moveTo(p[0][0],p[0][1]);for(let i=1;i<p.length;i++)ctx.lineTo(p[i][0],p[i][1]);ctx.closePath();ctx.fill();}
+function wash(ctx,cx,cy,rx,ry,color,layers,alpha,r){
+  const base=deform(poly(cx,cy,rx,ry,10,r),2,0.32,r);
+  ctx.fillStyle=color; ctx.globalAlpha=alpha;
+  for(let i=0;i<layers;i++) fillP(ctx,deform(base,3,0.26,r));
+  ctx.globalAlpha=1;
+}
+function disc(ctx,cx,cy,rad,color,layers,alpha,r){
+  const base=deform(poly(cx,cy,rad,rad,24,r),1,0.03,r);
+  ctx.fillStyle=color; ctx.globalAlpha=alpha;
+  for(let i=0;i<layers;i++){const k=0.82+0.22*(i/layers); fillP(ctx,deform(base.map(p=>[cx+(p[0]-cx)*k,cy+(p[1]-cy)*k]),3,0.06,r));}
+  ctx.globalAlpha=1;
+}
+function ragged(w,h,ins,r){
+  const p=[], s=14, j=()=>gauss(r)*1.1;
+  for(let x=ins;x<w-ins;x+=s)p.push([x,ins+j()]);
+  for(let y=ins;y<h-ins;y+=s)p.push([w-ins+j(),y]);
+  for(let x=w-ins;x>ins;x-=s)p.push([x,h-ins+j()]);
+  for(let y=h-ins;y>ins;y-=s)p.push([ins+j(),y]);
+  return p;
+}
+let grain=null;
+function grainPattern(ctx){
+  if(!grain){
+    grain=document.createElement('canvas'); grain.width=grain.height=128;
+    const g=grain.getContext('2d'), d=g.createImageData(128,128);
+    for(let i=0;i<d.data.length;i+=4){const v=150+Math.random()*105; d.data[i]=v;d.data[i+1]=v*.97;d.data[i+2]=v*.9;d.data[i+3]=255;}
+    g.putImageData(d,0,0);
+  }
+  return ctx.createPattern(grain,'repeat');
+}
+
+function paint(win, hf, seed, big){
+  const cv=win.querySelector('canvas');
+  const W=win.clientWidth, H=win.clientHeight, dpr=Math.min(2,window.devicePixelRatio||1);
+  cv.width=Math.round(W*dpr); cv.height=Math.round(H*dpr);
+  const ctx=cv.getContext('2d'); ctx.setTransform(dpr,0,0,dpr,0,0);
+  const r=rng(seed);
+  const sk=skyAt(hf);
+  const night = hf<5 || hf>=20;
+  const dusk  = (hf>=5 && hf<7.5) || (hf>=16.8 && hf<20);
+  const edge=ragged(W,H,3,r);
+  win._edge=edge; win._W=W; win._H=H;
+
+  ctx.save();
+  ctx.beginPath(); ctx.moveTo(edge[0][0],edge[0][1]); edge.forEach(p=>ctx.lineTo(p[0],p[1])); ctx.closePath(); ctx.clip();
+
+  // base gradient, a little thinner than real paint
+  const g=ctx.createLinearGradient(0,0,0,H);
+  g.addColorStop(0,rgb(sk.top)); g.addColorStop(1,rgb(sk.bot));
+  ctx.globalAlpha=.9; ctx.fillStyle=g; ctx.fillRect(0,0,W,H); ctx.globalAlpha=1;
+
+  // uneven washes
+  const n = big?7:5;
+  for(let i=0;i<n;i++){
+    const y=H*(0.05+r()*0.45);
+    wash(ctx, W*r(), y, W*(0.35+r()*0.4), H*(0.12+r()*0.12), rgb(sk.top), big?18:14, 0.035, r);
+  }
+  for(let i=0;i<n-2;i++){
+    const y=H*(0.55+r()*0.4);
+    wash(ctx, W*r(), y, W*(0.35+r()*0.35), H*(0.1+r()*0.1), rgb(sk.bot), big?16:12, 0.04, r);
+  }
+
+  // sun / moon (screen, so it lifts the paper instead of muddying it)
+  ctx.globalCompositeOperation='screen';
+  if(night){
+    const mx=W*(0.64+r()*0.14), my=big?H*(0.18+r()*0.1):H*(0.36+r()*0.08), mr=Math.min(W,H)*(big?0.055:0.08);
+    wash(ctx,mx,my,mr*3,mr*3,'rgb(120,116,140)',10,0.05,r);
+    disc(ctx,mx,my,mr,'rgb(250,240,205)',14,0.07,r);
+    const stars = big?38:16;
+    for(let i=0;i<stars;i++){
+      ctx.globalAlpha=0.25+r()*0.6; ctx.fillStyle='#fffbe9';
+      ctx.beginPath(); ctx.arc(W*r(), H*r()*0.7, 0.5+r()*1.0, 0, Math.PI*2); ctx.fill();
+    }
+    ctx.globalAlpha=1;
+  }else{
+    const sx = W*(0.62+r()*0.18), sy = dusk ? H*(0.62+r()*0.08) : big ? H*(0.16+r()*0.12) : H*(0.36+r()*0.08);
+    const sr=Math.min(W,H)*(big?0.065:0.09);
+    wash(ctx,sx,sy,sr*3.2,sr*3.2, dusk?'rgb(200,120,70)':'rgb(150,140,110)',12,0.05,r);
+    disc(ctx,sx,sy,sr, dusk?'rgb(255,200,140)':'rgb(255,246,215)',14,0.075,r);
+  }
+  ctx.globalCompositeOperation='source-over';
+
+  // clouds
+  if(!night){
+    const cc = dusk ? 'rgb(252,222,214)' : 'rgb(255,255,255)';
+    ctx.globalCompositeOperation='screen';
+    const clouds = big? 5+Math.floor(r()*3) : 2+Math.floor(r()*2);
+    for(let i=0;i<clouds;i++){
+      const cx=W*(r()*1.1-0.05), cw=W*(big?0.16:0.26)*(0.7+r()*0.7);
+      let cy=H*(0.12+r()*0.5);
+      if(cx<W*0.62 && cy<H*(big?0.42:0.3)) cy=H*((big?0.46:0.42)+r()*0.18); // keep the words clear
+      for(let k=0;k<4;k++){
+        wash(ctx, cx+(k-1.5)*cw*0.45+gauss(r)*cw*0.12, cy+gauss(r)*cw*0.12, cw*(0.45+r()*0.3), cw*(0.22+r()*0.15), cc, 12, 0.05, r);
+      }
+      ctx.globalCompositeOperation='source-over';
+      wash(ctx, cx, cy+cw*0.25, cw*1.2, cw*0.12, rgb(mix(sk.top,[90,90,120],.25)), 8, 0.025, r); // shadow underneath
+      ctx.globalCompositeOperation='screen';
+    }
+    ctx.globalCompositeOperation='source-over';
+  }else{
+    // a faint night cloud
+    wash(ctx, W*r(), H*(0.35+r()*0.2), W*0.5, H*0.06, 'rgb(90,90,130)', 10, 0.04, r);
+  }
+
+  // low far land
+  const land = night ? [38,40,60] : dusk ? [110,88,98] : [138,128,108];
+  wash(ctx, W*0.3, H*1.05, W*0.9, H*(big?0.07:0.06), rgb(land), 12, 0.045, r);
+  wash(ctx, W*0.85, H*1.04, W*0.6, H*(big?0.06:0.05), rgb(land), 10, 0.045, r);
+
+  // grain
+  ctx.globalCompositeOperation='multiply';
+  ctx.globalAlpha=0.16; ctx.fillStyle=grainPattern(ctx); ctx.fillRect(0,0,W,H);
+  ctx.globalCompositeOperation='source-over'; ctx.globalAlpha=1;
+  ctx.restore();
+
+  // pigment pooling at the edge
+  ctx.strokeStyle=rgb(mix(sk.top,[40,40,60],.3),0.22); ctx.lineWidth=1.2;
+  ctx.beginPath(); ctx.moveTo(edge[0][0],edge[0][1]); edge.forEach(p=>ctx.lineTo(p[0],p[1])); ctx.closePath(); ctx.stroke();
+}
+
+// a warm drop blooming into wet paper
+function bloom(win, seed, done){
+  const cv=win.querySelector('canvas'), ctx=cv.getContext('2d');
+  const W=win._W, H=win._H, r=rng(seed), edge=win._edge;
+  const cx=W*(0.5+gauss(r)*0.06), cy=H*(0.55+gauss(r)*0.05), R=Math.min(W,H)*0.34;
+  let f=0; const N=46;
+  (function step(){
+    ctx.save();
+    ctx.beginPath(); ctx.moveTo(edge[0][0],edge[0][1]); edge.forEach(p=>ctx.lineTo(p[0],p[1])); ctx.closePath(); ctx.clip();
+    const k=0.18+0.82*Math.sqrt(f/N);
+    ctx.globalAlpha=0.04; ctx.fillStyle='rgb(246,196,130)';
+    fillP(ctx, deform(poly(cx,cy,R*k,R*k*0.9,9,r),3,0.2,r));
+    if(f<N*0.6){ctx.globalAlpha=0.05; ctx.fillStyle='rgb(250,214,160)'; fillP(ctx, deform(poly(cx,cy,R*k*0.5,R*k*0.45,9,r),3,0.2,r));}
+    ctx.restore();
+    if(++f<N) requestAnimationFrame(step); else done && done();
+  })();
+}
+
+/* ---------- build ---------- */
+const here=document.getElementById('here');
+const row=document.getElementById('row');
+const wins=AWAY.map((z,i)=>{
+  const d=document.createElement('div'); d.className='win';
+  d.innerHTML='<canvas></canvas><div class="lab serif"><div class="big">--:--</div><div class="say"></div></div><div class="stamp"></div>';
+  row.appendChild(d); return d;
+});
+let lastBucket='';
+const SEEDS=[71,13,29,47];
+function hfOf(t){return t.h+t.m/60;}
+function refresh(force){
+  const now=new Date();
+  const ht=hm(HOME,now);
+  document.getElementById('hereT').textContent=fmt(ht);
+  document.getElementById('hereS').textContent=hereSay(ht.h);
+  const ts=AWAY.map(z=>hm(z,now));
+  wins.forEach((w,i)=>{
+    w.querySelector('.big').textContent=fmt(ts[i]);
+    w.querySelector('.say').textContent=awayState(ts[i].h)[0];
+  });
+  // repaint skies every quarter hour, or on resize
+  const bucket=[ht,...ts].map(t=>t.h*4+Math.floor(t.m/15)).join(',')+'|'+here.clientWidth;
+  if(force || bucket!==lastBucket){
+    lastBucket=bucket;
+    paint(here,hfOf(ht),SEEDS[0],true);
+    wins.forEach((w,i)=>{paint(w,hfOf(ts[i]),SEEDS[i+1],false); if(w._bloomed) bloomStill(w,i);});
+  }
+  return ts;
+}
+function bloomStill(w,i){ // after repaint, keep the warm mark without animating
+  bloom(w, 500+i, null);
+}
+
+
+/* ---------- the message ---------- */
+const field=document.getElementById('field'), txt=document.getElementById('txt'), send=document.getElementById('send');
+const sent=document.getElementById('sent'), end=document.getElementById('end'), again=document.getElementById('again');
+const DRAFTS=[
+  {t:'在吗', keep:0},
+  {t:'吃了没', keep:0},
+  {t:'最近咋样啊', keep:0},
+  {t:'嗯…说啥呢', keep:0},
+];
+const FINAL='没啥事，就是突然想你了';
+let state='idle', speed=1;
+const wait=ms=>new Promise(res=>setTimeout(res,ms/speed));
+async function typeIn(s,slow){
+  for(const ch of s){ txt.textContent+=ch; await wait((slow?170:115)+Math.random()*90); }
+}
+async function backOut(keep){
+  while(txt.textContent.length>keep){ txt.textContent=txt.textContent.slice(0,-1); await wait(55); }
+}
+async function compose(){
+  state='typing'; field.classList.add('typing');
+  await wait(500);
+  for(const d of DRAFTS){
+    await typeIn(d.t);
+    await wait(650+Math.random()*300);
+    await backOut(d.keep);
+    await wait(380);
+  }
+  await wait(900);
+  await typeIn(FINAL,true);
+  state='ready'; send.disabled=false; send.classList.add('ready');
+}
+field.addEventListener('click',()=>{
+  if(state==='idle') compose();
+  else if(state==='typing') speed=2.2;
+});
+
+function flyTo(fromEl, toEl, delay){
+  return new Promise(res=>{
+    const a=fromEl.getBoundingClientRect(), b=toEl.getBoundingClientRect();
+    const x0=a.left+a.width*0.7, y0=a.top+a.height*0.5;
+    const x1=b.left+b.width*0.5, y1=b.top+b.height*0.55;
+    const dot=document.createElement('div'); dot.className='dot'; document.body.appendChild(dot);
+    dot.style.left=x0+'px'; dot.style.top=y0+'px'; dot.style.opacity='0';
+    const mx=(x0+x1)/2+(x1-x0)*0.15, my=Math.min(y0,y1)-60;
+    const kf=[];
+    for(let i=0;i<=24;i++){
+      const t=i/24, u=1-t;
+      const x=u*u*x0+2*u*t*mx+t*t*x1, y=u*u*y0+2*u*t*my+t*t*y1;
+      kf.push({transform:`translate(${x-x0}px,${y-y0}px) scale(${1-0.4*t})`, opacity: t<0.08?t/0.08: t>0.9?(1-t)/0.1:1});
+    }
+    const an=dot.animate(kf,{duration:1300,delay,easing:'cubic-bezier(.35,.1,.3,1)',fill:'forwards'});
+    an.onfinish=()=>{dot.remove();res();};
+  });
+}
+
+send.addEventListener('click',async()=>{
+  if(state!=='ready') return;
+  state='sent'; send.disabled=true; send.classList.remove('ready');
+  field.classList.remove('typing'); txt.textContent='';
+  field.querySelector('.ph').textContent='';
+  const ht=hm(HOME);
+  const b=document.createElement('div'); b.className='bubble';
+  b.innerHTML=FINAL+'<span class="meta">'+fmt(ht)+'</span>';
+  sent.appendChild(b); requestAnimationFrame(()=>requestAnimationFrame(()=>b.classList.add('on')));
+  await new Promise(r=>setTimeout(r,650));
+  const ts=AWAY.map(z=>hm(z));
+  await Promise.all(wins.map((w,i)=>flyTo(b,w,i*380).then(()=>new Promise(res=>{
+    w._bloomed=true;
+    bloom(w,500+i,()=>{
+      const st=awayState(ts[i].h);
+      const s=w.querySelector('.stamp');
+      s.innerHTML='已送达 '+fmt(ts[i])+'<br>'+st[1];
+      s.classList.add('on'); res();
+    });
+  }))));
+  await new Promise(r=>setTimeout(r,900));
+  const ps=end.querySelectorAll('p');
+  for(let i=0;i<ps.length;i++){ ps[i].classList.add('on'); await new Promise(r=>setTimeout(r,i===1?1800:1100)); }
+  again.classList.add('on');
+  end.scrollIntoView({behavior:'smooth',block:'end'});
+});
+
+again.addEventListener('click',()=>{
+  if(!again.classList.contains('on')) return;
+  sent.innerHTML=''; state='idle'; speed=1;
+  field.querySelector('.ph').textContent='想说点什么…';
+  end.querySelectorAll('p').forEach(p=>p.classList.remove('on')); again.classList.remove('on');
+  wins.forEach(w=>{w._bloomed=false; w.querySelector('.stamp').classList.remove('on');});
+  refresh(true);
+  window.scrollTo({top:0,behavior:'smooth'});
+});
+
+refresh(true);
+setInterval(()=>refresh(false),20000);
+let rt; window.addEventListener('resize',()=>{clearTimeout(rt); rt=setTimeout(()=>refresh(false),200);});
+})();
+</script>
+</body>
+</html>
