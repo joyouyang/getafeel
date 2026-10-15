@@ -41,8 +41,9 @@ body.flying #hint,body.flying #doneBtn,body.flying #pop{opacity:0!important;poin
 
 #viewer{position:fixed;inset:0;z-index:20;background:#000;opacity:0;visibility:hidden;transition:opacity .45s ease}
 #viewer.open{opacity:1;visibility:visible}
-#viewer.land #frame{animation:land .9s cubic-bezier(.2,.9,.25,1) both}
-@keyframes land{0%{opacity:0;transform:scale(1.07);filter:blur(10px)}55%{opacity:1;filter:blur(0)}72%{transform:scale(.992)}100%{transform:none}}
+#veil{position:absolute;inset:0;z-index:2;pointer-events:none;opacity:0}
+#veil.on{animation:veil 1s ease-out both}
+@keyframes veil{0%,25%{opacity:1}100%{opacity:0}}
 #frame{position:absolute;left:0;top:0;width:100%;height:calc(100% - env(safe-area-inset-bottom) - 72px);border:0;background:transparent}
 #bar{position:absolute;left:0;right:0;bottom:0;height:calc(env(safe-area-inset-bottom) + 72px);padding:10px 10px calc(env(safe-area-inset-bottom) + 12px);
   display:flex;align-items:center;justify-content:center;gap:7px;background:rgba(14,19,48,.9);border-top:1px solid rgba(255,236,200,.1)}
@@ -103,6 +104,7 @@ body.flying #hint,body.flying #doneBtn,body.flying #pop{opacity:0!important;poin
 
 <div id="viewer">
   <iframe id="frame" title="作品" sandbox="allow-scripts" allow="autoplay"></iframe>
+  <div id="veil"></div>
   <div id="bar">
     <button id="back" type="button" aria-label="回到星空">←</button>
     <button class="c" data-v="me" type="button">Me！</button>
@@ -577,6 +579,7 @@ function draw(t, now, dt) {
       const appear = sstep(0, 1, planetsIn * 1.6 - (hashStr(p.c) % 100) / 160);
       const dim = state.choice[p.c] === 'no' ? .55 : 1;
       if (rs > 6000) continue;
+      if (V && V.Z > 3 && p !== fly.p) continue;   // 冲向目标时其他星球早已飞出画面，不再画
       drawPlanet(ctx, p, x, y, rs, t, now, appear * dim, false);
     }
   }
@@ -679,17 +682,21 @@ function openWork(p) {
   document.body.classList.add('flying');
   syncBar();
 }
+let pauseTimer = 0;
 function landed() {
   fly.done = true;
   state.seen[fly.p.c] = 1; save();
-  const C = fly.p.P.colors;
-  viewer.style.background = C[0];
-  viewer.classList.add('open', 'land');
-  setTimeout(() => viewer.classList.remove('land'), 1000);
-  setTimeout(() => { if (opened) paused = true; }, 700);
+  const C = fly.p.P.colors, veil = $('veil');
+  viewer.style.background = C[0]; veil.style.background = C[0];
+  frame.srcdoc = fly.w.h;   // 落地时才加载作品，飞行时不和动画抢资源
+  veil.classList.remove('on'); void veil.offsetWidth; veil.classList.add('on');
+  viewer.classList.add('open');
+  clearTimeout(pauseTimer);
+  pauseTimer = setTimeout(() => { if (opened && fly && fly.dir > 0 && fly.done) paused = true; }, 500);   // 作品盖满后停掉星空，省电
 }
 function closeWork() {
-  if (!opened || !fly || !fly.done) return;
+  if (!opened || !fly || !fly.done || fly.dir < 0 || fly.closing) return;
+  fly.closing = true; clearTimeout(pauseTimer);
   const p = fly.p;
   if (paused) { paused = false; last = performance.now(); requestAnimationFrame(loop); }
   viewer.classList.remove('open');
@@ -837,7 +844,6 @@ function loop(now) {
     if (fly.dir > 0) {
       if (!fly.done) {
         fly.k = u;
-        if (u > .55 && !fly.loaded) { fly.loaded = true; frame.srcdoc = fly.w.h; }
         if (u >= 1) landed();
       }
     } else {
