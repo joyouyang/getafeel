@@ -130,8 +130,8 @@ body.flying #hint,body.flying #doneBtn,body.flying #pop{opacity:0!important;poin
 (() => {
 'use strict';
 /* 后台：填上就会自动记录；留空则只显示一段可复制的结果 */
-const ENDPOINT = '';          // 例如 https://xxxx.supabase.co/rest/v1/responses
-const ANON_KEY = '';
+const ENDPOINT = 'https://chrxqhraickomolmvnap.supabase.co/rest/v1/responses';
+const ANON_KEY = 'sb_publishable_Me2STWDSBkhxlGJWXPWBKQ_a9vgAQaI';   // 只能写入，读改删都被 RLS 挡住
 
 const $ = (id) => document.getElementById(id);
 const store = { get(k) { try { return JSON.parse(localStorage.getItem(k)); } catch (e) { return null; } },
