@@ -29,7 +29,13 @@ canvas{display:block}
 #doneBtn{position:fixed;left:50%;bottom:calc(env(safe-area-inset-bottom) + 26px);transform:translateX(-50%);font:inherit;font-family:var(--hand);font-size:15px;letter-spacing:.36em;
   padding:11px 22px 11px 28px;border-radius:999px;color:var(--ink);opacity:0;pointer-events:none;transition:opacity 1.4s ease;cursor:pointer}
 #doneBtn.on{pointer-events:auto;opacity:1}
-body.flying #hint,body.flying #doneBtn,body.flying #pop{opacity:0!important;pointer-events:none!important}
+#aboutBtn{position:fixed;top:calc(env(safe-area-inset-top) + 14px);right:calc(env(safe-area-inset-right) + 14px);z-index:12;width:38px;height:38px;border-radius:50%;
+  font:inherit;font-family:var(--hand);font-size:18px;color:var(--ink);cursor:pointer;opacity:0;pointer-events:none;transition:opacity 1.4s ease}
+#aboutBtn.on{opacity:1;pointer-events:auto}
+.qlist{text-align:left;font-size:13px;line-height:1.75;margin:0 0 16px}
+.qlist h3{font-family:var(--hand);font-weight:400;font-size:15px;color:var(--warm);margin:12px 0 2px;letter-spacing:.08em}
+.qlist ol{margin:0;padding-left:1.7em}
+body.flying #aboutBtn,body.flying #hint,body.flying #doneBtn,body.flying #pop{opacity:0!important;pointer-events:none!important}
 
 /* 星球上的小卡片 */
 #pop{position:fixed;left:0;top:0;z-index:15;width:236px;padding:15px 14px 13px;border-radius:18px;text-align:center;opacity:0;pointer-events:none;
@@ -100,6 +106,7 @@ body.flying #hint,body.flying #doneBtn,body.flying #pop{opacity:0!important;poin
 <canvas id="sky"></canvas>
 <div id="hint">拖 动 星 空 · 挑 一 颗 降 落</div>
 <button id="doneBtn" class="glass" type="button">看 完 了</button>
+<button id="aboutBtn" class="glass" type="button" aria-label="这些星球从哪里来">?</button>
 <div id="pop" class="glass"></div>
 
 <div id="viewer">
@@ -193,7 +200,7 @@ function begin() {
   setTimeout(() => intro.classList.add('gone'), total);
   setTimeout(() => {
     buildPlanets(); planetsT0 = performance.now();
-    setTimeout(() => $('hint').classList.add('on'), 1400);
+    setTimeout(() => { $('hint').classList.add('on'); $('aboutBtn').classList.add('on'); }, 1400);
     setTimeout(() => $('hint').classList.remove('on'), 9000);
     updateDone();
   }, total - 600);
@@ -595,7 +602,7 @@ function draw(t, now, dt) {
 /* ================= 手指：拖是飞，点是降落 ================= */
 let down = null, lastMoveT = 0;
 addEventListener('pointerdown', (e) => {
-  if (fly || opened || e.target.closest('#panel,#doneBtn,#lock,#viewer,#pop')) return;
+  if (fly || opened || e.target.closest('#panel,#doneBtn,#aboutBtn,#lock,#viewer,#pop')) return;
   down = { x: e.clientX, y: e.clientY, moved: 0 }; cam.vx = cam.vy = 0; lastMoveT = performance.now();
 });
 addEventListener('pointermove', (e) => {
@@ -737,6 +744,17 @@ function chipsHTML(list, tagFn) { return list.map((c) => `<button class="chip" d
 function showPanel(html) { hidePop(); boxEl.innerHTML = html; panel.classList.add('show'); }
 function hidePanel() { panel.classList.remove('show'); }
 doneBtn.addEventListener('click', stepPick);
+$('aboutBtn').addEventListener('click', () => {
+  showPanel(`<h2>这些星球从哪里来</h2>
+    <p class="sub">每位朋友回答了下面 10 个问题，不想答的可以只回一个 👽。<br>每颗星球只用了同一位朋友的一部分回答：只用 A、B、C 其中一组，或者两组、三组，一共 7 种组合。<br>哪颗星球用了哪些，这里先不说。</p>
+    <div class="qlist">
+      <h3>A 组</h3><ol start="1"><li>你的出生日期，年月日和时辰</li><li>你的真名</li><li>你的出生地</li></ol>
+      <h3>B 组</h3><ol start="4"><li>微信 combo：头像、朋友圈背景（或 IG 头像和置顶），加个性签名</li><li>你的"人生作品"：电影、书、戏剧、音乐、游戏、综艺都行，可以不止一个，也可以没有</li><li>你的 comfort food：不知道吃什么的时候就吃它</li><li>你的 comfort 衣服：不知道穿什么的时候就穿它</li></ol>
+      <h3>C 组</h3><ol start="8"><li>解锁手机后看到的第一屏截图</li><li>随便发一句话，什么都行，不一定连贯、有逻辑</li><li>从 1 到 100 里随机选一个数字</li></ol>
+    </div>
+    <div class="row"><button class="btn pri" id="pBack" type="button">知道了</button></div>`);
+  $('pBack').onclick = hidePanel;
+});
 function stepPick() {
   const cand = Object.keys(state.choice).filter((c) => state.choice[c] !== 'no');
   if (!cand.length) {
