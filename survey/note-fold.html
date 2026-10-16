@@ -1,0 +1,35 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name="theme-color" content="#cfdbe8">
+<meta name="robots" content="noindex,nofollow">
+<title>传纸条 · 折痕</title>
+<link rel="preload" href="fonts/kuaile.woff2" as="font" type="font/woff2" crossorigin>
+<link rel="stylesheet" href="common.css">
+<link rel="stylesheet" href="note-core.css">
+<style>
+/* 只用一道对折的折痕 + 一个折角：纸条被折过。扔 = 往下一折，变成窄条递走。 */
+:root{--desk:#cfdbe8}
+.note{background-image:linear-gradient(180deg,rgba(0,0,0,.025) 0,transparent 50%,rgba(0,0,0,.04) 50%,transparent 51%),linear-gradient(180deg,transparent calc(50% - 1px),rgba(0,0,0,.09) calc(50% - 1px),rgba(255,255,255,.95) 50%,transparent calc(50% + 2px));box-shadow:0 2px 6px rgba(0,0,0,.12)}
+.note::after{content:"";position:absolute;top:0;right:0;width:28px;height:28px;background:linear-gradient(225deg,var(--desk) 50%,#ece5d3 50%);box-shadow:-2px 2px 3px rgba(0,0,0,.08)}
+</style>
+</head>
+<body>
+<div class="wrap" id="app"></div>
+<script src="common.js"></script>
+<script src="ui.js"></script>
+<script src="note-core.js"></script>
+<script>
+(() => {
+const { anim, gone } = GAFNote, C = 'translate(-50%,-50%)';
+const P = 'perspective(900px) ';
+GAFNote.start({ skin: 'fold', verb: '折好递', throwLabel: '折好递回去',
+  out(note) { return gone(note, [{ transform: P + 'none', transformOrigin: '50% 50%' }, { offset: .45, transform: P + 'rotateX(86deg)' }, { transform: P + 'translateX(-120vw) rotateX(86deg) rotate(-6deg)' }], { duration: 900, easing: 'ease-in' }); },
+  in(note) { return anim(note, [{ transform: P + 'translateX(120vw) rotateX(86deg) rotate(6deg)' }, { offset: .55, transform: P + 'rotateX(86deg)' }, { transform: P + 'rotateX(0deg)' }], { duration: 950, easing: 'ease-out' }); },
+});
+})();
+</script>
+</body>
+</html>

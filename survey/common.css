@@ -63,3 +63,14 @@ input::placeholder,textarea::placeholder{color:var(--faint)}
 .seg{display:inline-flex;border:1px solid var(--line2);border-radius:999px;padding:3px;gap:3px;margin:2px 0 4px}
 .seg button{font:inherit;font-size:14px;color:var(--dim);background:none;border:0;border-radius:999px;padding:7px 14px;cursor:pointer}
 .seg button.on{background:var(--warm);color:var(--warm-ink)}
+
+/* 可画可传的图片格 + 画板弹层 */
+.pics{grid-template-columns:repeat(2,minmax(0,1fr))}
+.slot.pic{cursor:default;gap:8px}
+.slot.pic .plabel{font-size:14px;color:var(--ink)}
+.pbtn{position:relative;overflow:hidden;font:inherit;font-size:13px;color:var(--ink);background:rgba(255,255,255,.08);border:1px solid var(--line2);border-radius:999px;padding:6px 12px;cursor:pointer;white-space:nowrap}
+.slot.pic .tag{position:absolute;left:6px;bottom:6px;z-index:2;font-size:11px;padding:2px 7px;border-radius:999px;background:rgba(0,0,0,.6);color:#fff}
+.sheet{position:fixed;inset:0;z-index:100;background:rgba(0,0,0,.45);display:flex;align-items:center;justify-content:center;padding:16px}
+.sheet-card{width:100%;max-width:380px;max-height:100%;overflow:auto;background:var(--card-solid,var(--bg));-webkit-backdrop-filter:none;backdrop-filter:none}
+.sheet .pad canvas{max-width:none}
+body.sheet-open{overflow:hidden}

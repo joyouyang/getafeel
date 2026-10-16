@@ -1,0 +1,77 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name="theme-color" content="#fbfaf6">
+<meta name="robots" content="noindex,nofollow">
+<title>传纸条 · 手绘线</title>
+<link rel="preload" href="fonts/kuaile.woff2" as="font" type="font/woff2" crossorigin>
+<link rel="stylesheet" href="common.css">
+<link rel="stylesheet" href="note-core.css">
+<style>
+/* 不画纸，只画一圈抖动的铅笔线：像随手在本子上框出来的一块。扔 = 缩成一团乱线飞走。 */
+:root{--desk:#fbfaf6}
+.note{background:transparent;padding:30px 26px 26px}
+.outline{position:absolute;inset:0;width:100%;height:100%;overflow:visible;pointer-events:none}
+.outline path,.token path{fill:none;stroke:var(--pencil);stroke-width:2.2;stroke-linecap:round;stroke-linejoin:round}
+.token{position:fixed;left:50%;top:34vh;width:84px;height:84px;z-index:20;pointer-events:none}
+.token svg{width:100%;height:100%;overflow:visible}
+</style>
+</head>
+<body>
+<div class="wrap" id="app"></div>
+<script src="common.js"></script>
+<script src="ui.js"></script>
+<script src="note-core.js"></script>
+<script>
+(() => {
+const { anim, gone } = GAFNote, C = 'translate(-50%,-50%)';
+const wob = (n) => (Math.random() - .5) * n;
+function roughRect(w, h) {   // 一圈抖动的框，起笔和收笔错开一点，像手画的
+  const pts = [], step = 36, add = (x, y) => pts.push(`${(x + wob(4)).toFixed(1)} ${(y + wob(4)).toFixed(1)}`);
+  for (let x = 4; x < w - 4; x += step) add(x, 4); for (let y = 4; y < h - 4; y += step) add(w - 4, y);
+  for (let x = w - 4; x > 4; x -= step) add(x, h - 4); for (let y = h - 4; y > 4; y -= step) add(4, y); add(14, 2);
+  return 'M' + pts.join(' L');
+}
+function scribble() { let d = ''; for (let k = 0; k < 4; k++) { const r = 22 + wob(14), cx = 42 + wob(8), cy = 42 + wob(8);
+  for (let a = 0; a <= 360; a += 30) { const t = (a + k * 50) * Math.PI / 180, rr = r + wob(10); d += (a ? ' L' : (k ? ' M' : 'M')) + (cx + rr * Math.cos(t)).toFixed(1) + ' ' + (cy + rr * Math.sin(t)).toFixed(1); } }
+  return `<svg viewBox="0 0 84 84"><path d="${d}"/></svg>`; }
+let TOKEN_HTML = scribble();
+// 线条每 150ms 换一种抖法（"线条沸腾"），看起来像一帧一帧手画的
+function outline(note) {
+  const svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg'); svg.setAttribute('class', 'outline'); svg.setAttribute('aria-hidden', 'true');
+  const path = document.createElementNS('http://www.w3.org/2000/svg', 'path'); svg.appendChild(path); note.prepend(svg);
+  let frames = [], k = 0;
+  const build = () => { const w = note.offsetWidth, h = note.offsetHeight; svg.setAttribute('viewBox', `0 0 ${w} ${h}`); frames = [0, 1, 2].map(() => roughRect(w, h)); path.setAttribute('d', frames[0]); };
+  new ResizeObserver(build).observe(note); build();
+  const id = setInterval(() => { if (!note.isConnected) return clearInterval(id); path.setAttribute('d', frames[k = (k + 1) % 3]); }, 150);
+}
+const AWAY = [{ transform: C + ' rotate(0)' }, { transform: C + ' translate(32vw,-75vh) rotate(500deg)' }];
+const BACK = [{ transform: C + ' translate(-32vw,-75vh) rotate(-500deg)' }, { offset: .8, transform: C + ' translateY(10px) rotate(10deg)' }, { transform: C }];
+
+function token() { const t = document.createElement('div'); t.className = 'token'; t.setAttribute('aria-hidden', 'true'); t.innerHTML = TOKEN_HTML; document.body.appendChild(t); return t; }
+async function shrinkAway(note) {
+  const t = token();
+  await Promise.all([
+    gone(note, [{ transform: 'none', opacity: 1 }, { transform: 'scale(.25) rotate(20deg)', opacity: 0 }], { duration: 380, easing: 'ease-in' }),
+    anim(t, [{ transform: C + ' scale(.4)', opacity: 0 }, { transform: C + ' scale(1)', opacity: 1 }], { duration: 300, delay: 150, fill: 'both' }),
+  ]);
+  await gone(t, AWAY, { duration: 600, easing: 'cubic-bezier(.45,0,.8,.45)' });
+  t.remove();
+}
+async function growIn(note) {
+  const t = token();
+  const fly = anim(t, BACK, { duration: 650, easing: 'cubic-bezier(.2,.7,.35,1)', fill: 'both' });
+  const open = anim(note, [{ transform: 'scale(.25) rotate(-12deg)', opacity: 0 }, { transform: 'none', opacity: 1 }], { duration: 360, delay: 650 + 60, easing: 'cubic-bezier(.3,1.4,.5,1)' });
+  await fly; await gone(t, [{ opacity: 1 }, { opacity: 0 }], { duration: 200 }); t.remove(); await open;
+}
+
+GAFNote.start({ skin: 'doodle', verb: '揉一揉扔', throwLabel: '揉一揉扔回去', decorate: outline,
+  out(note) { TOKEN_HTML = scribble(); return shrinkAway(note); },
+  in(note) { TOKEN_HTML = scribble(); return growIn(note); },
+});
+})();
+</script>
+</body>
+</html>

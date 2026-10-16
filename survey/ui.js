@@ -48,27 +48,11 @@ function questionInputs(q, sess, onChange) {
     field.placeholder = q.text.ph; field.value = a.text || ''; field.id = 'q' + q.n + '-text'; field.setAttribute('aria-label', '第 ' + q.n + ' 题的回答');
     field.oninput = () => { a.text = field.value; sess.save(); onChange(); };
   }
-  if (q.doodle && q.images) {
-    // 随手画 / 直接传图，二选一：有了一种，另一种自动清掉
+  if (q.images && q.images.some((x) => x.draw)) {
+    // 每张图各自可画可传，比如头像画一张、朋友圈背景传一张
     if (field) body.appendChild(field);
-    const otherSlots = q.images.map((x) => x.slot);
-    let grid, pad;
-    pad = doodlePad(a, q.doodle, sess, onChange, () => { otherSlots.forEach((sl) => delete a.images[sl]); grid.repaint(); });
-    grid = uploadGrid(q, a, sess, onChange, () => { delete a.images[q.doodle.slot]; pad.reset(); });
-    const seg = el('div', 'seg'), bDraw = el('button', null, '✏️ 随手画'), bUp = el('button', null, '🖼 直接传图');
-    bDraw.type = bUp.type = 'button';
-    const note = el('p', 'note', '二选一：画了就不用传图，传了图就不用画。');
-    const panes = el('div');
-    const pick = (which) => {
-      bDraw.classList.toggle('on', which === 'draw'); bUp.classList.toggle('on', which === 'up');
-      pad.hidden = which !== 'draw'; grid.hidden = which !== 'up';
-    };
-    bDraw.onclick = () => pick('draw'); bUp.onclick = () => pick('up');
-    seg.appendChild(bDraw); seg.appendChild(bUp);
-    panes.appendChild(pad); panes.appendChild(grid);
-    body.appendChild(el('p', 'hint', q.choiceLabel || '再选一种方式给我看看你的头像（可选）：'));
-    body.appendChild(seg); body.appendChild(note); body.appendChild(panes);
-    pick(a.images[q.doodle.slot] ? 'draw' : otherSlots.some((sl) => a.images[sl]) ? 'up' : null);
+    body.appendChild(el('p', 'hint', q.choiceLabel || '可以画一张，也可以传一张（可选）'));
+    body.appendChild(pictureSlots(q, a, sess, onChange));
   } else {
     if (q.images) body.appendChild(uploadGrid(q, a, sess, onChange));
     if (field) body.appendChild(field);
@@ -82,8 +66,53 @@ function questionInputs(q, sess, onChange) {
   return box;
 }
 
-/* 随手画：画完自动存成图片放进这一题；onDraw 在有内容时调用（用来清掉另一种） */
-function doodlePad(a, cfg, sess, onChange, onDraw) {
+/* 可画可传的图片格：空着时给"画一张 / 传一张"两个入口，有图时显示缩略图；画的图点开能接着画 */
+function pictureSlots(q, a, sess, onChange) {
+  const grid = el('div', 'imgs pics');
+  q.images.forEach((sl) => {
+    const tile = el('div', 'slot pic');
+    const paint = () => {
+      tile.innerHTML = '';
+      const im = a.images[sl.slot];
+      if (im) {
+        const img = el('img'); img.alt = sl.label; img.src = 'data:' + im.mime + ';base64,' + im.data; tile.appendChild(img);
+        if (im.src === 'doodle') { img.style.cursor = 'pointer'; img.onclick = () => openPad(); }
+        tile.appendChild(el('span', 'tag', (im.src === 'doodle' ? '画的' : '传的') + sl.label));
+        const x = el('button', 'x', '×'); x.type = 'button'; x.setAttribute('aria-label', '删掉' + sl.label);
+        x.onclick = () => { delete a.images[sl.slot]; sess.save(); paint(); onChange(); };
+        tile.appendChild(x);
+      } else {
+        tile.appendChild(el('span', 'plabel', sl.label));
+        const draw = el('button', 'pbtn', '✏️ 画一张'); draw.type = 'button'; draw.onclick = () => openPad();
+        const up = el('label', 'pbtn', '📷 传一张'), inp = el('input'); inp.type = 'file'; inp.accept = 'image/*'; inp.setAttribute('aria-label', '上传' + sl.label);
+        inp.onchange = async () => {
+          const f = inp.files && inp.files[0]; if (!f) return;
+          tile.classList.add('busy');
+          try { a.images[sl.slot] = Object.assign(await compressImage(f), { src: 'upload' }); sess.save(); }
+          catch (err) { alert(err.message); }
+          tile.classList.remove('busy'); paint(); onChange();
+        };
+        up.appendChild(inp); tile.appendChild(draw); tile.appendChild(up);
+      }
+    };
+    const openPad = () => {
+      const sheet = el('div', 'sheet'), box = el('div', 'card stack sheet-card');
+      box.appendChild(el('h2', null, '画一下你的' + sl.label));
+      const pad = doodlePad(a, sl, sess);
+      box.appendChild(pad);
+      const ok = el('button', 'btn pri', '画好了'); ok.type = 'button';
+      const close = () => { sheet.remove(); document.body.classList.remove('sheet-open'); paint(); onChange(); };
+      ok.onclick = close; sheet.onclick = (e) => { if (e.target === sheet) close(); };
+      const r = el('div', 'row'); r.appendChild(ok); box.appendChild(r);
+      sheet.appendChild(box); document.body.appendChild(sheet); document.body.classList.add('sheet-open');
+    };
+    paint(); grid.appendChild(tile);
+  });
+  return grid;
+}
+
+/* 随手画：每画一笔就存成图片放进这一题的 slot */
+function doodlePad(a, slot, sess) {
   const pane = el('div', 'pad');
   const SIZE = 600, COLORS = ['#2b2b33', '#e0656a', '#f2b33d', '#3f8fd8', '#4fa86a'];
   const cv = el('canvas'); cv.width = cv.height = SIZE; cv.setAttribute('aria-label', '画板');
@@ -93,9 +122,9 @@ function doodlePad(a, cfg, sess, onChange, onDraw) {
   const drawStroke = (st) => { x.strokeStyle = st.c; x.lineWidth = st.w; x.beginPath(); st.p.forEach(([px, py], i) => (i ? x.lineTo(px, py) : x.moveTo(px, py))); if (st.p.length === 1) x.lineTo(st.p[0][0] + .1, st.p[0][1]); x.stroke(); };
   const redraw = () => { paintBase(); strokes.forEach(drawStroke); };
   const save = () => {
-    if (!strokes.length && !base) { delete a.images[cfg.slot]; }
-    else { const data = cv.toDataURL('image/jpeg', 0.86).split(',')[1]; a.images[cfg.slot] = { mime: 'image/jpeg', w: SIZE, h: SIZE, bytes: Math.round(data.length * .75), data, name: 'doodle' }; if (onDraw) onDraw(); }
-    sess.save(); onChange();
+    if (!strokes.length && !base) delete a.images[slot.slot];
+    else { const data = cv.toDataURL('image/jpeg', 0.86).split(',')[1]; a.images[slot.slot] = { mime: 'image/jpeg', w: SIZE, h: SIZE, bytes: Math.round(data.length * .75), data, name: 'doodle', src: 'doodle' }; }
+    sess.save();
   };
   const pos = (e) => { const r = cv.getBoundingClientRect(); return [(e.clientX - r.left) / r.width * SIZE, (e.clientY - r.top) / r.height * SIZE]; };
   cv.addEventListener('pointerdown', (e) => { e.preventDefault(); cv.setPointerCapture(e.pointerId); cur = { c: color, w: width, p: [pos(e)] }; strokes.push(cur); drawStroke(cur); });
@@ -109,24 +138,20 @@ function doodlePad(a, cfg, sess, onChange, onDraw) {
   const undo = el('button', 'tool', '撤销'); undo.type = 'button'; undo.onclick = () => { strokes.pop(); redraw(); save(); };
   const clear = el('button', 'tool', '清空'); clear.type = 'button'; clear.onclick = () => { strokes = []; base = null; redraw(); save(); };
   [thick, undo, clear].forEach((b) => tools.appendChild(b));
-  pane.appendChild(cv); pane.appendChild(tools); pane.appendChild(el('p', 'note', '画成什么样都行，越随便越好。只画一个轮廓、一种颜色也可以。'));
-  if (a.images[cfg.slot]) { const im = new Image(); im.onload = () => { base = im; redraw(); }; im.src = 'data:' + a.images[cfg.slot].mime + ';base64,' + a.images[cfg.slot].data; } else redraw();
-  pane.reset = () => { strokes = []; base = null; redraw(); };   // 改成传图时清掉画
+  pane.appendChild(cv); pane.appendChild(tools); pane.appendChild(el('p', 'note', '画成什么样都行，越随便越好。'));
+  const old = a.images[slot.slot];
+  if (old && old.src === 'doodle') { const im = new Image(); im.onload = () => { base = im; redraw(); }; im.src = 'data:' + old.mime + ';base64,' + old.data; } else redraw();
   return pane;
 }
 
-/* 开场说明：时长、可以不答、会交给 AI */
+/* 开场说明：越短越好，点"好呀"就算知情同意 */
 function introCard(sess, modeLine, onStart) {
   const c = el('div', 'card stack');
-  c.innerHTML = `<p class="eyebrow">GET A FEEL · 10 个问题</p><h1>说说你自己</h1>
-    <p class="lead" style="margin:0">${modeLine}大约 3 到 5 分钟。<br>任何一题不想回答，都可以只回一个 👽，不用解释。</p>
-    <p class="note" style="margin:0">你的回答会交给 AI（Claude）来创作 7 件作品，再给你看。原始回答只有组织者能看到；作品里不会原样出现你的名字、数字、原话和原图。</p>`;
-  const lab = el('label', 'consent'); const cb = el('input'); cb.type = 'checkbox'; cb.id = 'consent'; cb.checked = !!sess.s.consent;
-  lab.appendChild(cb); lab.appendChild(el('span', null, '我知道回答会交给 AI 用来生成作品，同意继续。'));
-  c.appendChild(lab);
-  const go = el('button', 'btn pri', '开始'); go.type = 'button'; go.disabled = !cb.checked;
-  cb.onchange = () => { sess.s.consent = cb.checked; sess.save(); go.disabled = !cb.checked; };
-  go.onclick = onStart;
+  c.innerHTML = `<h1>嗨，交个朋友吧？</h1>
+    <p class="lead" style="margin:0">${modeLine}不想答的，发个 👽 就行。</p>
+    <p class="note" style="margin:0">你写的会交给 AI，帮我做几件送你的小作品。原话只有我看得到。</p>`;
+  const go = el('button', 'btn pri', '好呀'); go.type = 'button';
+  go.onclick = () => { sess.s.consent = true; sess.save(); onStart(); };
   const r = el('div', 'row'); r.appendChild(go); c.appendChild(r);
   return c;
 }
@@ -138,8 +163,8 @@ async function doSubmit(sess, mount, extra) {
   try {
     const p = await window.GAF.submit(sess, extra);
     const done = el('div', 'card stack');
-    done.innerHTML = `<div class="done-mark">🪐</div><h2>收到了，谢谢你</h2>
-      <p class="lead" style="margin:0">接下来会用你的回答做出 7 件作品。做好了会通过链接告诉你，到时你可以从里面挑出最像你的那一件。</p>
+    done.innerHTML = `<div class="done-mark">🪐</div><h2>收到啦，谢谢你</h2>
+      <p class="lead" style="margin:0">我去把它们做成送你的小作品，做好了再来找你。</p>
       <p class="note" style="margin:0">回执编号：${p.client_id.slice(0, 8)}　·　用时 ${Math.max(1, Math.round(p.duration_s / 60))} 分钟</p>
       <p class="note" style="margin:0"><a href="./">回到问卷首页</a></p>`;
     mount.replaceWith(done); window.scrollTo({ top: 0 });

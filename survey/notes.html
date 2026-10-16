@@ -1,0 +1,45 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name="robots" content="noindex,nofollow">
+<title>传纸条试样</title>
+<link rel="preload" href="fonts/kuaile.woff2" as="font" type="font/woff2" crossorigin>
+<style>
+@font-face{font-family:"GAFKid";src:url(fonts/kuaile.woff2) format("woff2");font-display:swap}
+:root{--bg:#efe6d4;--ink:#3a3934;--dim:#7a7468;--paper:#fffdf5}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--ink);font:16px/1.6 "GAFKid","PingFang SC",sans-serif}
+main{max-width:720px;margin:0 auto;padding:36px 16px 60px}
+h1{font-weight:400;font-size:30px;margin:0 0 6px}
+.lead{color:var(--dim);margin:0 0 24px}
+.grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(200px,1fr));gap:16px}
+a.n{display:block;text-decoration:none;color:inherit;padding:18px 16px 16px;min-height:150px;transition:transform .15s}
+a.n:hover{transform:rotate(-1deg) translateY(-2px)}
+a.n b{display:block;font-weight:400;font-size:21px;margin-bottom:6px}
+a.n span{font-size:14px;color:var(--dim)}
+.lines{background-color:var(--paper);background-image:linear-gradient(90deg,transparent 22px,#f1a7a7 22px 24px,transparent 24px),repeating-linear-gradient(transparent 0 27px,#bcd5ee 27px 28px);padding-left:36px!important}
+.torn{background:var(--paper);clip-path:polygon(0 100%,0 7px,6% 2px,13% 8px,21% 3px,30% 9px,38% 1px,47% 6px,55% 2px,64% 8px,72% 3px,81% 7px,90% 1px,100% 6px,100% 100%)}
+.fold{background:var(--paper) linear-gradient(180deg,transparent calc(50% - 1px),rgba(0,0,0,.1) calc(50% - 1px),#fff 50%,transparent calc(50% + 2px));position:relative}
+.fold::after{content:"";position:absolute;top:0;right:0;width:22px;height:22px;background:linear-gradient(225deg,var(--bg) 50%,#ece5d3 50%)}
+.doodle{background:#fbfaf6;border:2.5px solid var(--ink);border-radius:255px 12px 225px 12px/12px 225px 12px 255px}
+.grid2{background-color:#fdfefb;background-image:linear-gradient(#d5e6da 1px,transparent 1px),linear-gradient(90deg,#d5e6da 1px,transparent 1px);background-size:14px 14px}
+.foot{color:var(--dim);font-size:13px;margin-top:26px;font-family:"PingFang SC",sans-serif}
+</style>
+</head>
+<body>
+<main>
+<h1>传纸条 · 5 种最简单的纸条</h1>
+<p class="lead">同一套流程：写完扔出去，回应和下一题一起扔回来。每种只用一样东西让人认出"这是张纸条"。</p>
+<div class="grid">
+  <a class="n lines" href="note-lines.html"><b>横线</b><span>只有横线和红色页边线。揉成一个圆团扔走。</span></a>
+  <a class="n torn" href="note-torn.html"><b>撕边</b><span>只有一条随手撕的毛边，每张都不一样。整张抛出去。</span></a>
+  <a class="n fold" href="note-fold.html"><b>折痕</b><span>只有一道对折痕和一个折角。往下一折，变成窄条递走。</span></a>
+  <a class="n doodle" href="note-doodle.html"><b>手绘线</b><span>不画纸，只画一圈会抖的铅笔线。缩成一团乱线扔走。</span></a>
+  <a class="n grid2" href="note-grid.html"><b>方格叠方块</b><span>方格纸，叠成写着"给你"的小方块，从桌上推给同桌。</span></a>
+</div>
+<p class="foot">内部试看页。字体：站酷快乐体（SIL OFL）。提交的数据进同一张表，skin 字段标出是哪一种。</p>
+</main>
+</body>
+</html>

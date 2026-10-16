@@ -1,0 +1,58 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name="theme-color" content="#dcc39c">
+<meta name="robots" content="noindex,nofollow">
+<title>传纸条 · 方格叠方块</title>
+<link rel="preload" href="fonts/kuaile.woff2" as="font" type="font/woff2" crossorigin>
+<link rel="stylesheet" href="common.css">
+<link rel="stylesheet" href="note-core.css">
+<style>
+/* 方格纸 + 叠成小方块：小时候传给同桌的那种。扔 = 叠成方块从桌面推过去。 */
+:root{--desk:#dcc39c}
+.note,.token{background-color:#fdfefb;background-image:linear-gradient(#d5e6da 1px,transparent 1px),linear-gradient(90deg,#d5e6da 1px,transparent 1px);background-size:16px 16px}
+.note{box-shadow:0 2px 5px rgba(80,50,10,.18)}
+.token{position:fixed;left:50%;top:32vh;width:76px;height:76px;z-index:20;pointer-events:none;display:flex;align-items:center;justify-content:center;font-family:var(--kid);font-size:17px;color:var(--pen);box-shadow:2px 3px 6px rgba(80,50,10,.3)}
+.token::before{content:"";position:absolute;inset:0;background:linear-gradient(45deg,transparent calc(50% - .8px),rgba(0,0,0,.18) 50%,transparent calc(50% + .8px)),linear-gradient(-45deg,transparent calc(50% - .8px),rgba(0,0,0,.18) 50%,transparent calc(50% + .8px))}
+.token span{position:relative;background:#fdfefb;padding:0 3px;transform:rotate(-8deg)}
+</style>
+</head>
+<body>
+<div class="wrap" id="app"></div>
+<script src="common.js"></script>
+<script src="ui.js"></script>
+<script src="note-core.js"></script>
+<script>
+(() => {
+const { anim, gone } = GAFNote, C = 'translate(-50%,-50%)';
+let TOKEN_HTML = '<span>给你</span>';
+const AWAY = [{ transform: C + ' rotate(-6deg)' }, { transform: C + ' translateX(90vw) rotate(14deg)' }];
+const BACK = [{ transform: C + ' translateX(90vw) rotate(20deg)' }, { offset: .85, transform: C + ' translateX(-8px) rotate(-4deg)' }, { transform: C + ' rotate(-6deg)' }];
+
+function token() { const t = document.createElement('div'); t.className = 'token'; t.setAttribute('aria-hidden', 'true'); t.innerHTML = TOKEN_HTML; document.body.appendChild(t); return t; }
+async function shrinkAway(note) {
+  const t = token();
+  await Promise.all([
+    gone(note, [{ transform: 'none', opacity: 1 }, { transform: 'scale(.25) rotate(20deg)', opacity: 0 }], { duration: 380, easing: 'ease-in' }),
+    anim(t, [{ transform: C + ' scale(.4)', opacity: 0 }, { transform: C + ' scale(1)', opacity: 1 }], { duration: 300, delay: 150, fill: 'both' }),
+  ]);
+  await gone(t, AWAY, { duration: 520, easing: 'cubic-bezier(.45,0,.8,.45)' });
+  t.remove();
+}
+async function growIn(note) {
+  const t = token();
+  const fly = anim(t, BACK, { duration: 600, easing: 'cubic-bezier(.2,.7,.35,1)', fill: 'both' });
+  const open = anim(note, [{ transform: 'scale(.25) rotate(-12deg)', opacity: 0 }, { transform: 'none', opacity: 1 }], { duration: 360, delay: 600 + 60, easing: 'cubic-bezier(.3,1.4,.5,1)' });
+  await fly; await gone(t, [{ opacity: 1 }, { opacity: 0 }], { duration: 200 }); t.remove(); await open;
+}
+
+GAFNote.start({ skin: 'grid', verb: '叠好传', throwLabel: '叠好传回去',
+  out(note) { TOKEN_HTML = '<span>给你</span>'; return shrinkAway(note); },
+  in(note) { TOKEN_HTML = '<span>回你</span>'; return growIn(note); },
+});
+})();
+</script>
+</body>
+</html>
