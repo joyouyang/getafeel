@@ -34,6 +34,13 @@ const store = {
   del(k) { try { localStorage.removeItem(k); } catch (e) {} },
 };
 const uuid = () => (crypto.randomUUID ? crypto.randomUUID() : 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, (c) => { const r = Math.random() * 16 | 0; return (c === 'x' ? r : (r & 3 | 8)).toString(16); }));
+/* 设备编号：这个浏览器第一次打开时生成，之后一直保留，只用来发现"同一台手机交了两次"。
+ * 清掉浏览器数据、无痕模式、换浏览器（包括微信内置浏览器和 Safari 之间）都会变，不能拿来认人；认人靠链接里的邀请码。 */
+function device() {
+  let d = store.get('gaf-device');
+  if (!d || !d.id) { d = { id: uuid(), submits: [] }; store.set('gaf-device', d); }
+  return d;
+}
 
 /* 一份答卷的状态；每种模式各自一份草稿，刷新不丢 */
 function session(mode, keyName) {   // keyName：同一种问法下不同外壳各存各的草稿
@@ -84,6 +91,7 @@ function buildPayload(sess, extra = {}) {
     started_at: s.started_at, submitted_at: now.toISOString(),
     duration_s: Math.round((now - new Date(s.started_at)) / 1000),
     consent: { ai: !!s.consent },
+    device_id: device().id, device_prev: device().submits.length,   // device_prev：这台设备之前已经交过几次
     ua: navigator.userAgent.slice(0, 160), lang: navigator.language,
     answers: QUESTIONS.map((q) => {
       const a = s.answers[q.n] || { text: '', skipped: false, images: {} };
@@ -102,6 +110,7 @@ async function submit(sess, extra) {
   const res = await fetch(ENDPOINT, { method: 'POST', headers: { 'Content-Type': 'application/json', apikey: ANON_KEY, Prefer: 'return=minimal' }, body: JSON.stringify({ payload }) });
   if (!res.ok) throw new Error('提交没有成功（' + res.status + '）');
   sess.s.submitted = true; sess.clear();
+  const d = device(); d.submits.push(payload.client_id); store.set('gaf-device', d);
   store.set('gaf-survey-receipt', { client_id: payload.client_id, mode: payload.mode, at: payload.submitted_at });
   return payload;
 }
