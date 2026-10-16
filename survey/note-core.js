@@ -1,7 +1,7 @@
 /* 传纸条的共用内核：开场纸条 → 每张纸条 = 对上一题的回应（+ 追问）+ 下一题 → 扔出去 → 下一张扔回来 → 最后一张交卷。
  * 外壳只管纸条长什么样、怎么扔：
  *   GAFNote.start({ skin, swipe, introLine, throwLabel, out(note, kind, info), in(note, kind), decorate(note, i) })
- *   swipe: true 时没有"扔"按钮，往左滑纸条就扔走（info.dx 是松手时纸条已经被拖出去的距离；上下滑仍是滚动页面）；
+ *   swipe: true 时没有按钮：往左滑扔走、往右滑捡回上一张（info.dx 是松手时纸条已经被拖出去的距离；上下滑仍是滚动页面）；
  *   out / in 返回 Promise；kind 是 'next'（往下传）或 'back'（捡回上一张）。 */
 (() => {
 'use strict';
@@ -17,16 +17,12 @@ function tally(k) {
   for (let j = 0; j < k; j++) s += `<path d="${STROKES[j % 5]}" transform="translate(${Math.floor(j / 5) * 44} 0)"/>`;
   return s + '</svg>';
 }
-/* 手画的箭头：从题目那边弯下来，指向回答框；每次抖得不一样 */
+/* 上滑提示里的手画小箭头：dir = -1 朝左，1 朝右 */
 const wob = (n) => (Math.random() - 0.5) * n;
 const f1 = (x) => x.toFixed(1);
-function arrow() {
-  const d = `M${f1(96 + wob(8))} ${f1(4 + wob(3))} C ${f1(92 + wob(8))} ${f1(24 + wob(6))}, ${f1(62 + wob(8))} ${f1(34 + wob(4))}, 22 38`;
-  const head = `M22 38 L${f1(34 + wob(3))} ${f1(29 + wob(3))} M22 38 L${f1(35 + wob(3))} ${f1(44 + wob(2))}`;
-  return el('div', 'arrow', `<svg viewBox="0 0 120 48" aria-hidden="true"><path d="${d}"/><path d="${head}"/></svg>`);
-}
-function leftArrow() {
-  return `<svg viewBox="0 0 44 24" aria-hidden="true"><path d="M41 12 C 30 ${f1(11 + wob(3))}, 16 ${f1(13 + wob(3))}, 4 12"/><path d="M4 12 L${f1(13 + wob(2))} ${f1(4 + wob(2))} M4 12 L${f1(13 + wob(2))} ${f1(20 + wob(2))}"/></svg>`;
+function sideArrow(dir) {
+  const svg = `<svg viewBox="0 0 44 24" aria-hidden="true"><path d="M41 12 C 30 ${f1(11 + wob(3))}, 16 ${f1(13 + wob(3))}, 4 12"/><path d="M4 12 L${f1(13 + wob(2))} ${f1(4 + wob(2))} M4 12 L${f1(13 + wob(2))} ${f1(20 + wob(2))}"/></svg>`;
+  return dir > 0 ? svg.replace('<svg ', '<svg style="transform:scaleX(-1)" ') : svg;
 }
 /* 揉纸的沙沙声：一小段过滤过的噪声，不用音频文件 */
 let ac = null;
@@ -37,9 +33,9 @@ function rustle(dur = 0.28) {
     src.buffer = buf; src.connect(f); f.connect(g); g.connect(ac.destination); src.start(); } catch (e) {}
 }
 
-/* 往左滑就扔走。手指先往哪个方向走就算哪种手势：横着往左是扔，竖着是正常滚动页面；在输入框、按钮、画板上起手不算。
- * canThrow() 为假时拖不远，松手弹回并提示。 */
-function swipeable(note, { canThrow, onThrow, hint }) {
+/* 往左滑扔走，往右滑捡回上一张。手指先往哪个方向走就算哪种手势：横着是扔或捡，竖着是正常滚动页面；在输入框、按钮、画板上起手不算。
+ * canThrow() 为假时往左拖不远，松手弹回并提示；canBack() 为假（第一题）时不能往右拖。 */
+function swipeable(note, { canThrow, onThrow, canBack, onBack, hint }) {
   let active = false, dragging = false, sx = 0, sy = 0, dx = 0, lx = 0, lt = 0, vel = 0;
   const skip = (t) => t.closest('input,textarea,button,label,canvas,a,select,.pic,.sheet');
   const place = () => (note.style.transform = `translateX(${dx}px) rotate(${(dx * 0.02).toFixed(2)}deg)`);
@@ -49,19 +45,20 @@ function swipeable(note, { canThrow, onThrow, hint }) {
     const d = x - sx, v = y - sy;
     if (!dragging) {
       if (Math.abs(d) < 6 && Math.abs(v) < 6) return;
-      if (d < 0 && Math.abs(d) > Math.abs(v) * 1.2) dragging = true;
+      if (Math.abs(d) > Math.abs(v) * 1.2 && (d < 0 || canBack())) dragging = true;
       else { active = false; return; }
       note.classList.add('dragging');
     }
     if (e.cancelable) e.preventDefault();
     const now = performance.now(); vel = (x - lx) / Math.max(1, now - lt); lx = x; lt = now;
-    dx = Math.min(0, canThrow() ? d : d * 0.22); place();
+    dx = d < 0 ? (canThrow() ? d : d * 0.22) : (canBack() ? d : 0); place();
   };
   const finish = () => {
     if (!active) return; active = false;
     if (!dragging) return;
     note.classList.remove('dragging');
     if (canThrow() && (dx < -100 || (dx < -30 && vel < -0.6))) { onThrow(dx); return; }
+    if (canBack() && (dx > 100 || (dx > 30 && vel > 0.6))) { onBack(dx); return; }
     const from = note.style.transform; note.style.transform = '';
     note.animate([{ transform: from }, { transform: 'none' }], { duration: 260, easing: 'cubic-bezier(.3,1.5,.5,1)' });
     if (!canThrow() && dx < -12) { hint.warn(); note.animate([{ transform: 'translateX(0)' }, { transform: 'translateX(-6px)' }, { transform: 'translateX(6px)' }, { transform: 'translateX(0)' }], { duration: 260, delay: 220 }); }
@@ -95,17 +92,20 @@ function start(cfg) {
     note.appendChild(box);
   }
 
-  /* 纸条底部：上滑提示（swipe 模式）或"扔"按钮 */
-  function thrower(note, label, canThrow, onThrow, fixed) {   // fixed：按钮就用 label，不换成外壳的"扔"字样
+  /* 纸条底部：左右滑提示（swipe 模式）或"扔"按钮。onBack 为空表示没有上一张 */
+  function thrower(note, label, canThrow, onThrow, fixed, onBack) {   // fixed：按钮就用 label，不换成外壳的"扔"字样
     if (!cfg.swipe) {
       const b = btn('btn pri', fixed ? label : (cfg.throwLabel || label));
       b.onclick = () => { if (!busy && canThrow()) onThrow(0); };
       return { node: b, refresh: () => (b.disabled = !canThrow()) };
     }
-    const h = el('div', 'swipe', leftArrow() + `<span>${fine ? '往左拖' : '往左滑'}，${label}</span>`), msg = el('p', 'warn');
-    const wrap = el('div', 'swipe-wrap'); wrap.appendChild(h); wrap.appendChild(msg);
+    const verb = fine ? '拖' : '滑', row = el('div', 'swipe-row');
+    const h = el('div', 'swipe', sideArrow(-1) + `<span>往左${verb}，${label}</span>`), msg = el('p', 'warn');
+    row.appendChild(h);
+    if (onBack) row.appendChild(el('div', 'swipe back', `<span>捡回上一张</span>` + sideArrow(1)));
+    const wrap = el('div', 'swipe-wrap'); wrap.appendChild(row); wrap.appendChild(msg);
     const hint = { warn: (t) => { msg.textContent = t || '先写一点，或者点「不告诉你」'; msg.classList.remove('show'); void msg.offsetWidth; msg.classList.add('show'); } };
-    swipeable(note, { canThrow: () => !busy && canThrow(), onThrow, hint });
+    swipeable(note, { canThrow: () => !busy && canThrow(), onThrow, canBack: () => !busy && !!onBack, onBack: (dx) => onBack(dx), hint });
     return { node: wrap, hint, refresh: () => { h.classList.toggle('ready', canThrow()); if (canThrow()) msg.classList.remove('show'); } };
   }
 
@@ -122,9 +122,9 @@ function start(cfg) {
       return note;
     }
     if (k > 0) replyPart(note, QUESTIONS[k - 1]);
-    const r = el('div', 'nav'), back = btn('link', '← 捡回上一张');
-    back.onclick = () => { if (busy) return; leave(); sess.s.cursor = k - 1; sess.save(); move(k - 1, 'back'); };
-    if (k > 0) r.appendChild(back);
+    const goBack = k > 0 ? (dx) => { if (busy) return; leave(); sess.s.cursor = k - 1; sess.save(); move(k - 1, 'back', null, { dx: dx || 0 }); } : null;
+    const r = el('div', 'nav');
+    if (k > 0 && !cfg.swipe) { const back = btn('link', '← 捡回上一张'); back.onclick = () => goBack(0); r.appendChild(back); }
 
     if (k === END) {   // 最后一张：交卷
       note.appendChild(el('p', 'lead', '就这些啦，谢谢你陪我传纸条。'));
@@ -141,8 +141,8 @@ function start(cfg) {
           t.node.classList.remove('sending'); sending = false;
         }
       };
-      t = thrower(note, '都交给你', () => !sending, send, true); t.refresh();
-      if (cfg.swipe) { note.appendChild(r); note.appendChild(t.node); }
+      t = thrower(note, '都交给你', () => !sending, send, true, goBack); t.refresh();
+      if (cfg.swipe) note.appendChild(t.node);
       else { r.appendChild(t.node); note.appendChild(r); }
       note.appendChild(err);
       return note;
@@ -157,15 +157,13 @@ function start(cfg) {
       sess.s.feedback = (sess.s.feedback || []).filter((f) => f.n !== q.n).concat([{ n: q.n, text: feedbackFor(q.n, a) }]);
       sess.s.cursor = k + 1; sess.save(); move(k + 1, 'next', null, { dx });
     };
-    const t = thrower(note, '扔回给我', () => sess.isDone(q.n), toss);
+    const t = thrower(note, '扔回给我', () => sess.isDone(q.n), toss, false, goBack);
     const box = questionInputs(q, sess, () => t.refresh()); note.appendChild(box);
-    const target = box.querySelector('input[type=text],input[type=number],textarea,.imgs');
-    if (target) target.before(arrow());
     note.addEventListener('keydown', (e) => {
       if (e.key !== 'Enter' || e.target.tagName !== 'INPUT' || !e.target.closest('.qbody')) return;
       if (sess.isDone(q.n) && !busy) toss(0); else if (t.hint) t.hint.warn();
     });
-    if (cfg.swipe) { note.appendChild(r); note.appendChild(t.node); }
+    if (cfg.swipe) note.appendChild(t.node);
     else { if (!k) r.appendChild(el('span')); r.appendChild(t.node); note.appendChild(r); }
     t.refresh();
     note.focusField = () => box.focusField && box.focusField();

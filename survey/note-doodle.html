@@ -9,47 +9,49 @@
 <link rel="stylesheet" href="common.css">
 <link rel="stylesheet" href="note-core.css">
 <style>
-/* 正式版：不画纸，只画一圈会抖的线，像在本子上随手框出来的一块。往左滑，纸条缩成一团乱线往左飞走；下一张从左边扔回来。
- * 只用三种颜色：页面上的字和线是蓝色，用户写的是黑色，箭头和提醒是红色。字体用系统自带的无衬线体。 */
-:root{--desk:#fbfaf6;--blue:#2557d6;--red:#e23b3b;--user:#111;
+/* 正式版：不画纸，只画一圈会抖的线，像在本子上随手框出来的一块。往左滑，纸条缩成一团乱线往左飞走，下一张从左边扔回来；
+ * 往右滑，这张推到右边，上一张从左边滑回来。
+ * 只用三种颜色：纸条上的字和线是黑色，用户写的是蓝色，提醒是红色。字体用系统自带的无衬线体。不显示题目下的填写提示。 */
+:root{--desk:#fbfaf6;--page:#111;--user:#2557d6;--red:#e23b3b;
   --kid:-apple-system,BlinkMacSystemFont,"PingFang SC","Hiragino Sans GB","Helvetica Neue","Microsoft YaHei",sans-serif;
-  --pencil:var(--blue);--pen:var(--user);--gel:var(--blue);--mark:transparent;--arrow:var(--red);
-  --dim:rgba(37,87,214,.75);--faint:rgba(37,87,214,.5);--line:rgba(37,87,214,.16);--line2:rgba(37,87,214,.4);--ink:var(--blue);--warm:var(--blue)}
+  --pencil:var(--page);--pen:var(--user);--gel:var(--page);--mark:transparent;
+  --dim:rgba(17,17,17,.7);--faint:rgba(17,17,17,.45);--line:rgba(17,17,17,.13);--line2:rgba(17,17,17,.35);--ink:var(--page);--warm:var(--page)}
+.qbody .hint,.pad .note{display:none}
 body{-webkit-font-smoothing:antialiased}
 .note{background:transparent;padding:30px 26px 22px;gap:16px;touch-action:pan-y}
 .note h1{font-size:26px;font-weight:600;letter-spacing:0}
 .note h2{font-size:20px;font-weight:500;letter-spacing:0;line-height:1.55}
-.note .lead{font-size:17px;color:var(--blue)}
+.note .lead{font-size:17px;color:var(--page)}
 .note .small{font-size:13px;color:var(--faint)}
-.from .reply{font-size:18px;color:var(--blue)}
-.from .ask{font-size:15px;color:var(--blue);opacity:1}
+.from .reply{font-size:18px;color:var(--page)}
+.from .ask{font-size:15px;color:var(--page);opacity:1}
 input[type=text],input[type=number],textarea{font-size:18px;color:var(--user)}
-input::placeholder,textarea::placeholder{color:rgba(37,87,214,.32)}
-.btn:focus-visible,.alien:focus-visible,input:focus-visible,textarea:focus-visible{outline:2px solid rgba(37,87,214,.3)}
-.btn{font-size:16px;color:var(--blue);border-color:var(--blue)}
-.btn.pri{background:var(--blue);color:#fff;border-color:var(--blue)}
-.link{color:var(--blue);text-decoration-color:rgba(37,87,214,.35)}
-.alien{color:var(--blue);border-color:rgba(37,87,214,.45)}
-.alien.on{background:var(--blue);color:#fff;border-color:var(--blue)}
-.slot{border-color:rgba(37,87,214,.4);color:var(--blue);background:transparent}
-.slot.pic .plabel{color:var(--blue)}
-.slot.pic .tag,.slot .x{background:var(--blue);color:#fff}
-.pbtn{color:var(--blue);border-color:var(--blue)}
-.tool{color:var(--blue);border-color:rgba(37,87,214,.4)}
-.pad canvas{box-shadow:0 0 0 2px rgba(37,87,214,.3)}
-.sw.on{box-shadow:0 0 0 2px var(--blue)}
-.sheet-card h2{color:var(--blue)}
+input::placeholder,textarea::placeholder{color:rgba(17,17,17,.28)}
+.btn:focus-visible,.alien:focus-visible,input:focus-visible,textarea:focus-visible{outline:2px solid rgba(17,17,17,.25)}
+.btn{font-size:16px;color:var(--page);border-color:var(--page)}
+.btn.pri{background:var(--page);color:#fff;border-color:var(--page)}
+.link{color:var(--page);text-decoration-color:rgba(17,17,17,.3)}
+.alien{color:var(--page);border-color:rgba(17,17,17,.4)}
+.alien.on{background:var(--page);color:#fff;border-color:var(--page)}
+.slot{border-color:rgba(17,17,17,.35);color:var(--page);background:transparent}
+.slot.pic .plabel{color:var(--page)}
+.slot.pic .tag,.slot .x{background:var(--page);color:#fff}
+.pbtn{color:var(--page);border-color:var(--page)}
+.tool{color:var(--page);border-color:rgba(17,17,17,.35)}
+.pad canvas{box-shadow:0 0 0 2px rgba(17,17,17,.25)}
+.sw.on{box-shadow:0 0 0 2px var(--page)}
+.sheet-card h2{color:var(--page)}
 .err{color:var(--red)}
-.top{color:var(--blue)}
+.top{color:var(--page)}
 .outline{position:absolute;inset:0;width:100%;height:100%;overflow:visible;pointer-events:none}
-.outline path,.token path{fill:none;stroke:var(--blue);stroke-width:2.2;stroke-linecap:round;stroke-linejoin:round}
+.outline path,.token path{fill:none;stroke:var(--page);stroke-width:2.2;stroke-linecap:round;stroke-linejoin:round}
 .token{position:fixed;left:50%;top:34vh;width:84px;height:84px;z-index:20;pointer-events:none}
 .token svg{width:100%;height:100%;overflow:visible}
 </style>
 </head>
 <body>
 <div class="wrap" id="app"></div>
-<script>window.GAF_PAD_COLORS = ['#111', '#2557d6', '#e23b3b'];</script>
+<script>window.GAF_PAD_COLORS = ['#2557d6', '#111', '#e23b3b'];   // 默认蓝色：用户画的和写的一样是蓝色</script>
 <script src="common.js"></script>
 <script src="ui.js"></script>
 <script src="note-core.js"></script>
@@ -99,10 +101,13 @@ async function back(note) {
   const open = anim(note, [{ transform: 'scale(.25) rotate(-12deg)', opacity: 0 }, { transform: 'none', opacity: 1 }], { duration: 360, delay: 710, easing: 'cubic-bezier(.3,1.4,.5,1)' });
   await fly; await gone(t, [{ opacity: 1 }, { opacity: 0 }], { duration: 200 }); t.remove(); await open;
 }
+// 捡回上一张：这张往右推出去，上一张从左边平着滑回来（不揉成团）
+const aside = (note, dx) => gone(note, [{ transform: `translateX(${dx}px) rotate(${(dx * 0.02).toFixed(2)}deg)`, opacity: 1 }, { transform: 'translateX(110vw) rotate(8deg)', opacity: 1 }], { duration: 360, easing: 'cubic-bezier(.4,0,.8,.5)' });
+const pickUp = (note) => anim(note, [{ transform: 'translateX(-110vw) rotate(-6deg)' }, { offset: .8, transform: 'translateX(8px) rotate(.5deg)' }, { transform: 'none' }], { duration: 480, easing: 'cubic-bezier(.2,.7,.3,1)' });
 GAFNote.start({ skin: 'doodle', swipe: true, decorate: outline,
   introLine: '我传你 10 张小纸条，写完往左一滑，就扔回给我了。<br>不想答的，点「不告诉你」就行。',
-  out(note, kind, info) { return away(note, (info && info.dx) || 0); },
-  in(note) { return back(note); },
+  out(note, kind, info) { const dx = (info && info.dx) || 0; return kind === 'back' ? aside(note, dx) : away(note, dx); },
+  in(note, kind) { return kind === 'back' ? pickUp(note) : back(note); },
 });
 })();
 </script>
