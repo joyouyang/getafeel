@@ -1,6 +1,6 @@
 /* 传纸条的共用内核：开场纸条 → 每张纸条 = 对上一题的回应（+ 追问）+ 下一题 → 扔出去 → 下一张扔回来 → 最后一张交卷。
  * 外壳只管纸条长什么样、怎么扔：
- *   GAFNote.start({ skin, swipe, introLine, throwLabel, out(note, kind, info), in(note, kind), decorate(note, i) })
+ *   GAFNote.start({ skin, swipe, intro: { title, lead, small }, throwLabel, out(note, kind, info), in(note, kind), decorate(note, i) })
  *   swipe: true 时没有按钮：往左滑扔走、往右滑捡回上一张（info.dx 是松手时纸条已经被拖出去的距离；上下滑仍是滚动页面）。
  *     手势不靠文字讲：开场纸条就是教程（自己往左晃、纸条外有一个手指圆点往左划，滑走就开始）；
  *     第一次到第 2 张时教一次右滑；之后只在写完时，纸条外出现往左划的圆点，纸条自己往左晃一下。
@@ -17,6 +17,15 @@ function tally(k) {
   let s = '<svg class="tally" viewBox="0 0 84 40" aria-hidden="true">';
   for (let j = 0; j < k; j++) s += `<path d="${STROKES[j % 5]}" transform="translate(${Math.floor(j / 5) * 44} 0)"/>`;
   return s + '</svg>';
+}
+/* 题目：问句后面还有话时拆成两行（"你的微信头像？" / "描述下或者画一个也行嘿："）；结尾没有标点的补一个"：" */
+const colon = (t) => (/[？?！!。：:~]$/.test(t) ? t : t + '：');
+function title(text) {
+  const h = el('h2'), k = text.search(/[？?](?=.)/);
+  if (k < 0) { h.textContent = colon(text); return h; }
+  h.textContent = text.slice(0, k + 1);
+  h.appendChild(el('span', 'sub')).textContent = colon(text.slice(k + 1));
+  return h;
 }
 /* 揉纸的沙沙声：一小段过滤过的噪声，不用音频文件 */
 let ac = null;
@@ -158,11 +167,12 @@ function start(cfg) {
     const note = el('section', 'note');
     if (k < 0) {   // 开场：swipe 模式下它就是教程，往左滑走就开始
       note.classList.add('intro');
-      note.appendChild(el('h1', null, '嗨，交个朋友吧？'));
-      note.appendChild(el('p', 'lead', cfg.introLine || `我传你 10 张小纸条，写完${cfg.verb || '扔'}回来就好。<br>不想答的，点「不告诉你」就行。`));
+      const I = cfg.intro || {};
+      note.appendChild(el('h1', null, I.title || '嗨，交个朋友吧？'));
+      note.appendChild(el('p', 'lead', I.lead || `我传你 10 张小纸条，写完${cfg.verb || '扔'}回来就好。<br>不想答的，点「不告诉你」就行。`));
       const begin = (dx) => { if (busy) return; sess.s.consent = true; sess.s.cursor = 0; sess.save(); move(0, 'next', null, { dx: dx || 0 }); };
       if (cfg.swipe) {
-        note.appendChild(el('p', 'small', '你写的会交给 AI，帮我做几件送你的小作品，原话只有我看得到。滑走这张，就当你答应啦。'));
+        note.appendChild(el('p', 'small', I.small || '你写的会交给 AI，帮我做几件送你的小作品，原话只有我看得到。滑走这张，就当你答应啦。'));
         const st = gestures(note, k, { canThrow: () => true, throwIt: begin, firstText: () => '把这张纸条往左滑，就开始了' });
         st.onShown = () => { guide.show(-1, '把这张纸条往左滑，就开始了'); [600, 3600, 6600, 9600].forEach((ms) => later(() => nudge(note, -1), ms)); };
         note.gesture = st;
@@ -201,7 +211,7 @@ function start(cfg) {
     }
 
     const q = QUESTIONS[k];
-    note.appendChild(el('h2', null, q.q + '：'));
+    note.appendChild(title(q.q));
     const ready = () => sess.isDone(q.n);
     const toss = (dx) => {
       if (busy || !ready()) return;

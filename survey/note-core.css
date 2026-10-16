@@ -18,6 +18,7 @@ body{background:var(--desk);background-image:none;font-family:var(--kid);color:v
 .note{position:relative;display:flex;flex-direction:column;gap:14px;background:var(--paper);color:var(--pencil);padding:26px 22px 22px;will-change:transform}
 .note h1{font-family:var(--kid);font-weight:400;font-size:30px;letter-spacing:.02em;margin:0;line-height:1.35}
 .note h2{font-family:var(--kid);font-weight:400;font-size:22px;letter-spacing:.02em;margin:0;line-height:1.5}
+.note h2 .sub{display:block;margin-top:2px;font-size:.8em;font-weight:400;color:var(--dim)}
 .note .lead{font-size:19px;line-height:1.7;color:var(--pencil);margin:0}
 .note .small{font-size:14px;line-height:1.6;color:var(--faint);margin:0}
 .qn{font-family:var(--kid);font-size:14px;letter-spacing:.05em;color:var(--faint)}

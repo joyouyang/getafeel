@@ -7,18 +7,16 @@ const ENDPOINT = 'https://chrxqhraickomolmvnap.supabase.co/rest/v1/responses';
 const ANON_KEY = 'sb_publishable_Me2STWDSBkhxlGJWXPWBKQ_a9vgAQaI';   // 只能写入
 const SCHEMA = 'gaf.survey.v1';
 
-/* 题目原文和 questions.txt 一致；text/images 描述这一题收什么 */
+/* 第五版题目（2026-10-16 乐泉定稿）：1-5 题改写，6-10 题沿用原文。text/images 描述这一题收什么。
+ * 分组仍是 A 1-3、B 4-7、C 8-10，生成用的 7 种组合不变。原始实验的题目在 ../questions.txt。 */
 const QUESTIONS = [
-  { n: 1, g: 'A', q: '你的出生日期，年月日时辰', hint: '能写到几点就写到几点', text: { kind: 'line', ph: '例如 1999 年 5 月 20 日 早上 7 点' } },
-  { n: 2, g: 'A', q: '你的真名', hint: '它不会原样出现在作品里', text: { kind: 'line', ph: '名字' } },
-  { n: 3, g: 'A', q: '你的出生地点', hint: '写到城市就行，想写多细都可以', text: { kind: 'line', ph: '例如 杭州' } },
-  { n: 4, g: 'B', q: '说说你的微信 combo：头像和朋友圈背景（或者 IG 头像和置顶）是什么样的，再加上你的个性签名',
-    hint: '用两三句话说说它们是什么、为什么选、用了多久',
-    choiceLabel: '头像和朋友圈背景，可以各画一张，也可以各传一张（都可选）',
-    followUp: true,
-    images: [{ slot: 'avatar', label: '头像', draw: true }, { slot: 'background', label: '朋友圈背景', draw: true }],
-    text: { kind: 'area', ph: '比如：头像是一只侧着脸的猫，用了三年没换；背景是……；签名是……' } },
-  { n: 5, g: 'B', q: '你的"人生作品"：电影书戏剧音乐游戏综艺……啥都行，不止一个也行，没有也行', hint: '没有也完全可以', text: { kind: 'area', ph: '写下名字，想说为什么也可以' } },
+  { n: 1, g: 'A', q: '你的名字？', hint: '它不会原样出现在作品里', text: { kind: 'line', ph: '名字' } },
+  { n: 2, g: 'A', q: '你出生的年月日时辰？', hint: '能写到几点就写到几点', text: { kind: 'line', ph: '例如 1999 年 5 月 20 日 早上 7 点' } },
+  { n: 3, g: 'A', q: '在哪出生的？', hint: '写到城市就行，想写多细都可以', text: { kind: 'line', ph: '例如 杭州' } },
+  { n: 4, g: 'B', q: '你的微信头像？描述下或者画一个也行嘿', followUp: true,
+    images: [{ slot: 'avatar', label: '头像', draw: true }], text: { kind: 'area', ph: '比如：一只侧着脸的猫，用了三年没换' } },
+  { n: 5, g: 'B', q: '你的朋友圈背景？描述下画几笔也行', followUp: true,
+    images: [{ slot: 'background', label: '朋友圈背景', draw: true }], text: { kind: 'area', ph: '比如：一张很久以前拍的海' } },
   { n: 6, g: 'B', q: '你的 comfort food：不知道吃什么的时候就吃它', text: { kind: 'line', ph: '它是什么' } },
   { n: 7, g: 'B', q: '你的 comfort 衣服：不知道穿什么的时候就穿它', text: { kind: 'line', ph: '它是什么' } },
   { n: 8, g: 'C', q: '你解锁手机后看到的第一屏截图', hint: '解锁后直接截一张传上来，不用整理',
@@ -26,7 +24,7 @@ const QUESTIONS = [
   { n: 9, g: 'C', q: '随便给我发一句话，什么都行，不一定要连贯有逻辑', text: { kind: 'area', ph: '脑子里冒出什么就写什么' } },
   { n: 10, g: 'C', q: '从 1–100 里随机选一个数字', text: { kind: 'number', ph: '1 到 100' } },
 ];
-const VARIANT = 'v4';   // v4：第 4 题描述 + 头像、朋友圈背景各自可画可传（图片带 src: doodle / upload），第 8 题只收截图；一答一回应
+const VARIANT = 'v5';   // v5：1 名字、2 出生时间、3 出生地、4 头像（描述/画/传）、5 朋友圈背景（描述/画/传），6-10 同 v4；去掉了"人生作品"和个性签名
 
 const params = new URLSearchParams(location.search);
 const INVITE = (location.hash.match(/invite=([\w-]+)/) || [])[1] || params.get('invite') || null;
@@ -54,7 +52,7 @@ function session(mode, keyName) {   // keyName：同一种问法下不同外壳�
     clear() { store.del(key); },
     isDone(n) { const a = s.answers[n]; if (!a) return false; if (a.skipped) return true; const q = QUESTIONS[n - 1];
       const hasText = (a.text || '').trim().length > 0, hasImg = Object.keys(a.images || {}).length > 0;
-      if (q.n === 8) return hasImg; if (q.n === 4) return hasImg || hasText; return hasText; },
+      if (!q.text) return hasImg; if (q.images) return hasImg || hasText; return hasText; },   // 只收图的题要有图；可写可画的题有一样就行
     tick(n, ms) { s.timing[n] = (s.timing[n] || 0) + ms; },
   };
   return api;
@@ -120,16 +118,16 @@ const short = (t, n = 10) => { t = (t || '').replace(/\s+/g, ' ').trim(); return
 function feedbackFor(n, a) {
   if (a.skipped) return pick(['行。', '好好好', '111收到']);
   const t = (a.text || '').trim(), imgs = Object.keys(a.images || {}).length;
+  const ims = Object.values(a.images || {}), drew = ims.some((im) => im.src === 'doodle'), up = ims.some((im) => im.src !== 'doodle');
   switch (n) {
-    case 1: { const m = +(t.match(/(\d{1,2})\s*月/) || t.match(/[\/.-](\d{1,2})[\/.-]/) || [])[1];
+    case 1: return '好名字。放心，它不会原样出现在作品里。';
+    case 2: { const m = +(t.match(/(\d{1,2})\s*月/) || t.match(/[\/.-](\d{1,2})[\/.-]/) || [])[1];
       const season = m >= 3 && m <= 5 ? '春天' : m >= 6 && m <= 8 ? '夏天' : m >= 9 && m <= 11 ? '秋天' : m ? '冬天' : '';
       const precise = /[点时:：]|辰|分/.test(t);
       return (season ? `${season}出生的。` : '记下了。') + (precise ? '连几点都记得，很少有人能说得这么准。' : '时辰不记得也没关系。'); }
-    case 2: return '好名字。放心，它不会原样出现在作品里。';
     case 3: return `${short(t, 12)}，记下了。那里有你最早看到的天。`;
-    case 4: { const ims = Object.values(a.images || {}), drew = ims.some((im) => im.src === 'doodle'), up = ims.some((im) => im.src !== 'doodle');
-      return (drew ? '画收到了。画成什么样都好，这就是它在你眼里的样子。' : '') + (up ? '图也收到了。' : '') + (t ? `你先说的是「${short(t, 10)}」，这大概就是你最在意的那部分。` : ''); }
-    case 5: return /^(无|没有|暂无|没)/.test(t) ? '没有"人生作品"也很好，说明你的人生还没有被某一件事限定。' : '记下了。能被叫作"人生作品"的，一定陪你走过一段路。';
+    case 4: return (drew ? '画收到了。画成什么样都好，这就是它在你眼里的样子。' : up ? '头像收到了。' : '') + (t ? `你先说的是「${short(t, 10)}」，这大概就是你最在意的那部分。` : '');
+    case 5: return (drew ? '这几笔收到了。' : up ? '背景收到了。' : '') + (t ? `「${short(t, 10)}」，别人点开你主页，第一眼看到的就是它。` : '别人点开你主页，第一眼看到的就是它。');
     case 6: return `下次不知道吃什么，我也试试${short(t, 8) ? '「' + short(t, 8) + '」' : '它'}。`;
     case 7: return pick(['很有安全感的选择。', '穿上就不用再想的衣服，最懂你。']);
     case 8: return imgs ? '第一屏收到了。这一屏，你每天大概要看上百次。' : '收到。';
@@ -145,7 +143,10 @@ function feedbackFor(n, a) {
 function followUpFor(n, a) {
   if (a.skipped || a.followup) return null;
   const t = (a.text || '').trim(), imgs = Object.keys(a.images || {}).length;
-  if (n === 4 && t.length < 14) return Object.values(a.images || {}).some((im) => im.src === 'doodle') ? '画得很好。能再用一句话说说，你为什么选它当头像吗？' : imgs ? '图收到了。能再用一句话说说，你为什么选它吗？' : '能再多说一点吗？比如它是什么颜色、为什么选它、用了多久。';
+  if ((n === 4 || n === 5) && t.length < 10) {
+    const what = n === 4 ? '头像' : '背景', drew = Object.values(a.images || {}).some((im) => im.src === 'doodle');
+    return drew ? `画得很好。能再用一句话说说，你为什么选它当${what}吗？` : imgs ? '图收到了。能再用一句话说说，你为什么选它吗？' : '能再多说一点吗？比如它是什么颜色、为什么选它、用了多久。';
+  }
   return null;
 }
 
