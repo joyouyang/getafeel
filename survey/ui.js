@@ -44,6 +44,7 @@ function questionInputs(q, sess, onChange) {
   field.placeholder = q.text.ph; field.value = a.text || ''; field.id = 'q' + q.n + '-text'; field.setAttribute('aria-label', '第 ' + q.n + ' 题的回答');
   field.oninput = () => { a.text = field.value; sess.save(); onChange(); };
   body.appendChild(field);
+  if (q.doodle) body.appendChild(doodlePad(a, q.doodle, sess, onChange));
   const alien = el('button', 'alien' + (a.skipped ? ' on' : ''), a.skipped ? '已选择不回答 👽' : '不想回答，发个 👽');
   alien.type = 'button';
   alien.onclick = () => { a.skipped = !a.skipped; sess.save(); alien.className = 'alien' + (a.skipped ? ' on' : ''); alien.textContent = a.skipped ? '已选择不回答 👽' : '不想回答，发个 👽'; body.className = 'qbody' + (a.skipped ? ' off' : ''); onChange(); };
@@ -51,6 +52,43 @@ function questionInputs(q, sess, onChange) {
   const r = el('div', 'row'); r.appendChild(alien); box.appendChild(r);
   box.focusField = () => field.focus();
   return box;
+}
+
+/* 随手画：可选，画完自动存成图片放进这一题 */
+function doodlePad(a, cfg, sess, onChange) {
+  const wrap = el('div', 'doodle');
+  const has = () => !!a.images[cfg.slot];
+  const toggle = el('button', 'alien', has() ? '✏️ 改改我画的头像' : '✏️ 或者，随手画一下你的头像（可选）'); toggle.type = 'button';
+  const pane = el('div', 'pad'); pane.hidden = true;
+  wrap.appendChild(toggle); wrap.appendChild(pane);
+  const SIZE = 600, COLORS = ['#2b2b33', '#e0656a', '#f2b33d', '#3f8fd8', '#4fa86a'];
+  const cv = el('canvas'); cv.width = cv.height = SIZE; cv.setAttribute('aria-label', '画板');
+  const x = cv.getContext('2d'); x.lineCap = x.lineJoin = 'round';
+  let color = COLORS[0], width = 7, strokes = [], cur = null, base = null;
+  const paintBase = () => { x.fillStyle = '#fff'; x.fillRect(0, 0, SIZE, SIZE); if (base) x.drawImage(base, 0, 0, SIZE, SIZE); };
+  const drawStroke = (st) => { x.strokeStyle = st.c; x.lineWidth = st.w; x.beginPath(); st.p.forEach(([px, py], i) => (i ? x.lineTo(px, py) : x.moveTo(px, py))); if (st.p.length === 1) x.lineTo(st.p[0][0] + .1, st.p[0][1]); x.stroke(); };
+  const redraw = () => { paintBase(); strokes.forEach(drawStroke); };
+  const save = () => {
+    if (!strokes.length && !base) { delete a.images[cfg.slot]; }
+    else { const data = cv.toDataURL('image/jpeg', 0.86).split(',')[1]; a.images[cfg.slot] = { mime: 'image/jpeg', w: SIZE, h: SIZE, bytes: Math.round(data.length * .75), data, name: 'doodle' }; }
+    sess.save(); onChange();
+  };
+  const pos = (e) => { const r = cv.getBoundingClientRect(); return [(e.clientX - r.left) / r.width * SIZE, (e.clientY - r.top) / r.height * SIZE]; };
+  cv.addEventListener('pointerdown', (e) => { e.preventDefault(); cv.setPointerCapture(e.pointerId); cur = { c: color, w: width, p: [pos(e)] }; strokes.push(cur); drawStroke(cur); });
+  cv.addEventListener('pointermove', (e) => { if (!cur) return; cur.p.push(pos(e)); const n = cur.p.length; x.strokeStyle = cur.c; x.lineWidth = cur.w; x.beginPath(); x.moveTo(...cur.p[n - 2]); x.lineTo(...cur.p[n - 1]); x.stroke(); });
+  const end = () => { if (cur) { cur = null; save(); } };
+  cv.addEventListener('pointerup', end); cv.addEventListener('pointercancel', end);
+  const tools = el('div', 'tools');
+  COLORS.forEach((c, i) => { const b = el('button', 'sw' + (i === 0 ? ' on' : '')); b.type = 'button'; b.style.background = c; b.setAttribute('aria-label', '颜色 ' + (i + 1));
+    b.onclick = () => { color = c; tools.querySelectorAll('.sw').forEach((s) => s.classList.toggle('on', s === b)); }; tools.appendChild(b); });
+  const thick = el('button', 'tool', '粗'); thick.type = 'button'; thick.onclick = () => { width = width === 7 ? 18 : 7; thick.textContent = width === 7 ? '粗' : '细'; };
+  const undo = el('button', 'tool', '撤销'); undo.type = 'button'; undo.onclick = () => { strokes.pop(); redraw(); save(); };
+  const clear = el('button', 'tool', '清空'); clear.type = 'button'; clear.onclick = () => { strokes = []; base = null; redraw(); save(); };
+  [thick, undo, clear].forEach((b) => tools.appendChild(b));
+  pane.appendChild(cv); pane.appendChild(tools); pane.appendChild(el('p', 'note', '画成什么样都行，越随便越好。只画一个轮廓、一种颜色也可以。'));
+  if (has()) { const im = new Image(); im.onload = () => { base = im; redraw(); }; im.src = 'data:' + a.images[cfg.slot].mime + ';base64,' + a.images[cfg.slot].data; } else redraw();
+  toggle.onclick = () => { pane.hidden = !pane.hidden; toggle.textContent = pane.hidden ? (has() ? '✏️ 改改我画的头像' : '✏️ 或者，随手画一下你的头像（可选）') : '收起画板'; };
+  return wrap;
 }
 
 /* 开场说明：时长、可以不答、会交给 AI */

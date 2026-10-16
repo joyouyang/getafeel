@@ -66,12 +66,27 @@ function composer(q) {
   send.onclick = async () => {
     sess.tick(q.n, performance.now() - t0); comp.innerHTML = '';
     me(q.n);
+    const fq = GAF.followUpFor(q.n, sess.answer(q.n));
+    if (fq) { await typing(600 + Math.random() * 400); host(fq); await followUp(q, fq); }
     const fb = feedbackFor(q.n, sess.answer(q.n));
     sess.s.feedback = (sess.s.feedback || []).filter((f) => f.n !== q.n).concat([{ n: q.n, text: fb }]);
     sess.s.cursor = q.n; sess.save();
     await typing(700 + Math.random() * 600); host(fb);
     await sleep(500); next();
   };
+}
+/* 追问一句：可以补充，也可以说"就这些" */
+function followUp(q, fq) {
+  return new Promise((done) => {
+    const a = sess.answer(q.n), card = el('div', 'card stack');
+    const ta = el('textarea'); ta.placeholder = '补充一句（可选）'; ta.id = 'q' + q.n + '-followup'; ta.setAttribute('aria-label', '补充回答');
+    const send = el('button', 'btn pri', '发送'), skip = el('button', 'btn', '就这些'); send.type = skip.type = 'button';
+    const r = el('div', 'send'); r.appendChild(skip); r.appendChild(send); card.appendChild(ta); card.appendChild(r); comp.appendChild(card);
+    setTimeout(() => ta.focus(), 100);
+    const finish = (text) => { comp.innerHTML = ''; a.followup = text || ''; a.followup_q = fq; sess.save();
+      const m = el('div', 'msg me'); m.textContent = text || '就这些'; chat.appendChild(m); scroll(); done(); };
+    send.onclick = () => finish(ta.value.trim()); skip.onclick = () => finish('');
+  });
 }
 async function next() {
   const i = sess.s.cursor || 0;
@@ -91,7 +106,7 @@ async function start() {
   host('嗨，我会问你 10 个小问题，大约 3 到 5 分钟。', true);
   host('哪题不想答，回个 👽 就行，不用解释。', true);
   const done = sess.s.cursor || 0;   // 刷新后把聊过的内容补回来
-  for (let k = 0; k < done; k++) { const q = QUESTIONS[k]; ask(q, true); me(q.n); const f = (sess.s.feedback || []).find((x) => x.n === q.n); if (f) host(f.text, true); }
+  for (let k = 0; k < done; k++) { const q = QUESTIONS[k]; ask(q, true); me(q.n); const aa = sess.answer(q.n); if (aa.followup_q) { host(aa.followup_q, true); const m = el('div', 'msg me'); m.textContent = aa.followup || '就这些'; chat.appendChild(m); } const f = (sess.s.feedback || []).find((x) => x.n === q.n); if (f) host(f.text, true); }
   scroll(); next();
 }
 if (sess.s.consent && (sess.s.cursor || Object.keys(sess.s.answers).length)) start();

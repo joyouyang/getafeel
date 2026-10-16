@@ -12,16 +12,20 @@ const QUESTIONS = [
   { n: 1, g: 'A', q: '你的出生日期，年月日时辰', hint: '能写到几点就写到几点', text: { kind: 'line', ph: '例如 1999 年 5 月 20 日 早上 7 点' } },
   { n: 2, g: 'A', q: '你的真名', hint: '它不会原样出现在作品里', text: { kind: 'line', ph: '名字' } },
   { n: 3, g: 'A', q: '你的出生地点', hint: '写到城市就行，想写多细都可以', text: { kind: 'line', ph: '例如 杭州' } },
-  { n: 4, g: 'B', q: '微信 combo：头像和朋友圈背景（或者 IG 头像和置顶）+ 个性签名', hint: '传图，再写下微信名和个性签名',
-    images: [{ slot: 'avatar', label: '头像' }, { slot: 'background', label: '朋友圈背景' }, { slot: 'profile', label: '资料页截图（可选）' }],
-    text: { kind: 'area', ph: '微信名、个性签名（没有也可以写"无"）' } },
+  { n: 4, g: 'B', q: '说说你的微信 combo：头像和朋友圈背景（或者 IG 头像和置顶）是什么样的，再加上你的个性签名',
+    hint: '不用截图。用两三句话说说它们是什么、为什么选、用了多久；也可以在下面随手画一下你的头像',
+    doodle: { slot: 'doodle', label: '随手画的头像' }, followUp: true,
+    text: { kind: 'area', ph: '比如：头像是一只侧着脸的猫，用了三年没换；背景是……；签名是……' } },
   { n: 5, g: 'B', q: '你的"人生作品"：电影书戏剧音乐游戏综艺……啥都行，不止一个也行，没有也行', hint: '没有也完全可以', text: { kind: 'area', ph: '写下名字，想说为什么也可以' } },
-  { n: 6, g: 'B', q: '你的 comfort food：不知道吃什么的时候就吃它', images: [{ slot: 'food', label: '照片（可选）' }], text: { kind: 'line', ph: '它是什么' } },
-  { n: 7, g: 'B', q: '你的 comfort 衣服：不知道穿什么的时候就穿它', images: [{ slot: 'clothes', label: '照片（可选）' }], text: { kind: 'line', ph: '它是什么' } },
-  { n: 8, g: 'C', q: '你解锁手机后看到的第一屏截图', hint: '直接截一张传上来', images: [{ slot: 'screen', label: '第一屏截图' }], text: { kind: 'line', ph: '想补充的话（可选）', optional: true } },
+  { n: 6, g: 'B', q: '你的 comfort food：不知道吃什么的时候就吃它', text: { kind: 'line', ph: '它是什么' } },
+  { n: 7, g: 'B', q: '你的 comfort 衣服：不知道穿什么的时候就穿它', text: { kind: 'line', ph: '它是什么' } },
+  { n: 8, g: 'C', q: '不看手机，凭印象说说：你解锁手机后看到的第一屏上有什么', followUp: true,
+    hint: '想到什么写什么，记不清也没关系。愿意的话，再传一张真实截图对照（可选）',
+    images: [{ slot: 'screen', label: '真实截图（可选）' }], text: { kind: 'area', ph: '比如：壁纸是……，最显眼的是……，还有几个红点……' } },
   { n: 9, g: 'C', q: '随便给我发一句话，什么都行，不一定要连贯有逻辑', text: { kind: 'area', ph: '脑子里冒出什么就写什么' } },
   { n: 10, g: 'C', q: '从 1–100 里随机选一个数字', text: { kind: 'number', ph: '1 到 100' } },
 ];
+const VARIANT = 'describe-v2';   // v2：第 4 题改为描述或随手画，第 8 题改为凭印象描述、截图可选
 
 const params = new URLSearchParams(location.search);
 const INVITE = (location.hash.match(/invite=([\w-]+)/) || [])[1] || params.get('invite') || null;
@@ -36,8 +40,8 @@ const uuid = () => (crypto.randomUUID ? crypto.randomUUID() : 'xxxxxxxx-xxxx-4xx
 function session(mode) {
   const key = 'gaf-survey-' + mode;
   let s = store.get(key);
-  if (!s || s.schema !== SCHEMA || s.submitted) {
-    s = { schema: SCHEMA, mode, client_id: uuid(), started_at: new Date().toISOString(), answers: {}, timing: {}, feedback: [], consent: false };
+  if (!s || s.schema !== SCHEMA || s.variant !== VARIANT || s.submitted) {
+    s = { schema: SCHEMA, variant: VARIANT, mode, client_id: uuid(), started_at: new Date().toISOString(), answers: {}, timing: {}, feedback: [], consent: false };
   }
   const api = {
     s,
@@ -49,7 +53,7 @@ function session(mode) {
     clear() { store.del(key); },
     isDone(n) { const a = s.answers[n]; if (!a) return false; if (a.skipped) return true; const q = QUESTIONS[n - 1];
       const hasText = (a.text || '').trim().length > 0, hasImg = Object.keys(a.images || {}).length > 0;
-      if (q.n === 8) return hasImg || hasText; if (q.n === 4) return hasImg || hasText; return hasText || (q.text.optional && hasImg); },
+      if (q.n === 4 || q.n === 8) return hasImg || hasText; return hasText; },
     tick(n, ms) { s.timing[n] = (s.timing[n] || 0) + ms; },
   };
   return api;
@@ -77,7 +81,7 @@ function compressImage(file, maxSide = 1280, quality = 0.82) {
 function buildPayload(sess, extra = {}) {
   const s = sess.s, now = new Date();
   return {
-    schema: SCHEMA, mode: s.mode, client_id: s.client_id, invite: INVITE,
+    schema: SCHEMA, variant: VARIANT, mode: s.mode, client_id: s.client_id, invite: INVITE,
     started_at: s.started_at, submitted_at: now.toISOString(),
     duration_s: Math.round((now - new Date(s.started_at)) / 1000),
     consent: { ai: !!s.consent },
@@ -85,7 +89,8 @@ function buildPayload(sess, extra = {}) {
     answers: QUESTIONS.map((q) => {
       const a = s.answers[q.n] || { text: '', skipped: false, images: {} };
       return { n: q.n, group: q.g, question: q.q, skipped: !!a.skipped, text: a.skipped ? '' : (a.text || '').trim(),
-        images: a.skipped ? [] : Object.entries(a.images || {}).map(([slot, im]) => ({ slot, label: (q.images || []).find((x) => x.slot === slot)?.label || slot, ...im })),
+        followup: a.skipped ? '' : (a.followup || '').trim(), followup_q: a.skipped ? '' : (a.followup_q || ''),
+        images: a.skipped ? [] : Object.entries(a.images || {}).map(([slot, im]) => ({ slot, label: [...(q.images || []), ...(q.doodle ? [q.doodle] : [])].find((x) => x.slot === slot)?.label || slot, ...im })),
         time_s: Math.round((s.timing[q.n] || 0) / 1000) };
     }),
     feedback: s.feedback || [],
@@ -121,11 +126,12 @@ function feedbackFor(n, a) {
       return (season ? `${season}出生的。` : '记下了。') + (precise ? '连几点都记得，很少有人能说得这么准。' : '时辰不记得也没关系。'); }
     case 2: return '好名字。放心，它不会原样出现在作品里。';
     case 3: return `${short(t, 12)}，记下了。那里有你最早看到的天。`;
-    case 4: return (imgs ? `收到 ${imgs} 张图。头像和背景，常常比本人更会说话。` : '收到。') + (/^(无|没有|暂无)$/.test(t) ? '没写签名，也是一种签名。' : '');
+    case 4: { const drew = !!(a.images || {}).doodle;
+      return (drew ? '画收到了。画成什么样都好，这就是它在你眼里的样子。' : '') + (t ? `你先说的是「${short(t, 10)}」，这大概就是你最在意的那部分。` : ''); }
     case 5: return /^(无|没有|暂无|没)/.test(t) ? '没有"人生作品"也很好，说明你的人生还没有被某一件事限定。' : '记下了。能被叫作"人生作品"的，一定陪你走过一段路。';
     case 6: return `下次不知道吃什么，我也试试${short(t, 8) ? '「' + short(t, 8) + '」' : '它'}。`;
     case 7: return pick(['很有安全感的选择。', '穿上就不用再想的衣服，最懂你。']);
-    case 8: return imgs ? '第一屏收到了。这一屏，你每天大概要看上百次。' : '收到。';
+    case 8: return (t ? '凭印象能记得这些，说明它们对你挺重要。' : '') + (imgs ? '截图也收到了，我会对照着看你记住了什么、漏掉了什么。' : '');
     case 9: return '这句话我收好了。它会被认真读，但不会被原样用。';
     case 10: { const v = parseInt(t, 10);
       if (v === 100) return '一百，满格。'; if (v === 99) return '九十九，差一点就满，像是故意留了一格。'; if (v === 1) return '一，从最开始的那个。';
@@ -134,5 +140,14 @@ function feedbackFor(n, a) {
   return '收到。';
 }
 
-window.GAF = { QUESTIONS, INVITE, session, compressImage, buildPayload, submit, downloadBackup, feedbackFor };
+/* 一答一反馈：回答太短时追问一句（每题最多一次） */
+function followUpFor(n, a) {
+  if (a.skipped || a.followup) return null;
+  const t = (a.text || '').trim(), imgs = Object.keys(a.images || {}).length;
+  if (n === 4 && t.length < 14) return imgs ? '画得很好。能再用一句话说说，你为什么选它当头像吗？' : '能再多说一点吗？比如它是什么颜色、为什么选它、用了多久。';
+  if (n === 8 && t.length < 12) return '还记得别的吗？比如壁纸是什么、哪个图标上挂着红点。';
+  return null;
+}
+
+window.GAF = { VARIANT, followUpFor, QUESTIONS, INVITE, session, compressImage, buildPayload, submit, downloadBackup, feedbackFor };
 })();
