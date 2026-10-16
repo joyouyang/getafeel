@@ -1,0 +1,109 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name="theme-color" content="#c99b62">
+<meta name="robots" content="noindex,nofollow">
+<title>Get A Feel 问卷 · 剪报勒索信</title>
+<link rel="stylesheet" href="common.css">
+<link rel="stylesheet" href="flip-core.css">
+<style>
+/* 剪报拼贴：题目是剪下来的报纸字，翻面 = 一张便利贴拍上来 */
+:root{color-scheme:light;
+  --bg:#c99b62; --card:#fdfbf3; --line:#d7d2c2; --line2:#2b2622; --ink:#1f1b17; --dim:#5b5248; --faint:#8d8273;
+  --warm:#ff5c8a; --warm-ink:#1f1b17; --kai:"Kaiti SC","STKaiti","KaiTi","BiauKai",serif; --hand:var(--kai)}
+body{background:var(--bg);background-image:radial-gradient(rgba(70,40,10,.25) 1px,transparent 1.5px),radial-gradient(rgba(255,240,210,.25) 1px,transparent 1.5px);background-size:9px 9px,13px 13px;background-position:0 0,4px 6px;color:var(--ink)}
+.wrap{max-width:460px;padding-top:calc(env(safe-area-inset-top) + 40px)}
+.card{position:relative;background:var(--card);border:0;border-radius:2px;padding:30px 20px 22px;transform:rotate(-1.2deg);
+  background-image:repeating-linear-gradient(transparent 0 31px,#cfe3f2 31px 32px),linear-gradient(90deg,transparent 34px,#f3b6b6 34px 35px,transparent 35px);
+  box-shadow:2px 6px 0 rgba(0,0,0,.18),0 18px 30px rgba(60,30,0,.25);-webkit-backdrop-filter:none;backdrop-filter:none}
+.card::before,.card::after{content:"";position:absolute;width:110px;height:28px;background:rgba(240,228,190,.82);box-shadow:0 1px 2px rgba(0,0,0,.15);top:-12px}
+.card::before{left:18px;transform:rotate(-6deg)}
+.card::after{right:22px;transform:rotate(5deg)}
+.flipper,.flipper.flipped{transform:none;transition:none}
+.face{-webkit-backface-visibility:visible;backface-visibility:visible}
+.back{visibility:hidden;z-index:2;align-self:start;margin:40px 10px 0 30px;transform:rotate(3deg);
+  background:#ffe45c;background-image:linear-gradient(180deg,rgba(0,0,0,.05),transparent 22%);box-shadow:3px 8px 14px rgba(0,0,0,.28);padding:28px 22px}
+.back::before{width:90px;left:50%;margin-left:-45px;transform:rotate(-2deg)}
+.back::after{display:none}
+.flipped .back{visibility:visible;animation:slap .45s cubic-bezier(.2,1.6,.4,1) both}
+.flipped .front{filter:saturate(.6) brightness(.95)}
+@keyframes slap{from{transform:rotate(-14deg) scale(1.5);opacity:0}to{transform:rotate(3deg) scale(1);opacity:1}}
+.qhead h2{display:flex;flex-wrap:wrap;gap:3px 2px;align-items:center;margin-top:10px}
+.cut{display:inline-block;padding:1px 4px;line-height:1.15;box-shadow:1px 1px 0 rgba(0,0,0,.25)}
+.qn{font-family:"Courier New",monospace;color:var(--dim);font-size:12px;letter-spacing:.1em;text-transform:uppercase}
+.hint,.note,.lead{color:var(--dim)}
+input[type=text],input[type=number],textarea{background:transparent;border:0;border-bottom:2px solid var(--ink);border-radius:0;color:var(--ink);font-family:var(--kai);font-size:19px;padding:6px 2px}
+textarea{border:2px solid var(--ink);border-radius:4px;background:rgba(255,255,255,.6)}
+input::placeholder,textarea::placeholder{color:#a2988a}
+.btn{border:2.5px solid var(--ink);border-radius:10px;background:#fff;color:var(--ink);font-weight:700;box-shadow:4px 4px 0 var(--ink);transform:rotate(-1deg)}
+.btn.pri{background:#7ad3ff;color:var(--ink);transform:rotate(1.5deg)}
+.btn:active{box-shadow:1px 1px 0 var(--ink);transform:translate(3px,3px)}
+.alien{border:2px solid var(--ink);color:var(--ink);background:#fff;box-shadow:3px 3px 0 var(--ink)}
+.alien.on{background:#ff5c8a;color:var(--ink)}
+.seg{border:2px solid var(--ink);background:#fff}.seg button{color:var(--ink)}.seg button.on{background:#ffd400;color:var(--ink)}
+.slot{border:2px dashed var(--ink);background:rgba(255,255,255,.7);color:var(--dim)}
+.slot b{color:var(--ink)}
+.tool{color:var(--ink);border:2px solid var(--ink);background:#fff}
+.pad canvas{border-radius:4px;box-shadow:0 0 0 2px var(--ink)}
+.progress{height:10px;border-radius:5px;background:#fff;border:2px solid var(--ink)}
+.progress i{background:#ff5c8a}
+.top .count{color:var(--ink);font-weight:700}
+.reply{font-family:var(--kai);color:var(--ink);font-size:27px;line-height:1.5}
+.reply span{background:linear-gradient(transparent 62%,rgba(255,92,138,.45) 62%)}
+.echo{border-left:3px solid var(--ink);color:#3d352c;font-family:var(--kai);font-size:16px}
+.follow{border-top:2px dashed rgba(0,0,0,.35)}
+.follow textarea{background:rgba(255,255,255,.55)}
+.sticker{position:fixed;pointer-events:none;font-size:34px;z-index:0;opacity:.9;filter:drop-shadow(2px 2px 0 rgba(0,0,0,.25))}
+#app{position:relative;z-index:1}
+</style>
+</head>
+<body>
+<div class="wrap stack" id="app"></div>
+<script src="common.js"></script>
+<script src="ui.js"></script>
+<script src="flip-core.js"></script>
+<script>
+(() => {
+const { el } = GAFUI;
+// 剪报字：每题固定的随机（同一题每次打开都一样）
+const rng = (seed) => () => ((seed = Math.imul(seed ^ (seed >>> 15), 2246822507) ^ Math.imul(seed ^ (seed >>> 13), 3266489909), seed ^= seed >>> 16) >>> 0) / 4294967296;
+const FONTS = ['"Songti SC",serif', '"PingFang SC",sans-serif', '"Kaiti SC","KaiTi",serif', '"Heiti SC","Microsoft YaHei",sans-serif', '"Courier New",monospace', 'Georgia,serif', 'Impact,"Arial Black",sans-serif'];
+const PAPER = [['#fff', '#111'], ['#111', '#fff'], ['#ffd400', '#111'], ['#ff5c8a', '#111'], ['#7ad3ff', '#111'], ['#e9e4d6', '#2a2a2a'], ['#fff', '#c41d1d']];
+function ransom(h2, text, seed) {
+  const r = rng(seed * 9973 + 7); h2.innerHTML = '';
+  [...text].forEach((ch) => {
+    if (ch === ' ') { h2.appendChild(document.createTextNode(' ')); return; }
+    const s = el('span', 'cut'); s.textContent = ch; const [bg, fg] = PAPER[Math.floor(r() * PAPER.length)];
+    Object.assign(s.style, { fontFamily: FONTS[Math.floor(r() * FONTS.length)], background: bg, color: fg, fontSize: (17 + r() * 13).toFixed(0) + 'px',
+      transform: `rotate(${((r() - .5) * 14).toFixed(1)}deg) translateY(${((r() - .5) * 4).toFixed(1)}px)`, fontWeight: r() > .5 ? '700' : '400' });
+    h2.appendChild(s);
+  });
+  h2.setAttribute('aria-label', text);
+}
+// 撕胶带的声音：一小段过滤过的噪声
+let ac = null;
+function rip() {
+  try { ac = ac || new (window.AudioContext || window.webkitAudioContext)(); const n = ac.sampleRate * .18, buf = ac.createBuffer(1, n, ac.sampleRate), d = buf.getChannelData(0);
+    for (let k = 0; k < n; k++) d[k] = (Math.random() * 2 - 1) * Math.pow(1 - k / n, 2);
+    const src = ac.createBufferSource(), f = ac.createBiquadFilter(), g = ac.createGain(); f.type = 'bandpass'; f.frequency.value = 1800; g.gain.value = .25;
+    src.buffer = buf; src.connect(f); f.connect(g); g.connect(ac.destination); src.start(); } catch (e) {}
+}
+['★', '✿', '☺', '✂', '♥', '✦'].forEach((s, k) => { const d = el('div', 'sticker', s); d.setAttribute('aria-hidden', 'true');
+  Object.assign(d.style, { left: (k % 2 ? 82 + Math.random() * 10 : 2 + Math.random() * 8) + 'vw', top: (8 + k * 15 + Math.random() * 6) + 'vh', transform: `rotate(${(Math.random() - .5) * 40}deg)`, color: ['#ff5c8a', '#ffd400', '#7ad3ff', '#111'][k % 4] });
+  document.body.appendChild(d); });
+GAFFlip.start({
+  skin: 'zine',
+  intro: '题目是从报纸上剪下来拼的。写好后，会有一张便利贴拍上来回应你，',
+  labels: { turn: '贴上去！', again: '撕掉重写', next: '下一页', submit: '寄出去', mine: '你写的', group: (q) => `${q.g} 组 / page ${q.n}`, count: (q) => `${q.n} / 10` },
+  hooks: {
+    front(face, q) { ransom(face.querySelector('.qhead h2'), q.q, q.n); },
+    reply(node, text) { node.innerHTML = ''; node.appendChild(el('span', null, '')).textContent = text; },
+    flip(toBack) { rip(); },
+  },
+});
+})();
+</script>
+</body>
+</html>

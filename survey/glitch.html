@@ -1,0 +1,109 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name="theme-color" content="#030605">
+<meta name="robots" content="noindex,nofollow">
+<title>Get A Feel 问卷 · 故障终端</title>
+<link rel="stylesheet" href="common.css">
+<link rel="stylesheet" href="flip-core.css">
+<style>
+/* 赛博故障终端：CRT 扫描线、逐字打印、翻面 = 画面撕裂后吐出回应 */
+:root{color-scheme:dark;
+  --bg:#030605; --card:rgba(4,16,10,.88); --line:rgba(57,255,136,.25); --line2:rgba(57,255,136,.45); --ink:#5cff9d; --dim:#2fbf6f; --faint:#1f7a48;
+  --warm:#ffb000; --warm-ink:#030605;
+  --mono:"SF Mono","Menlo","Consolas","Courier New","PingFang SC","Microsoft YaHei",monospace; --hand:var(--mono); --sans:var(--mono)}
+body{background:radial-gradient(120% 80% at 50% 40%,#08160f,#020403 70%);font-family:var(--mono);color:var(--ink);text-shadow:0 0 6px rgba(92,255,157,.45)}
+body::before{content:"";position:fixed;inset:0;pointer-events:none;z-index:50;background:repeating-linear-gradient(0deg,rgba(0,0,0,.22) 0 1px,transparent 1px 3px);mix-blend-mode:multiply}
+body::after{content:"";position:fixed;inset:0;pointer-events:none;z-index:51;background:radial-gradient(ellipse at center,transparent 55%,rgba(0,0,0,.65));animation:flicker 5s infinite steps(1)}
+@keyframes flicker{0%,97%,100%{opacity:1}98%{opacity:.82}}
+.wrap{max-width:520px}
+.card{background:var(--card);border:1px solid var(--line2);border-radius:2px;padding:14px 16px 18px;box-shadow:0 0 0 1px rgba(57,255,136,.08),0 0 30px rgba(57,255,136,.12);-webkit-backdrop-filter:none;backdrop-filter:none}
+.flipper,.flipper.flipped{transform:none;transition:none}
+.face{-webkit-backface-visibility:visible;backface-visibility:visible}
+.back{transform:none;display:none}
+.flipped .front{display:none}
+.flipped .back{display:flex}
+.tear{animation:tear .5s steps(6) both}
+@keyframes tear{
+  0%{clip-path:inset(0 0 0 0);transform:none;filter:none}
+  20%{clip-path:inset(12% 0 58% 0);transform:translateX(-14px);filter:drop-shadow(4px 0 #ff2a6d) drop-shadow(-4px 0 #05d9e8)}
+  40%{clip-path:inset(62% 0 8% 0);transform:translateX(18px);filter:drop-shadow(-6px 0 #ff2a6d) drop-shadow(6px 0 #05d9e8)}
+  60%{clip-path:inset(30% 0 40% 0);transform:translateX(-8px) skewX(8deg)}
+  80%{clip-path:inset(0 0 80% 0);transform:translateX(6px)}
+  100%{clip-path:inset(0 0 0 0);transform:none;filter:none}}
+.prompt{font-size:12px;color:var(--faint);border-bottom:1px dashed var(--line);padding-bottom:8px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.prompt b{color:var(--warm);font-weight:400}
+.qn{font-family:var(--mono);color:var(--warm);font-size:12px;letter-spacing:.1em;text-shadow:0 0 6px rgba(255,176,0,.5)}
+.qhead h2,h1,h2{font-family:var(--mono);font-weight:700;letter-spacing:.02em}
+.qhead h2{font-size:19px;line-height:1.55;position:relative}
+.glitchy{animation:jit 3.2s infinite steps(1)}
+@keyframes jit{0%,92%,100%{transform:none;text-shadow:0 0 6px rgba(92,255,157,.45)}93%{transform:translateX(2px);text-shadow:-2px 0 #ff2a6d,2px 0 #05d9e8}95%{transform:translateX(-2px) skewX(-6deg);text-shadow:2px 0 #ff2a6d,-2px 0 #05d9e8}}
+.caret::after{content:"█";animation:blink 1s steps(1) infinite;margin-left:2px}
+@keyframes blink{50%{opacity:0}}
+.hint,.note,.lead,.consent{color:var(--dim)}
+input[type=text],input[type=number],textarea{background:rgba(0,0,0,.35);border:1px solid var(--line);border-radius:0;color:var(--ink);font-family:var(--mono);caret-color:var(--ink);text-shadow:inherit}
+input::placeholder,textarea::placeholder{color:var(--faint)}
+input:focus,textarea:focus{outline:1px solid var(--ink);box-shadow:0 0 12px rgba(57,255,136,.3)}
+.btn{border-radius:0;border:1px solid var(--line2);background:transparent;color:var(--ink);font-family:var(--mono);text-shadow:inherit}
+.btn::before{content:"[ "}.btn::after{content:" ]"}
+.btn.pri{background:var(--ink);color:#021208;text-shadow:none}
+.alien{border-radius:0;color:var(--dim);border-color:var(--line)}
+.alien.on{background:var(--warm);color:#021208;border-color:var(--warm)}
+.slot{border-radius:0;border-color:var(--line2);background:rgba(0,0,0,.3);color:var(--dim)}
+.slot b{color:var(--ink)}
+.seg{border-radius:0;border-color:var(--line2)}.seg button{border-radius:0;color:var(--dim)}.seg button.on{background:var(--ink);color:#021208}
+.tool{border-radius:0;color:var(--ink);border-color:var(--line2);background:transparent}
+.pad canvas{border-radius:0;box-shadow:0 0 0 1px var(--ink)}
+.progress{border-radius:0;height:8px;background:rgba(57,255,136,.12)}
+.progress i{background:repeating-linear-gradient(90deg,var(--ink) 0 6px,transparent 6px 8px)}
+.top .count{color:var(--dim)}
+.echo{border-left:0;padding:0;color:var(--dim);font-size:13px}
+.echo::before{content:"$ cat your_answer.txt\A";white-space:pre;color:var(--faint)}
+.reply{color:var(--warm);font-size:20px;text-shadow:0 0 8px rgba(255,176,0,.55);min-height:3em}
+.reply::before{content:"> ";color:var(--faint)}
+.status{font-size:12px;color:var(--faint)}
+.status b{color:var(--ink);font-weight:400}
+.follow{border-top:1px dashed var(--line)}
+@media (prefers-reduced-motion: reduce){.glitchy,.tear,body::after{animation:none!important}}
+</style>
+</head>
+<body>
+<div class="wrap stack" id="app"></div>
+<script src="common.js"></script>
+<script src="ui.js"></script>
+<script src="flip-core.js"></script>
+<script>
+(() => {
+const { el, blip, typewriter } = Object.assign({}, GAFUI, GAFFlip);
+const key = () => blip(1100 + Math.random() * 600, 0.025, 'square', 0.02);
+addEventListener('input', (e) => { if (/INPUT|TEXTAREA/.test(e.target.tagName)) key(); });
+function typeTitle(h2, text) {   // 题目逐字打出来，打完开始偶尔故障抖动
+  h2.textContent = ''; h2.classList.add('caret'); let k = 0;
+  const tick = () => { h2.textContent = text.slice(0, ++k); if (k % 3 === 0) key(); if (k < text.length) setTimeout(tick, 22); else { h2.classList.add('glitchy'); } };
+  tick();
+}
+GAFFlip.start({
+  skin: 'glitch',
+  intro: '这是一个终端。每一题会被打印出来，写完回车，屏幕会吐出一行回应，',
+  labels: { turn: 'EXECUTE', prev: 'BACK', again: 'EDIT', next: 'NEXT', submit: 'UPLOAD', mine: 'INPUT', group: (q) => `GROUP_${q.g} // Q${String(q.n).padStart(2, '0')}`, count: (q) => `PROC ${String(q.n).padStart(2, '0')}/10` },
+  hooks: {
+    front(face, q) {
+      face.prepend(el('div', 'prompt', `gaf@feel:~$ <b>./survey --question ${q.n}</b>`));
+      typeTitle(face.querySelector('.qhead h2'), q.q);
+    },
+    back(face, q) {
+      face.prepend(el('div', 'status', `RESPONSE // <b>200 OK</b> // q${q.n}`));
+    },
+    reply(node, text) { node.classList.add('caret'); typewriter(node, text, 45); },
+    flip(toBack, scene) {
+      scene.classList.remove('tear'); void scene.offsetWidth; scene.classList.add('tear');
+      [0, 80, 160, 240].forEach((d) => setTimeout(() => blip(200 + Math.random() * 900, 0.04, 'sawtooth', 0.03), d));
+    },
+  },
+});
+})();
+</script>
+</body>
+</html>

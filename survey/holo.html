@@ -1,0 +1,97 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name="theme-color" content="#0b0b16">
+<meta name="robots" content="noindex,nofollow">
+<title>Get A Feel 问卷 · 全息闪卡</title>
+<link rel="stylesheet" href="common.css">
+<link rel="stylesheet" href="flip-core.css">
+<style>
+/* 全息闪卡：镭射边框跟着手指或手机倾斜变色，翻面是一张"稀有卡" */
+@property --ang{syntax:"<angle>";inherits:true;initial-value:0deg}
+:root{color-scheme:dark;
+  --bg:#0b0b16; --card:#15152a; --line:rgba(255,255,255,.14); --line2:rgba(255,255,255,.28); --ink:#f4f1ff; --dim:#b9b4d6; --faint:#7d78a3;
+  --warm:#ffe6a3; --warm-ink:#1b1430; --mx:50%; --my:50%; --rx:0deg; --ry:0deg;
+  --serif:"Songti SC","STSong","Noto Serif CJK SC",serif; --hand:var(--serif)}
+body{background:radial-gradient(80% 60% at 50% 0%,#2a1f55,transparent 60%),radial-gradient(70% 50% at 50% 100%,#14324a,transparent 60%),var(--bg);background-attachment:fixed}
+.wrap{max-width:440px}
+#app{perspective:1200px}
+.scene{transform:rotateX(var(--ry)) rotateY(var(--rx));transition:transform .25s ease-out;transform-style:preserve-3d}
+.foil{--g:conic-gradient(from var(--ang) at var(--mx) var(--my),#ff9ad5,#ffe08a,#9dffb8,#8ad8ff,#c3a0ff,#ff9ad5)}
+.card{position:relative;border:6px solid transparent;border-radius:22px;padding:22px 18px 20px;overflow:hidden;
+  background:linear-gradient(160deg,#1c1b38,#11112a) padding-box,conic-gradient(from var(--ang) at var(--mx) var(--my),#ff9ad5,#ffe08a,#9dffb8,#8ad8ff,#c3a0ff,#ff9ad5) border-box;
+  box-shadow:0 20px 50px rgba(0,0,0,.55),0 0 40px rgba(170,140,255,.15);-webkit-backdrop-filter:none;backdrop-filter:none}
+.card::after{content:"";position:absolute;inset:0;pointer-events:none;border-radius:16px;
+  background:radial-gradient(circle at var(--mx) var(--my),rgba(255,255,255,.22),transparent 45%);mix-blend-mode:soft-light}
+.card::before{content:"";position:absolute;inset:0;pointer-events:none;opacity:.07;
+  background:linear-gradient(115deg,transparent 30%,#ff9ad5 42%,#8ad8ff 50%,#ffe08a 58%,transparent 70%) no-repeat;background-size:250% 100%;background-position:var(--mx) 0;mix-blend-mode:color-dodge}
+.back{background:linear-gradient(160deg,#2b1f52,#0f1d33) padding-box,conic-gradient(from calc(var(--ang) + 120deg) at var(--mx) var(--my),#ffe08a,#ff9ad5,#8ad8ff,#9dffb8,#ffe08a) border-box}
+.back::before{opacity:.16}
+.qn{font-family:var(--serif);color:var(--warm);letter-spacing:.3em;font-size:12px}
+.qhead h2,h1,h2{font-family:var(--serif)}
+.qhead h2{font-size:22px;line-height:1.5}
+.rarity{display:flex;justify-content:space-between;align-items:center;font-family:var(--serif);font-size:12px;letter-spacing:.2em;color:var(--warm)}
+.rarity b{font-size:15px;background:linear-gradient(90deg,#ffe08a,#ff9ad5,#8ad8ff);-webkit-background-clip:text;background-clip:text;color:transparent;letter-spacing:.1em}
+.reply{font-family:var(--serif);font-size:26px;line-height:1.55;background:linear-gradient(100deg,#fff6d6 20%,#ffd3ef 50%,#cfefff 80%);-webkit-background-clip:text;background-clip:text;color:transparent;text-shadow:none}
+.echo{border-left-color:rgba(255,224,138,.5)}
+.btn.pri{background:linear-gradient(90deg,#ffe08a,#ff9ad5 60%,#8ad8ff);color:#1b1430;border:0}
+.gyro{font-size:12px;color:var(--faint);text-align:center;min-height:1em}
+</style>
+</head>
+<body>
+<div class="wrap stack" id="app"></div>
+<p class="gyro wrap" id="gyro" style="padding-top:0"></p>
+<script src="common.js"></script>
+<script src="ui.js"></script>
+<script src="flip-core.js"></script>
+<script>
+(() => {
+const { el, blip } = Object.assign({}, GAFUI, GAFFlip);
+const root = document.documentElement.style;
+let tx = 0, ty = 0, cx = 0, cy = 0, ang = 0, calm = false, neutral = null, gyroOn = false;
+// 指针：相对屏幕中心的位置 → 倾斜角和光斑位置
+addEventListener('pointermove', (e) => { if (gyroOn) return; tx = (e.clientX / innerWidth - .5) * 2; ty = (e.clientY / innerHeight - .5) * 2; });
+// 重力感应：第一次读数当作"平放"，之后做低通滤波
+function onTilt(e) {
+  if (e.beta == null) return;
+  if (!neutral) neutral = { b: e.beta, g: e.gamma };
+  gyroOn = true;
+  tx = Math.max(-1, Math.min(1, (e.gamma - neutral.g) / 25)); ty = Math.max(-1, Math.min(1, (e.beta - neutral.b) / 25));
+}
+function enableGyro() {
+  const D = window.DeviceOrientationEvent; if (!D) return;
+  if (typeof D.requestPermission === 'function') D.requestPermission().then((s) => { if (s === 'granted') addEventListener('deviceorientation', onTilt); }).catch(() => {});
+  else addEventListener('deviceorientation', onTilt);
+}
+addEventListener('pointerdown', enableGyro, { once: true });
+if (matchMedia('(pointer: coarse)').matches) document.getElementById('gyro').textContent = '点一下屏幕，再倾斜手机，卡面会跟着反光';
+// 正在打字时让卡片放平，免得晃着写
+addEventListener('focusin', (e) => (calm = /INPUT|TEXTAREA/.test(e.target.tagName)));
+addEventListener('focusout', () => (calm = false));
+(function loop() {
+  const k = calm ? 0 : 1;
+  cx += (tx * k - cx) * .08; cy += (ty * k - cy) * .08; ang = (ang + .25 + Math.abs(cx) * .6) % 360;
+  root.setProperty('--rx', (cx * 9).toFixed(2) + 'deg'); root.setProperty('--ry', (-cy * 7).toFixed(2) + 'deg');
+  root.setProperty('--mx', (50 + cx * 40).toFixed(1) + '%'); root.setProperty('--my', (50 + cy * 40).toFixed(1) + '%');
+  root.setProperty('--ang', ang.toFixed(1) + 'deg');
+  requestAnimationFrame(loop);
+})();
+const shimmer = () => [523, 659, 784, 1047].forEach((f, k) => setTimeout(() => blip(f, 0.18, 'sine', 0.04), k * 70));
+GAFFlip.start({
+  skin: 'holo',
+  intro: '每一题是一张闪卡，写好后翻过来，背面是回应。手机可以倾斜着看反光，',
+  labels: { turn: '翻开这张卡', again: '翻回去改改', next: '抽下一张', submit: '收进卡册', mine: '你写的', group: (q) => `${q.g} 组 · No.${String(q.n).padStart(2, '0')}`, count: (q) => `${q.n} / 10` },
+  hooks: {
+    back(face, q) {
+      const stars = ['★★★', '★★★★', '★★★★★'][q.n % 3], tag = ['R', 'SR', 'SSR'][q.n % 3];
+      face.prepend(el('div', 'rarity', `<span>No.${String(q.n).padStart(2, '0')} / 10</span><b>${stars} ${tag}</b>`));
+    },
+    flip(toBack) { if (toBack) shimmer(); },
+  },
+});
+})();
+</script>
+</body>
+</html>

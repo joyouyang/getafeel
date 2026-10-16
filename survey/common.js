@@ -38,8 +38,8 @@ const store = {
 const uuid = () => (crypto.randomUUID ? crypto.randomUUID() : 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, (c) => { const r = Math.random() * 16 | 0; return (c === 'x' ? r : (r & 3 | 8)).toString(16); }));
 
 /* 一份答卷的状态；每种模式各自一份草稿，刷新不丢 */
-function session(mode) {
-  const key = 'gaf-survey-' + mode;
+function session(mode, keyName) {   // keyName：同一种问法下不同外壳各存各的草稿
+  const key = 'gaf-survey-' + (keyName || mode);
   let s = store.get(key);
   if (!s || s.schema !== SCHEMA || s.variant !== VARIANT || s.submitted) {
     s = { schema: SCHEMA, variant: VARIANT, mode, client_id: uuid(), started_at: new Date().toISOString(), answers: {}, timing: {}, feedback: [], consent: false };

@@ -1,0 +1,103 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name="theme-color" content="#008080">
+<meta name="robots" content="noindex,nofollow">
+<title>Get A Feel 问卷 · Win98</title>
+<link rel="stylesheet" href="common.css">
+<link rel="stylesheet" href="flip-core.css">
+<style>
+/* 复古操作系统：每题一个窗口，翻面 = 弹出系统消息框 */
+:root{color-scheme:light;
+  --bg:#008080; --card:#c0c0c0; --line:#808080; --line2:#808080; --ink:#000; --dim:#222; --faint:#555; --warm:#000080; --warm-ink:#fff;
+  --sys:"Tahoma","MS Sans Serif","Microsoft YaHei","SimSun","PingFang SC",sans-serif; --hand:var(--sys); --sans:var(--sys)}
+body{background:var(--bg);font-family:var(--sys);font-size:14px;color:#000;padding-bottom:44px;-webkit-font-smoothing:none}
+.wrap{max-width:520px}
+.bevel-out{box-shadow:inset -1px -1px #0a0a0a,inset 1px 1px #fff,inset -2px -2px #808080,inset 2px 2px #dfdfdf}
+.bevel-in{box-shadow:inset -1px -1px #fff,inset 1px 1px #0a0a0a,inset -2px -2px #dfdfdf,inset 2px 2px #808080}
+.card{background:var(--card);border:0;border-radius:0;padding:3px;-webkit-backdrop-filter:none;backdrop-filter:none;
+  box-shadow:inset -1px -1px #0a0a0a,inset 1px 1px #fff,inset -2px -2px #808080,inset 2px 2px #dfdfdf,6px 6px 0 rgba(0,0,0,.25)}
+.card > :not(.titlebar){margin-left:12px;margin-right:12px}
+.card > :last-child{margin-bottom:12px}
+.titlebar{display:flex;align-items:center;gap:6px;background:linear-gradient(90deg,#000080,#1084d0);color:#fff;font-weight:700;padding:3px 3px 3px 6px;font-size:13px;cursor:move;touch-action:none;user-select:none}
+.titlebar span{flex:1;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.titlebar i{width:18px;height:16px;background:#c0c0c0;color:#000;font-style:normal;font-size:11px;line-height:14px;text-align:center;box-shadow:inset -1px -1px #0a0a0a,inset 1px 1px #fff,inset -2px -2px #808080,inset 2px 2px #dfdfdf}
+.flipper,.flipper.flipped{transform:none;transition:none}
+.face{-webkit-backface-visibility:visible;backface-visibility:visible}
+.back{transform:translate(14px,24px);visibility:hidden;z-index:2;align-self:start}
+.flipped .back{visibility:visible;animation:pop .22s steps(4) both}
+.flipped .front{filter:grayscale(.4) brightness(.92)}
+@keyframes pop{from{transform:translate(14px,24px) scale(.6);opacity:0}to{transform:translate(14px,24px) scale(1);opacity:1}}
+h1,h2,.qhead h2{font-family:var(--sys);font-weight:700;letter-spacing:0;color:#000}
+.qhead h2{font-size:17px;line-height:1.5}
+.qn{font-family:var(--sys);color:#000080;font-size:12px;letter-spacing:0}
+.hint,.note,.lead,.consent{color:#222}
+input[type=text],input[type=number],textarea{background:#fff;color:#000;border:0;border-radius:0;padding:6px 7px;font-family:var(--sys);font-size:15px;
+  box-shadow:inset -1px -1px #fff,inset 1px 1px #0a0a0a,inset -2px -2px #dfdfdf,inset 2px 2px #808080}
+input::placeholder,textarea::placeholder{color:#808080}
+.btn,.alien,.tool,.seg button{font-family:var(--sys);font-size:14px;color:#000;background:#c0c0c0;border:0;border-radius:0;padding:7px 16px;
+  box-shadow:inset -1px -1px #0a0a0a,inset 1px 1px #fff,inset -2px -2px #808080,inset 2px 2px #dfdfdf}
+.btn:active,.alien:active,.tool:active{box-shadow:inset -1px -1px #fff,inset 1px 1px #0a0a0a,inset -2px -2px #dfdfdf,inset 2px 2px #808080;transform:none}
+.btn.pri{font-weight:700;outline:1px solid #000;outline-offset:-5px}
+.alien.on,.seg button.on{background:#000080;color:#fff}
+.seg{border:0;border-radius:0;padding:0;gap:4px}
+.slot{border-radius:0;border:0;background:#fff;color:#000;box-shadow:inset -1px -1px #fff,inset 1px 1px #0a0a0a,inset -2px -2px #dfdfdf,inset 2px 2px #808080}
+.slot b{color:#000080}
+.pad canvas{border-radius:0;box-shadow:inset -1px -1px #fff,inset 1px 1px #0a0a0a}
+.sw{border-radius:0}
+.progress{height:18px;border-radius:0;background:#fff;padding:2px;box-shadow:inset -1px -1px #fff,inset 1px 1px #0a0a0a,inset -2px -2px #dfdfdf,inset 2px 2px #808080}
+.progress i{background:repeating-linear-gradient(90deg,#000080 0 9px,transparent 9px 11px)}
+.top{background:#c0c0c0;padding:6px 8px;box-shadow:inset -1px -1px #0a0a0a,inset 1px 1px #fff}
+.top .count{color:#000}
+.dialog{display:flex;gap:12px;align-items:flex-start}
+.dialog .ico{flex:none;width:34px;height:34px;border-radius:50%;background:#1a5fd6;color:#fff;font:700 22px/34px Georgia,serif;text-align:center;box-shadow:1px 1px 0 #000}
+.reply{color:#000;font-size:16px;font-family:var(--sys);line-height:1.6}
+.echo{border-left:0;padding:6px 8px;background:#fff;color:#000;box-shadow:inset 1px 1px #808080}
+.follow{border-top:1px solid #808080}
+.taskbar{position:fixed;left:0;right:0;bottom:0;height:36px;padding:4px 6px calc(env(safe-area-inset-bottom) + 4px);background:#c0c0c0;display:flex;align-items:center;gap:6px;z-index:20;box-shadow:inset 0 1px #fff,inset 0 2px #dfdfdf}
+.start{font-weight:700;padding:3px 10px;display:flex;align-items:center;gap:6px;box-shadow:inset -1px -1px #0a0a0a,inset 1px 1px #fff,inset -2px -2px #808080,inset 2px 2px #dfdfdf}
+.task{flex:1;max-width:220px;padding:3px 8px;font-size:12px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;box-shadow:inset -1px -1px #fff,inset 1px 1px #0a0a0a,inset -2px -2px #dfdfdf,inset 2px 2px #808080}
+.clock{margin-left:auto;padding:3px 10px;font-size:12px;box-shadow:inset -1px -1px #fff,inset 1px 1px #808080}
+.done-mark{font-size:30px}
+</style>
+</head>
+<body>
+<div class="wrap stack" id="app"></div>
+<div class="taskbar"><div class="start">🪟 开始</div><div class="task" id="task">问卷.exe</div><div class="clock" id="clock">--:--</div></div>
+<script src="common.js"></script>
+<script src="ui.js"></script>
+<script src="flip-core.js"></script>
+<script>
+(() => {
+const { el, blip } = Object.assign({}, GAFUI, GAFFlip);
+const clock = () => { const d = new Date(); document.getElementById('clock').textContent = String(d.getHours()).padStart(2, '0') + ':' + String(d.getMinutes()).padStart(2, '0'); };
+clock(); setInterval(clock, 15000);
+const ding = () => { blip(880, 0.12, 'sine', 0.08); setTimeout(() => blip(660, 0.25, 'sine', 0.07), 110); };
+function bar(title, face) {   // 标题栏，可以拖动整个窗口
+  const t = el('div', 'titlebar', `<span>${title}</span><i>_</i><i>□</i><i>×</i>`);
+  let start = null;
+  t.addEventListener('pointerdown', (e) => { t.setPointerCapture(e.pointerId); start = { x: e.clientX - (+face.dataset.dx || 0), y: e.clientY - (+face.dataset.dy || 0) }; });
+  t.addEventListener('pointermove', (e) => { if (!start) return; const dx = e.clientX - start.x, dy = e.clientY - start.y; face.dataset.dx = dx; face.dataset.dy = dy; face.style.translate = `${dx}px ${dy}px`; });
+  t.addEventListener('pointerup', () => (start = null)); t.addEventListener('pointercancel', () => (start = null));
+  face.prepend(t);
+}
+GAFFlip.start({
+  skin: 'win98',
+  intro: '每一题是一个窗口。写好后点"确定"，会弹出一条系统消息回应你。',
+  labels: { turn: '确定(O)', prev: '< 上一步(B)', again: '返回修改(R)', next: '下一步(N) >', submit: '完成', mine: '你的输入', group: (q) => `${q.g} 组`, count: (q) => `正在处理 第 ${q.n} 题，共 10 题` },
+  hooks: {
+    front(face, q) { bar(`问卷.exe — 第 ${q.n} 题`, face); document.getElementById('task').textContent = `问卷.exe — 第 ${q.n} 题`; },
+    back(face, q) {
+      bar('系统消息', face);
+      const reply = face.querySelector('.reply'), d = el('div', 'dialog'); reply.before(d); d.appendChild(el('div', 'ico', 'i')); d.appendChild(reply);
+    },
+    flip(toBack) { if (toBack) ding(); },
+    ready(app) { const c = app.querySelector('.card:not(.face)'); if (c && !c.querySelector('.titlebar')) bar('欢迎使用 问卷.exe', c); },
+  },
+});
+})();
+</script>
+</body>
+</html>
