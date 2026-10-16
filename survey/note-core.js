@@ -1,7 +1,7 @@
 /* 传纸条的共用内核：开场纸条 → 每张纸条 = 对上一题的回应（+ 追问）+ 下一题 → 扔出去 → 下一张扔回来 → 最后一张交卷。
  * 外壳只管纸条长什么样、怎么扔：
  *   GAFNote.start({ skin, swipe, introLine, throwLabel, out(note, kind, info), in(note, kind), decorate(note, i) })
- *   swipe: true 时没有"扔"按钮，往上滑纸条就扔走（info.dy 是松手时纸条已经被拖上去的距离）；
+ *   swipe: true 时没有"扔"按钮，往左滑纸条就扔走（info.dx 是松手时纸条已经被拖出去的距离；上下滑仍是滚动页面）；
  *   out / in 返回 Promise；kind 是 'next'（往下传）或 'back'（捡回上一张）。 */
 (() => {
 'use strict';
@@ -25,8 +25,8 @@ function arrow() {
   const head = `M22 38 L${f1(34 + wob(3))} ${f1(29 + wob(3))} M22 38 L${f1(35 + wob(3))} ${f1(44 + wob(2))}`;
   return el('div', 'arrow', `<svg viewBox="0 0 120 48" aria-hidden="true"><path d="${d}"/><path d="${head}"/></svg>`);
 }
-function upArrow() {
-  return `<svg viewBox="0 0 30 40" aria-hidden="true"><path d="M15 37 C ${f1(14 + wob(3))} 26, ${f1(16 + wob(3))} 14, 15 4"/><path d="M15 4 L${f1(6 + wob(2))} ${f1(14 + wob(2))} M15 4 L${f1(24 + wob(2))} ${f1(13 + wob(2))}"/></svg>`;
+function leftArrow() {
+  return `<svg viewBox="0 0 44 24" aria-hidden="true"><path d="M41 12 C 30 ${f1(11 + wob(3))}, 16 ${f1(13 + wob(3))}, 4 12"/><path d="M4 12 L${f1(13 + wob(2))} ${f1(4 + wob(2))} M4 12 L${f1(13 + wob(2))} ${f1(20 + wob(2))}"/></svg>`;
 }
 /* 揉纸的沙沙声：一小段过滤过的噪声，不用音频文件 */
 let ac = null;
@@ -37,41 +37,40 @@ function rustle(dur = 0.28) {
     src.buffer = buf; src.connect(f); f.connect(g); g.connect(ac.destination); src.start(); } catch (e) {}
 }
 
-/* 往上滑就扔走。页面还能往下滚时先让它滚，滚到底了再往上滑才算扔；在输入框、按钮、画板上起手不算。
+/* 往左滑就扔走。手指先往哪个方向走就算哪种手势：横着往左是扔，竖着是正常滚动页面；在输入框、按钮、画板上起手不算。
  * canThrow() 为假时拖不远，松手弹回并提示。 */
 function swipeable(note, { canThrow, onThrow, hint }) {
-  let active = false, dragging = false, sy = 0, dy = 0, ly = 0, lt = 0, vel = 0;
+  let active = false, dragging = false, sx = 0, sy = 0, dx = 0, lx = 0, lt = 0, vel = 0;
   const skip = (t) => t.closest('input,textarea,button,label,canvas,a,select,.pic,.sheet');
-  const atBottom = () => window.innerHeight + window.scrollY >= document.documentElement.scrollHeight - 6;
-  const place = () => (note.style.transform = `translateY(${dy}px) rotate(${(-dy * 0.012).toFixed(2)}deg)`);
-  const begin = (y, target) => { if (note.inert || skip(target)) return false; active = true; dragging = false; sy = ly = y; dy = 0; vel = 0; lt = performance.now(); return true; };
-  const drag = (y, e) => {
+  const place = () => (note.style.transform = `translateX(${dx}px) rotate(${(dx * 0.02).toFixed(2)}deg)`);
+  const begin = (x, y, target) => { if (note.inert || skip(target)) return false; active = true; dragging = false; sx = lx = x; sy = y; dx = 0; vel = 0; lt = performance.now(); return true; };
+  const drag = (x, y, e) => {
     if (!active) return;
-    const d = y - sy;
+    const d = x - sx, v = y - sy;
     if (!dragging) {
-      if (d < -4 && atBottom()) dragging = true;
-      else if (Math.abs(d) > 4) { active = false; return; }
-      else return;
+      if (Math.abs(d) < 6 && Math.abs(v) < 6) return;
+      if (d < 0 && Math.abs(d) > Math.abs(v) * 1.2) dragging = true;
+      else { active = false; return; }
       note.classList.add('dragging');
     }
     if (e.cancelable) e.preventDefault();
-    const now = performance.now(); vel = (y - ly) / Math.max(1, now - lt); ly = y; lt = now;
-    dy = Math.min(0, canThrow() ? d : d * 0.22); place();
+    const now = performance.now(); vel = (x - lx) / Math.max(1, now - lt); lx = x; lt = now;
+    dx = Math.min(0, canThrow() ? d : d * 0.22); place();
   };
   const finish = () => {
     if (!active) return; active = false;
     if (!dragging) return;
     note.classList.remove('dragging');
-    if (canThrow() && (dy < -110 || (dy < -30 && vel < -0.6))) { onThrow(dy); return; }
+    if (canThrow() && (dx < -100 || (dx < -30 && vel < -0.6))) { onThrow(dx); return; }
     const from = note.style.transform; note.style.transform = '';
     note.animate([{ transform: from }, { transform: 'none' }], { duration: 260, easing: 'cubic-bezier(.3,1.5,.5,1)' });
-    if (!canThrow() && dy < -12) { hint.warn(); note.animate([{ transform: 'translateX(0)' }, { transform: 'translateX(-6px)' }, { transform: 'translateX(6px)' }, { transform: 'translateX(0)' }], { duration: 260, delay: 220 }); }
+    if (!canThrow() && dx < -12) { hint.warn(); note.animate([{ transform: 'translateX(0)' }, { transform: 'translateX(-6px)' }, { transform: 'translateX(6px)' }, { transform: 'translateX(0)' }], { duration: 260, delay: 220 }); }
   };
-  note.addEventListener('touchstart', (e) => { if (e.touches.length === 1) begin(e.touches[0].clientY, e.target); }, { passive: true });
-  note.addEventListener('touchmove', (e) => drag(e.touches[0].clientY, e), { passive: false });
+  note.addEventListener('touchstart', (e) => { if (e.touches.length === 1) begin(e.touches[0].clientX, e.touches[0].clientY, e.target); }, { passive: true });
+  note.addEventListener('touchmove', (e) => drag(e.touches[0].clientX, e.touches[0].clientY, e), { passive: false });
   note.addEventListener('touchend', finish); note.addEventListener('touchcancel', finish);
-  note.addEventListener('mousedown', (e) => { if (e.button === 0 && begin(e.clientY, e.target)) e.preventDefault(); });
-  addEventListener('mousemove', (e) => { if (active && note.isConnected) drag(e.clientY, e); });
+  note.addEventListener('mousedown', (e) => { if (e.button === 0 && begin(e.clientX, e.clientY, e.target)) e.preventDefault(); });
+  addEventListener('mousemove', (e) => { if (active && note.isConnected) drag(e.clientX, e.clientY, e); });
   addEventListener('mouseup', () => { if (note.isConnected) finish(); });
 }
 
@@ -103,7 +102,7 @@ function start(cfg) {
       b.onclick = () => { if (!busy && canThrow()) onThrow(0); };
       return { node: b, refresh: () => (b.disabled = !canThrow()) };
     }
-    const h = el('div', 'swipe', upArrow() + `<span>${fine ? '往上拖' : '往上滑'}，${label}</span>`), msg = el('p', 'warn');
+    const h = el('div', 'swipe', leftArrow() + `<span>${fine ? '往左拖' : '往左滑'}，${label}</span>`), msg = el('p', 'warn');
     const wrap = el('div', 'swipe-wrap'); wrap.appendChild(h); wrap.appendChild(msg);
     const hint = { warn: (t) => { msg.textContent = t || '先写一点，或者点「不告诉你」'; msg.classList.remove('show'); void msg.offsetWidth; msg.classList.add('show'); } };
     swipeable(note, { canThrow: () => !busy && canThrow(), onThrow, hint });
@@ -131,9 +130,9 @@ function start(cfg) {
       note.appendChild(el('p', 'lead', '就这些啦，谢谢你陪我传纸条。'));
       const err = el('p', 'err');
       let sending = false, t = null;
-      const send = async (dy) => {
+      const send = async (dx) => {
         if (busy || sending) return; sending = true;
-        if (dy) { const from = note.style.transform; note.style.transform = ''; note.animate([{ transform: from }, { transform: 'none' }], { duration: 240 }); }
+        if (dx) { const from = note.style.transform; note.style.transform = ''; note.animate([{ transform: from }, { transform: 'none' }], { duration: 240 }); }
         t.node.classList.add('sending'); err.textContent = '正在传…';
         try { const p = await submit(sess, { skin: 'note-' + cfg.skin }); move('done', 'next', p); }
         catch (e) {
@@ -151,12 +150,12 @@ function start(cfg) {
 
     const q = QUESTIONS[k];
     note.appendChild(el('h2', null, q.q + '：'));
-    const toss = (dy) => {
+    const toss = (dx) => {
       leave();
       const a = sess.answer(q.n);
       if (!a.followup) a.followup_q = followUpFor(q.n, a) || '';
       sess.s.feedback = (sess.s.feedback || []).filter((f) => f.n !== q.n).concat([{ n: q.n, text: feedbackFor(q.n, a) }]);
-      sess.s.cursor = k + 1; sess.save(); move(k + 1, 'next', null, { dy });
+      sess.s.cursor = k + 1; sess.save(); move(k + 1, 'next', null, { dx });
     };
     const t = thrower(note, '扔回给我', () => sess.isDone(q.n), toss);
     const box = questionInputs(q, sess, () => t.refresh()); note.appendChild(box);
@@ -192,7 +191,7 @@ function start(cfg) {
   async function move(next, kind, p, info) {
     busy = true;
     const old = stage.querySelector('.note');
-    if (old) { old.inert = true; rustle(); if (!calm) await cfg.out(old, kind, info || { dy: 0 }); old.remove(); }
+    if (old) { old.inert = true; rustle(); if (!calm) await cfg.out(old, kind, info || { dx: 0 }); old.remove(); }
     i = next; paintTop();
     const note = next === 'done' ? doneNote(p) : noteFor(next);
     stage.appendChild(note);

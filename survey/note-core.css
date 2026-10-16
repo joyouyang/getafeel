@@ -27,12 +27,12 @@ body{background:var(--desk);background-image:none;font-family:var(--kid);color:v
 .arrow svg{display:block;width:100%;height:100%;overflow:visible}
 .arrow path{fill:none;stroke:var(--arrow,var(--gel));stroke-width:2.2;stroke-linecap:round;stroke-linejoin:round}
 .swipe-wrap{display:flex;flex-direction:column;align-items:center;gap:2px;padding:10px 0 0;user-select:none;-webkit-user-select:none;cursor:grab}
-.swipe{display:flex;flex-direction:column;align-items:center;gap:2px;font-size:15px;color:var(--dim);opacity:.4;transition:opacity .25s}
-.swipe svg{width:20px;height:28px;overflow:visible}
+.swipe{display:flex;flex-direction:row;align-items:center;gap:8px;font-size:15px;color:var(--dim);opacity:.4;transition:opacity .25s}
+.swipe svg{width:34px;height:20px;overflow:visible}
 .swipe path{fill:none;stroke:currentColor;stroke-width:2.2;stroke-linecap:round}
 .swipe.ready{opacity:1}
 .swipe.ready svg{animation:nudge 1.8s ease-in-out infinite}
-@keyframes nudge{0%,60%,100%{transform:none}30%{transform:translateY(-6px)}}
+@keyframes nudge{0%,60%,100%{transform:none}30%{transform:translateX(-7px)}}
 .sending .swipe{opacity:.4}
 .warn{margin:0;min-height:1.5em;font-size:14px;color:var(--red,#c0392b);opacity:0;transition:opacity .2s}
 .warn.show{opacity:1}
