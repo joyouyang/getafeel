@@ -13,20 +13,20 @@ const QUESTIONS = [
   { n: 2, g: 'A', q: '你的真名', hint: '它不会原样出现在作品里', text: { kind: 'line', ph: '名字' } },
   { n: 3, g: 'A', q: '你的出生地点', hint: '写到城市就行，想写多细都可以', text: { kind: 'line', ph: '例如 杭州' } },
   { n: 4, g: 'B', q: '说说你的微信 combo：头像和朋友圈背景（或者 IG 头像和置顶）是什么样的，再加上你的个性签名',
-    hint: '用两三句话说说它们是什么、为什么选、用了多久；也可以随手画一下你的头像。愿意的话，也可以直接传图',
-    doodle: { slot: 'doodle', label: '随手画的头像' }, followUp: true, imagesAfter: true,
+    hint: '用两三句话说说它们是什么、为什么选、用了多久',
+    choiceLabel: '再给我看看你的头像（可选）：随手画一下，或者直接传图，选一种就好',
+    doodle: { slot: 'doodle', label: '随手画的头像' }, followUp: true,
     images: [{ slot: 'avatar', label: '头像（可选）' }, { slot: 'background', label: '朋友圈背景（可选）' }],
     text: { kind: 'area', ph: '比如：头像是一只侧着脸的猫，用了三年没换；背景是……；签名是……' } },
   { n: 5, g: 'B', q: '你的"人生作品"：电影书戏剧音乐游戏综艺……啥都行，不止一个也行，没有也行', hint: '没有也完全可以', text: { kind: 'area', ph: '写下名字，想说为什么也可以' } },
   { n: 6, g: 'B', q: '你的 comfort food：不知道吃什么的时候就吃它', text: { kind: 'line', ph: '它是什么' } },
   { n: 7, g: 'B', q: '你的 comfort 衣服：不知道穿什么的时候就穿它', text: { kind: 'line', ph: '它是什么' } },
-  { n: 8, g: 'C', q: '不看手机，凭印象说说：你解锁手机后看到的第一屏上有什么', followUp: true,
-    hint: '想到什么写什么，记不清也没关系。愿意的话，再传一张真实截图对照（可选）',
-    images: [{ slot: 'screen', label: '真实截图（可选）' }], text: { kind: 'area', ph: '比如：壁纸是……，最显眼的是……，还有几个红点……' } },
+  { n: 8, g: 'C', q: '你解锁手机后看到的第一屏截图', hint: '解锁后直接截一张传上来，不用整理',
+    images: [{ slot: 'screen', label: '第一屏截图' }], text: null },
   { n: 9, g: 'C', q: '随便给我发一句话，什么都行，不一定要连贯有逻辑', text: { kind: 'area', ph: '脑子里冒出什么就写什么' } },
   { n: 10, g: 'C', q: '从 1–100 里随机选一个数字', text: { kind: 'number', ph: '1 到 100' } },
 ];
-const VARIANT = 'describe-v2';   // v2：第 4 题改为描述或随手画，第 8 题改为凭印象描述、截图可选
+const VARIANT = 'flip-v3';   // v3：第 4 题描述 +（随手画 / 传图 二选一），第 8 题只收截图；正式问法为一答一回应
 
 const params = new URLSearchParams(location.search);
 const INVITE = (location.hash.match(/invite=([\w-]+)/) || [])[1] || params.get('invite') || null;
@@ -54,7 +54,7 @@ function session(mode) {
     clear() { store.del(key); },
     isDone(n) { const a = s.answers[n]; if (!a) return false; if (a.skipped) return true; const q = QUESTIONS[n - 1];
       const hasText = (a.text || '').trim().length > 0, hasImg = Object.keys(a.images || {}).length > 0;
-      if (q.n === 4 || q.n === 8) return hasImg || hasText; return hasText; },
+      if (q.n === 8) return hasImg; if (q.n === 4) return hasImg || hasText; return hasText; },
     tick(n, ms) { s.timing[n] = (s.timing[n] || 0) + ms; },
   };
   return api;
@@ -132,7 +132,7 @@ function feedbackFor(n, a) {
     case 5: return /^(无|没有|暂无|没)/.test(t) ? '没有"人生作品"也很好，说明你的人生还没有被某一件事限定。' : '记下了。能被叫作"人生作品"的，一定陪你走过一段路。';
     case 6: return `下次不知道吃什么，我也试试${short(t, 8) ? '「' + short(t, 8) + '」' : '它'}。`;
     case 7: return pick(['很有安全感的选择。', '穿上就不用再想的衣服，最懂你。']);
-    case 8: return (t ? '凭印象能记得这些，说明它们对你挺重要。' : '') + (imgs ? '截图也收到了，我会对照着看你记住了什么、漏掉了什么。' : '');
+    case 8: return imgs ? '第一屏收到了。这一屏，你每天大概要看上百次。' : '收到。';
     case 9: return '这句话我收好了。它会被认真读，但不会被原样用。';
     case 10: { const v = parseInt(t, 10);
       if (v === 100) return '一百，满格。'; if (v === 99) return '九十九，差一点就满，像是故意留了一格。'; if (v === 1) return '一，从最开始的那个。';
@@ -146,7 +146,6 @@ function followUpFor(n, a) {
   if (a.skipped || a.followup) return null;
   const t = (a.text || '').trim(), imgs = Object.keys(a.images || {}).length;
   if (n === 4 && t.length < 14) return (a.images || {}).doodle ? '画得很好。能再用一句话说说，你为什么选它当头像吗？' : imgs ? '图收到了。能再用一句话说说，你为什么选它吗？' : '能再多说一点吗？比如它是什么颜色、为什么选它、用了多久。';
-  if (n === 8 && t.length < 12) return '还记得别的吗？比如壁纸是什么、哪个图标上挂着红点。';
   return null;
 }
 
