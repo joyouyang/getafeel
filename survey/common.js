@@ -118,7 +118,7 @@ function downloadBackup(sess) {
 const pick = (arr) => arr[Math.floor(Math.random() * arr.length)];
 const short = (t, n = 10) => { t = (t || '').replace(/\s+/g, ' ').trim(); return t.length > n ? t.slice(0, n) + '…' : t; };
 function feedbackFor(n, a) {
-  if (a.skipped) return pick(['没关系，这题就留白。', '收到这个 👽，跳过。', '好，这题不问了。']);
+  if (a.skipped) return pick(['行。', '好好好', '111收到']);
   const t = (a.text || '').trim(), imgs = Object.keys(a.images || {}).length;
   switch (n) {
     case 1: { const m = +(t.match(/(\d{1,2})\s*月/) || t.match(/[\/.-](\d{1,2})[\/.-]/) || [])[1];

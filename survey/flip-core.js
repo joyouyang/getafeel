@@ -19,7 +19,7 @@ function start(cfg) {
 
   function echoOf(a) {
     const box = el('div', 'echo');
-    if (a.skipped) { box.textContent = '👽'; return box; }
+    if (a.skipped) { box.textContent = '不告诉你'; return box; }
     Object.values(a.images || {}).forEach((im) => { const img = el('img'); img.alt = ''; img.src = 'data:' + im.mime + ';base64,' + im.data; box.appendChild(img); });
     const t = (a.text || '').trim(); if (t) box.appendChild(el('span', null, '')).textContent = t.length > 80 ? t.slice(0, 80) + '…' : t;
     return box;

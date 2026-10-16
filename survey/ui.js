@@ -1,4 +1,4 @@
-/* 问卷页面共用的界面片段：一道题的输入区（图片、文字、👽）、开场说明、提交结果页 */
+/* 问卷页面共用的界面片段：一道题的输入区（图片、文字、不告诉你）、开场说明、提交结果页 */
 (() => {
 'use strict';
 const { QUESTIONS, compressImage } = window.GAF;
@@ -57,9 +57,10 @@ function questionInputs(q, sess, onChange) {
     if (q.images) body.appendChild(uploadGrid(q, a, sess, onChange));
     if (field) body.appendChild(field);
   }
-  const alien = el('button', 'alien' + (a.skipped ? ' on' : ''), a.skipped ? '已选择不回答 👽' : '不想回答，发个 👽');
+  const SKIP = (on) => (on ? '不告诉你 ✓' : '不告诉你');
+  const alien = el('button', 'alien' + (a.skipped ? ' on' : ''), SKIP(a.skipped));
   alien.type = 'button';
-  alien.onclick = () => { a.skipped = !a.skipped; sess.save(); alien.className = 'alien' + (a.skipped ? ' on' : ''); alien.textContent = a.skipped ? '已选择不回答 👽' : '不想回答，发个 👽'; body.className = 'qbody' + (a.skipped ? ' off' : ''); onChange(); };
+  alien.onclick = () => { a.skipped = !a.skipped; sess.save(); alien.className = 'alien' + (a.skipped ? ' on' : ''); alien.textContent = SKIP(a.skipped); body.className = 'qbody' + (a.skipped ? ' off' : ''); onChange(); };
   box.appendChild(body);
   const r = el('div', 'row'); r.appendChild(alien); box.appendChild(r);
   box.focusField = () => field && field.focus();
@@ -83,8 +84,8 @@ function pictureSlots(q, a, sess, onChange) {
         tile.appendChild(x);
       } else {
         tile.appendChild(el('span', 'plabel', sl.label));
-        const draw = el('button', 'pbtn', '✏️ 画一张'); draw.type = 'button'; draw.onclick = () => openPad();
-        const up = el('label', 'pbtn', '📷 传一张'), inp = el('input'); inp.type = 'file'; inp.accept = 'image/*'; inp.setAttribute('aria-label', '上传' + sl.label);
+        const draw = el('button', 'pbtn', '画一张'); draw.type = 'button'; draw.onclick = () => openPad();
+        const up = el('label', 'pbtn', '传一张'), inp = el('input'); inp.type = 'file'; inp.accept = 'image/*'; inp.setAttribute('aria-label', '上传' + sl.label);
         inp.onchange = async () => {
           const f = inp.files && inp.files[0]; if (!f) return;
           tile.classList.add('busy');
@@ -114,7 +115,7 @@ function pictureSlots(q, a, sess, onChange) {
 /* 随手画：每画一笔就存成图片放进这一题的 slot */
 function doodlePad(a, slot, sess) {
   const pane = el('div', 'pad');
-  const SIZE = 600, COLORS = ['#2b2b33', '#e0656a', '#f2b33d', '#3f8fd8', '#4fa86a'];
+  const SIZE = 600, COLORS = window.GAF_PAD_COLORS || ['#2b2b33', '#e0656a', '#f2b33d', '#3f8fd8', '#4fa86a'];   // 外壳可以限定画笔颜色
   const cv = el('canvas'); cv.width = cv.height = SIZE; cv.setAttribute('aria-label', '画板');
   const x = cv.getContext('2d'); x.lineCap = x.lineJoin = 'round';
   let color = COLORS[0], width = 7, strokes = [], cur = null, base = null;
@@ -148,7 +149,7 @@ function doodlePad(a, slot, sess) {
 function introCard(sess, modeLine, onStart) {
   const c = el('div', 'card stack');
   c.innerHTML = `<h1>嗨，交个朋友吧？</h1>
-    <p class="lead" style="margin:0">${modeLine}不想答的，发个 👽 就行。</p>
+    <p class="lead" style="margin:0">${modeLine}不想答的，点「不告诉你」就行。</p>
     <p class="note" style="margin:0">你写的会交给 AI，帮我做几件送你的小作品。原话只有我看得到。</p>`;
   const go = el('button', 'btn pri', '好呀'); go.type = 'button';
   go.onclick = () => { sess.s.consent = true; sess.save(); onStart(); };

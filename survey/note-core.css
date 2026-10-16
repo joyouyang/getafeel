@@ -22,8 +22,21 @@ body{background:var(--desk);background-image:none;font-family:var(--kid);color:v
 .from{display:flex;flex-direction:column;gap:6px}
 .from .reply{margin:0;color:var(--gel);font-size:20px;line-height:1.6}
 .from .ask{margin:4px 0 0;color:var(--gel);font-size:16px;opacity:.85}
-.sep svg{display:block;width:100%;height:10px}
-.sep path{fill:none;stroke:var(--pencil);stroke-width:1.6;opacity:.35;vector-effect:non-scaling-stroke}
+/* 指向回答框的手画箭头、上滑提示 */
+.arrow{width:104px;height:40px;margin:-6px 0 -10px 4px}
+.arrow svg{display:block;width:100%;height:100%;overflow:visible}
+.arrow path{fill:none;stroke:var(--arrow,var(--gel));stroke-width:2.2;stroke-linecap:round;stroke-linejoin:round}
+.swipe-wrap{display:flex;flex-direction:column;align-items:center;gap:2px;padding:10px 0 0;user-select:none;-webkit-user-select:none;cursor:grab}
+.swipe{display:flex;flex-direction:column;align-items:center;gap:2px;font-size:15px;color:var(--dim);opacity:.4;transition:opacity .25s}
+.swipe svg{width:20px;height:28px;overflow:visible}
+.swipe path{fill:none;stroke:currentColor;stroke-width:2.2;stroke-linecap:round}
+.swipe.ready{opacity:1}
+.swipe.ready svg{animation:nudge 1.8s ease-in-out infinite}
+@keyframes nudge{0%,60%,100%{transform:none}30%{transform:translateY(-6px)}}
+.sending .swipe{opacity:.4}
+.warn{margin:0;min-height:1.5em;font-size:14px;color:var(--red,#c0392b);opacity:0;transition:opacity .2s}
+.warn.show{opacity:1}
+.note.dragging{cursor:grabbing}
 input[type=text],input[type=number],textarea{font-family:var(--kid);font-size:20px;color:var(--pen);background:transparent;border:0;border-bottom:2px dashed var(--line2);border-radius:0;padding:6px 2px;box-shadow:none}
 textarea{min-height:110px;line-height:32px;padding:0 2px;border:0;background-image:repeating-linear-gradient(transparent 0 31px,var(--line) 31px 32px);background-attachment:local}
 input::placeholder,textarea::placeholder{color:rgba(44,91,184,.35)}
