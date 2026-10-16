@@ -9,8 +9,9 @@ function questionInputs(q, sess, onChange) {
   const a = sess.answer(q.n), box = el('div', 'stack');
   const body = el('div', 'qbody' + (a.skipped ? ' off' : ''));
   if (q.hint) body.appendChild(el('p', 'hint', q.hint));
+  let grid = null;
   if (q.images) {
-    const grid = el('div', 'imgs');
+    grid = el('div', 'imgs');
     q.images.forEach((sl) => {
       const tile = el('label', 'slot');
       const paint = () => {
@@ -36,7 +37,7 @@ function questionInputs(q, sess, onChange) {
       };
       paint(); grid.appendChild(tile);
     });
-    body.appendChild(grid);
+    if (!q.imagesAfter) body.appendChild(grid);
   }
   let field;
   if (q.text.kind === 'area') { field = el('textarea'); }
@@ -45,6 +46,7 @@ function questionInputs(q, sess, onChange) {
   field.oninput = () => { a.text = field.value; sess.save(); onChange(); };
   body.appendChild(field);
   if (q.doodle) body.appendChild(doodlePad(a, q.doodle, sess, onChange));
+  if (grid && q.imagesAfter) { body.appendChild(el('p', 'hint', '愿意的话，也可以直接传图（可选）：')); body.appendChild(grid); }
   const alien = el('button', 'alien' + (a.skipped ? ' on' : ''), a.skipped ? '已选择不回答 👽' : '不想回答，发个 👽');
   alien.type = 'button';
   alien.onclick = () => { a.skipped = !a.skipped; sess.save(); alien.className = 'alien' + (a.skipped ? ' on' : ''); alien.textContent = a.skipped ? '已选择不回答 👽' : '不想回答，发个 👽'; body.className = 'qbody' + (a.skipped ? ' off' : ''); onChange(); };

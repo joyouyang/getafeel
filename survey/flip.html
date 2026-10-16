@@ -1,0 +1,103 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name="theme-color" content="#121a3d">
+<meta name="robots" content="noindex,nofollow">
+<title>Get A Feel 问卷 · 一答一回应</title>
+<link rel="stylesheet" href="common.css">
+<style>
+.top{display:flex;align-items:center;gap:12px;margin-bottom:6px}
+.top .progress{flex:1}
+.top span{font-size:13px;color:var(--dim);font-variant-numeric:tabular-nums;white-space:nowrap}
+.scene{perspective:1600px}
+.flipper{display:grid;transition:transform .8s cubic-bezier(.5,.05,.2,1);transform-style:preserve-3d}
+.flipper.flipped{transform:rotateY(180deg)}
+.face{grid-area:1/1;-webkit-backface-visibility:hidden;backface-visibility:hidden}
+.back{transform:rotateY(180deg);display:flex;flex-direction:column;gap:16px;
+  background:linear-gradient(160deg,rgba(246,215,139,.16),rgba(24,33,78,.82) 45%);border-color:rgba(246,215,139,.4)}
+.front h2,.back .reply{font-size:24px;margin:6px 0 10px}
+.echo{font-size:14px;color:var(--dim);border-left:2px solid var(--line2);padding:2px 0 2px 12px;margin:0;white-space:pre-wrap;word-break:break-word}
+.echo img{width:64px;height:64px;object-fit:cover;border-radius:8px;vertical-align:middle;margin-right:6px;background:#fff}
+.reply{font-family:var(--hand);font-weight:400;line-height:1.6;letter-spacing:.03em;color:var(--warm);opacity:0;transform:translateY(8px);transition:opacity .7s ease .55s,transform .7s ease .55s}
+.flipped .reply{opacity:1;transform:none}
+.follow{display:flex;flex-direction:column;gap:10px;padding-top:12px;border-top:1px dashed var(--line2)}
+.follow p{margin:0;font-size:15px}
+.nav{display:flex;justify-content:space-between;gap:10px;flex-wrap:wrap}
+.q-in{animation:in .35s ease both}
+@keyframes in{from{opacity:0;transform:translateX(18px)}to{opacity:1;transform:none}}
+@media (prefers-reduced-motion: reduce){.flipper{transition:none}.reply{transition:none}}
+</style>
+</head>
+<body>
+<div class="wrap stack" id="app"></div>
+<script src="common.js"></script>
+<script src="ui.js"></script>
+<script>
+(() => {
+const { QUESTIONS, session, feedbackFor, followUpFor } = GAF, { el, questionInputs, introCard, doSubmit } = GAFUI;
+const sess = session('with_feedback'), app = document.getElementById('app');
+let i = Math.min(sess.s.cursor || 0, QUESTIONS.length - 1), t0 = 0;
+const leave = () => { if (t0) { sess.tick(QUESTIONS[i].n, performance.now() - t0); t0 = 0; } sess.save(); };
+
+function echoOf(a) {   // 背面上方引用一下刚才写的
+  const box = el('p', 'echo');
+  if (a.skipped) { box.textContent = '👽'; return box; }
+  Object.values(a.images || {}).forEach((im) => { const img = el('img'); img.alt = ''; img.src = 'data:' + im.mime + ';base64,' + im.data; box.appendChild(img); });
+  const t = (a.text || '').trim(); if (t) box.appendChild(document.createTextNode(t.length > 80 ? t.slice(0, 80) + '…' : t));
+  return box;
+}
+
+function show() {
+  app.innerHTML = ''; t0 = performance.now();
+  const q = QUESTIONS[i], a = sess.answer(q.n), last = i === QUESTIONS.length - 1;
+  const top = el('div', 'top'); top.appendChild(el('div', 'progress', `<i style="width:${(i / QUESTIONS.length) * 100}%"></i>`)); top.appendChild(el('span', null, `第 ${q.n} / 10 题`)); app.appendChild(top);
+
+  const scene = el('div', 'scene q-in'), flipper = el('div', 'flipper'); scene.appendChild(flipper);
+  // 正面：题目和作答
+  const front = el('section', 'face front card stack');
+  front.appendChild(el('div', null, `<div class="qn">${q.g} 组</div><h2>${q.q}</h2>`));
+  const turn = el('button', 'btn pri', '写好了，翻过来'), back0 = el('button', 'btn', '上一题');
+  turn.type = back0.type = 'button'; back0.disabled = i === 0;
+  const refresh = () => (turn.disabled = !sess.isDone(q.n));
+  const box = questionInputs(q, sess, refresh); front.appendChild(box);
+  const nav = el('div', 'nav'); nav.appendChild(back0); nav.appendChild(turn); front.appendChild(nav);
+  // 背面：对这句话的回应
+  const back = el('section', 'face back card'); back.inert = true;
+  flipper.appendChild(front); flipper.appendChild(back); app.appendChild(scene); refresh();
+  setTimeout(() => box.focusField && box.focusField(), 380);
+
+  function paintBack() {
+    back.innerHTML = '';
+    back.appendChild(el('div', 'qn', `第 ${q.n} 题 · 你写的`));
+    back.appendChild(echoOf(a));
+    const fb = feedbackFor(q.n, a);
+    sess.s.feedback = (sess.s.feedback || []).filter((f) => f.n !== q.n).concat([{ n: q.n, text: fb }]);
+    back.appendChild(el('p', 'reply', fb));
+    const fq = a.followup_q || followUpFor(q.n, a);
+    if (fq) {   // 写得太短：在背面追问一句
+      a.followup_q = fq;   // 问过就记下，没补充也算
+      const f = el('div', 'follow');
+      f.appendChild(el('p', null, fq));
+      const ta = el('textarea'); ta.placeholder = '补充一句（可选）'; ta.id = 'q' + q.n + '-followup'; ta.value = a.followup || ''; ta.setAttribute('aria-label', '补充回答');
+      ta.oninput = () => { a.followup = ta.value; a.followup_q = fq; sess.save(); };
+      f.appendChild(ta); back.appendChild(f);
+    }
+    const r = el('div', 'nav');
+    const again = el('button', 'btn', '翻回去改改'), go = el('button', 'btn pri', last ? '提交' : '下一题');
+    again.type = go.type = 'button'; r.appendChild(again); r.appendChild(go); back.appendChild(r); back.appendChild(el('p', 'err'));
+    again.onclick = () => { flipper.classList.remove('flipped'); back.inert = true; front.inert = false; t0 = performance.now(); };
+    go.onclick = () => { sess.s.cursor = last ? i : i + 1; sess.save(); if (last) doSubmit(sess, scene); else { i++; show(); } };
+    sess.save();
+  }
+  turn.onclick = () => { leave(); paintBack(); front.inert = true; back.inert = false; flipper.classList.add('flipped'); window.scrollTo({ top: 0, behavior: 'smooth' }); };
+  back0.onclick = () => { leave(); i--; sess.s.cursor = i; sess.save(); show(); };
+  front.addEventListener('keydown', (e) => { if (e.key === 'Enter' && e.target.tagName === 'INPUT' && !turn.disabled) turn.click(); });
+}
+if (sess.s.consent && Object.keys(sess.s.answers).length) show();
+else app.appendChild(introCard(sess, '一次只问一题。你写好后，卡片会翻过来，背面是对你这句话的回应，', show));
+})();
+</script>
+</body>
+</html>
