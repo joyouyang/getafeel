@@ -12,6 +12,9 @@ body{background:var(--desk);background-image:none;font-family:var(--kid);color:v
 .tally{height:26px;width:56px;overflow:visible}
 .tally path{fill:none;stroke:var(--pencil);stroke-width:3.2;stroke-linecap:round;opacity:.8}
 .stage{position:relative}
+/* 纸条在屏幕中间：页面至少一屏高，纸条（连同下方示意）在顶部计数下面的空间里上下居中；纸条比屏幕长时从上往下排 */
+.wrap{min-height:100vh;min-height:100dvh;display:flex;flex-direction:column}
+.stage{flex:1;display:flex;flex-direction:column;justify-content:center}
 .note{position:relative;display:flex;flex-direction:column;gap:14px;background:var(--paper);color:var(--pencil);padding:26px 22px 22px;will-change:transform}
 .note h1{font-family:var(--kid);font-weight:400;font-size:30px;letter-spacing:.02em;margin:0;line-height:1.35}
 .note h2{font-family:var(--kid);font-weight:400;font-size:22px;letter-spacing:.02em;margin:0;line-height:1.5}

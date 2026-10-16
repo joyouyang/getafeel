@@ -96,7 +96,7 @@ async function away(note, dx) {
 }
 // 扔回来：一团乱线从左边扔过来，弹一下，再展开成纸条
 async function back(note) {
-  const t = token();
+  const r = note.getBoundingClientRect(), t = token(r.left + r.width / 2, Math.max(70, Math.min(innerHeight - 90, r.top + Math.min(r.height, innerHeight) / 2)));   // 纸团落在纸条展开的位置
   const fly = anim(t, [{ transform: C + ' translate(-75vw,-18vh) rotate(500deg)' }, { offset: .8, transform: C + ' translateX(10px) rotate(-10deg)' }, { transform: C }], { duration: 650, easing: 'cubic-bezier(.2,.7,.35,1)', fill: 'both' });
   const open = anim(note, [{ transform: 'scale(.25) rotate(-12deg)', opacity: 0 }, { transform: 'none', opacity: 1 }], { duration: 360, delay: 710, easing: 'cubic-bezier(.3,1.4,.5,1)' });
   await fly; await gone(t, [{ opacity: 1 }, { opacity: 0 }], { duration: 200 }); t.remove(); await open;

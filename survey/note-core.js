@@ -27,7 +27,7 @@ function rustle(dur = 0.28) {
     src.buffer = buf; src.connect(f); f.connect(g); g.connect(ac.destination); src.start(); } catch (e) {}
 }
 
-/* 纸条外、紧挨着纸条下方的手势示意（纸条很长时贴在屏幕底边）：一个手指圆点带着拖痕往左（或往右）划，可以配一句话；提醒也出现在这里 */
+/* 纸条外、紧挨着纸条下方的手势示意（和纸条一起在屏幕中间；纸条很长时贴在屏幕底边）：一个手指圆点带着拖痕往左（或往右）划，可以配一句话；提醒也出现在这里 */
 function makeGuide() {
   const node = el('div', 'guide'), lane = el('div', 'lane', '<i class="trail"></i><i class="dot"></i>'), cap = el('p', 'cap'), warn = el('p', 'warn');
   node.setAttribute('aria-live', 'polite'); lane.setAttribute('aria-hidden', 'true');
@@ -48,13 +48,14 @@ function nudge(note, dir) {
   note.animate([{ transform: 'none' }, { offset: 0.4, transform: `translateX(${dir * 28}px) rotate(${dir * 0.8}deg)` }, { transform: 'none' }], { duration: 750, easing: 'ease-in-out' });
 }
 
-/* 往左滑扔走，往右滑捡回上一张。手指先往哪个方向走就算哪种手势：横着是扔或捡，竖着是正常滚动页面；在输入框、按钮、画板上起手不算。
+/* 往左滑扔走，往右滑捡回上一张。整个屏幕都能起手（纸条外的空白也算），手指先往哪个方向走就算哪种手势：横着是扔或捡，竖着是正常滚动页面。
+ * 按钮、图片格、画板上起手不算；手机上没在打字的输入框可以起手（点一下还是正常进入输入），电脑上输入框里起手不算（留给选字）。
  * canThrow() 为假时往左拖不远，松手弹回并提醒；canBack() 为假时不能往右拖。没拖动、只是点了一下时调用 onTap。 */
 function swipeable(note, { canThrow, onThrow, canBack, onBack, onRefuse, onTap }) {
   let active = false, dragging = false, sx = 0, sy = 0, dx = 0, lx = 0, lt = 0, vel = 0;
-  const skip = (t) => t.closest('input,textarea,button,label,canvas,a,select,.pic,.sheet');
+  const skip = (t, touch) => !t.closest || !!t.closest('button,label,canvas,a,select,.pic,.sheet,input[type=file]') || (t.closest('input,textarea') && (!touch || t === document.activeElement));
   const place = () => (note.style.transform = `translateX(${dx}px) rotate(${(dx * 0.02).toFixed(2)}deg)`);
-  const begin = (x, y, target) => { if (note.inert || skip(target)) return false; active = true; dragging = false; sx = lx = x; sy = y; dx = 0; vel = 0; lt = performance.now(); return true; };
+  const begin = (x, y, target, touch) => { if (!note.isConnected || note.inert || skip(target, touch)) return false; active = true; dragging = false; sx = lx = x; sy = y; dx = 0; vel = 0; lt = performance.now(); return true; };
   const drag = (x, y, e) => {
     if (!active) return;
     const d = x - sx, v = y - sy;
@@ -72,16 +73,17 @@ function swipeable(note, { canThrow, onThrow, canBack, onBack, onRefuse, onTap }
     if (!active) return; active = false;
     if (!dragging) { if (onTap) onTap(); return; }
     note.classList.remove('dragging');
-    if (canThrow() && (dx < -100 || (dx < -30 && vel < -0.6))) { onThrow(dx); return; }
-    if (canBack() && (dx > 100 || (dx > 30 && vel > 0.6))) { onBack(dx); return; }
+    if (canThrow() && (dx < -80 || (dx < -25 && vel < -0.5))) { onThrow(dx); return; }
+    if (canBack() && (dx > 80 || (dx > 25 && vel > 0.5))) { onBack(dx); return; }
     const from = note.style.transform; note.style.transform = '';
     note.animate([{ transform: from }, { transform: 'none' }], { duration: 260, easing: 'cubic-bezier(.3,1.5,.5,1)' });
     if (!canThrow() && dx < -12) { onRefuse(); note.animate([{ transform: 'translateX(0)' }, { transform: 'translateX(-6px)' }, { transform: 'translateX(6px)' }, { transform: 'translateX(0)' }], { duration: 260, delay: 220 }); }
   };
-  note.addEventListener('touchstart', (e) => { if (e.touches.length === 1) begin(e.touches[0].clientX, e.touches[0].clientY, e.target); }, { passive: true });
-  note.addEventListener('touchmove', (e) => drag(e.touches[0].clientX, e.touches[0].clientY, e), { passive: false });
-  note.addEventListener('touchend', finish); note.addEventListener('touchcancel', finish);
-  note.addEventListener('mousedown', (e) => { if (e.button === 0 && begin(e.clientX, e.clientY, e.target)) e.preventDefault(); });
+  // 监听整个页面；纸条被换掉（不在页面上）以后这些监听自动不起作用
+  addEventListener('touchstart', (e) => { if (e.touches.length === 1) begin(e.touches[0].clientX, e.touches[0].clientY, e.target, true); else active = false; }, { passive: true });
+  addEventListener('touchmove', (e) => { if (active && note.isConnected) drag(e.touches[0].clientX, e.touches[0].clientY, e); }, { passive: false });
+  addEventListener('touchend', () => { if (note.isConnected) finish(); }); addEventListener('touchcancel', () => { if (note.isConnected) finish(); });
+  addEventListener('mousedown', (e) => { if (e.button === 0 && begin(e.clientX, e.clientY, e.target, false)) e.preventDefault(); });
   addEventListener('mousemove', (e) => { if (active && note.isConnected) drag(e.clientX, e.clientY, e); });
   addEventListener('mouseup', () => { if (note.isConnected) finish(); });
 }
@@ -91,7 +93,8 @@ function start(cfg) {
   const top = el('div', 'top'), stage = el('div', 'stage');
   app.appendChild(top); app.appendChild(stage);
   const guide = cfg.swipe ? makeGuide() : null;
-  if (guide) { app.appendChild(guide.node); app.classList.add('has-guide'); }
+  if (guide) { stage.appendChild(guide.node); app.classList.add('has-guide'); }
+  const put = (note) => stage.insertBefore(note, guide ? guide.node : null);   // 纸条放在示意的上面
   let i = sess.s.consent ? Math.min(sess.s.cursor || 0, END) : -1, t0 = 0, busy = false;
   let cur = null;   // 当前纸条的 { note, throwIt, backIt, ready, onShown }，给键盘左右键和手势示意用
   const leave = () => { if (t0 && i >= 0 && i < END) sess.tick(QUESTIONS[i].n, performance.now() - t0); t0 = 0; sess.save(); };
@@ -252,7 +255,7 @@ function start(cfg) {
     if (old) { old.inert = true; rustle(); if (!calm) await cfg.out(old, kind, info || { dx: 0 }); old.remove(); }
     i = next; paintTop();
     const note = next === 'done' ? doneNote(p) : noteFor(next);
-    stage.appendChild(note);
+    put(note);
     if (cfg.decorate) cfg.decorate(note, next);
     window.scrollTo({ top: 0 });
     if (!calm) await cfg.in(note, kind);
@@ -267,7 +270,7 @@ function start(cfg) {
   });
 
   paintTop();
-  const first = noteFor(i); stage.appendChild(first); if (cfg.decorate) cfg.decorate(first, i);
+  const first = noteFor(i); put(first); if (cfg.decorate) cfg.decorate(first, i);
   if (!calm) { busy = true; cfg.in(first, 'next').then(() => shown(first)); } else shown(first);
 }
 
