@@ -17,6 +17,7 @@ const QUESTIONS = [
     images: [{ slot: 'avatar', label: '头像', draw: true }], text: { kind: 'area', ph: '比如：一只侧着脸的猫，用了三年没换' } },
   { n: 5, g: 'B', q: '你的朋友圈背景？描述下画几笔也行', followUp: true,
     images: [{ slot: 'background', label: '朋友圈背景', draw: true }], text: { kind: 'area', ph: '比如：一张很久以前拍的海' } },
+  { n: 11, g: 'B', q: '你的"人生作品"？电影、书、剧、音乐、游戏、综艺……啥都行，不止一个也行，没有也行', followUp: true, text: { kind: 'area', ph: '比如：一部很久以前看的电影' } },
   { n: 6, g: 'B', q: '你的 comfort food：不知道吃什么的时候就吃它', text: { kind: 'line', ph: '它是什么' } },
   { n: 7, g: 'B', q: '你的 comfort 衣服：不知道穿什么的时候就穿它', text: { kind: 'line', ph: '它是什么' } },
   { n: 8, g: 'C', q: '你解锁手机后看到的第一屏截图', hint: '解锁后直接截一张传上来，不用整理',
@@ -24,7 +25,8 @@ const QUESTIONS = [
   { n: 9, g: 'C', q: '随便给我发一句话，什么都行，不一定要连贯有逻辑', text: { kind: 'area', ph: '脑子里冒出什么就写什么' } },
   { n: 10, g: 'C', q: '从 1–100 里随机选一个数字', text: { kind: 'number', ph: '1 到 100' } },
 ];
-const VARIANT = 'v5';   // v5：1 名字、2 出生时间、3 出生地、4 头像（描述/画/传）、5 朋友圈背景（描述/画/传），6-10 同 v4；去掉了"人生作品"和个性签名
+const VARIANT = 'v6';   // v6（10-20）：在第 5 题后加回「人生作品」，数据里编号 11，原 1-10 题编号不变；页面上是第 6 张，共 11 道
+// 以下是 v5 的说明：   // v5：1 名字、2 出生时间、3 出生地、4 头像（描述/画/传）、5 朋友圈背景（描述/画/传），6-10 同 v4；去掉了"人生作品"和个性签名
 
 const params = new URLSearchParams(location.search);
 const INVITE = (location.hash.match(/invite=([\w-]+)/) || [])[1] || params.get('invite') || null;
@@ -57,7 +59,7 @@ function session(mode, keyName) {   // keyName：同一种问法下不同外壳�
       catch (e) { const lite = JSON.parse(JSON.stringify(s)); Object.values(lite.answers).forEach((a) => (a.images = {})); store.set(key, lite); }
     },
     clear() { store.del(key); },
-    isDone(n) { const a = s.answers[n]; if (!a) return false; if (a.skipped) return true; const q = QUESTIONS[n - 1];
+    isDone(n) { const a = s.answers[n]; if (!a) return false; if (a.skipped) return true; const q = QUESTIONS.find((x) => x.n === n);   // v6 起题号和位置不再一一对应
       const hasText = (a.text || '').trim().length > 0, hasImg = Object.keys(a.images || {}).length > 0;
       if (!q.text) return hasImg; if (q.images) return hasImg || hasText; return hasText; },   // 只收图的题要有图；可写可画的题有一样就行
     tick(n, ms) { s.timing[n] = (s.timing[n] || 0) + ms; },
@@ -141,6 +143,7 @@ function feedbackFor(n, a) {
     case 7: return pick(['很有安全感的选择。', '穿上就不用再想的衣服，最懂你。']);
     case 8: return imgs ? '第一屏收到了。这一屏，你每天大概要看上百次。' : '收到。';
     case 9: return '这句话我收好了。它会被认真读，但不会被原样用。';
+    case 11: return /^(没有|无|暂时没有|还没有|没|木有|none|no)$/i.test(t.replace(/[。.!！~～\s]/g, '')) ? '没有也很好，说明你的人生没被哪一件作品定义。' : t ? `「${short(t, 12)}」，记下了。` : '记下了。';
     case 10: { const v = parseInt(t, 10);
       if (v === 100) return '一百，满格。'; if (v === 99) return '九十九，差一点就满，像是故意留了一格。'; if (v === 1) return '一，从最开始的那个。';
       if ([66, 88, 8, 6, 9].includes(v)) return `${v}，一个吉利的数。`; if (v && v % 10 === 0) return `${v}，很整齐。`; if (v) return `${v}，记下了。`; return '记下了。'; }
@@ -156,6 +159,7 @@ function followUpFor(n, a) {
     const what = n === 4 ? '头像' : '背景', drew = Object.values(a.images || {}).some((im) => im.src === 'doodle');
     return drew ? `画得很好。能再用一句话说说，你为什么选它当${what}吗？` : imgs ? '图收到了。能再用一句话说说，你为什么选它吗？' : '能再多说一点吗？比如它是什么颜色、为什么选它、用了多久。';
   }
+  if (n === 11 && t.length < 6 && !/^(没有|无|暂时没有|还没有|没|木有|none|no)$/i.test(t.replace(/[。.!！~～\s]/g, ''))) return '它哪一点最打动你？';
   return null;
 }
 

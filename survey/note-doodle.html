@@ -105,7 +105,7 @@ async function back(note) {
 const aside = (note, dx) => gone(note, [{ transform: `translateX(${dx}px) rotate(${(dx * 0.02).toFixed(2)}deg)`, opacity: 1 }, { transform: 'translateX(110vw) rotate(8deg)', opacity: 1 }], { duration: 360, easing: 'cubic-bezier(.4,0,.8,.5)' });
 const pickUp = (note) => anim(note, [{ transform: 'translateX(-110vw) rotate(-6deg)' }, { offset: .8, transform: 'translateX(8px) rotate(.5deg)' }, { transform: 'none' }], { duration: 480, easing: 'cubic-bezier(.2,.7,.3,1)' });
 GAFNote.start({ skin: 'doodle', swipe: true, decorate: outline,
-  intro: { title: 'Hi！', lead: '这是一项由lequan发起的实验，恭喜你成为她的邀请对象^_^。<br>10道题，3分钟，看看我能不能<span style="white-space:nowrap">get 到你^ ^</span>', small: '数据会喂给LLM，对lequan来说，不回答也是有效信息，安lah！' },
+  intro: { title: 'Hi！', lead: '这是一项由lequan发起的实验，恭喜你成为她的邀请对象^_^。<br>11道题，3分钟，看看我能不能<span style="white-space:nowrap">get 到你^ ^</span>', small: '数据会喂给LLM，对lequan来说，不回答也是有效信息，安lah！' },
   out(note, kind, info) { const dx = (info && info.dx) || 0; return kind === 'back' ? aside(note, dx) : away(note, dx); },
   in(note, kind) { return kind === 'back' ? pickUp(note) : back(note); },
 });
