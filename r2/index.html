@@ -65,6 +65,9 @@ h2{font-size:18px;margin:30px 0 8px}
 .toast{position:fixed;left:50%;top:40%;transform:translate(-50%,-50%);z-index:90;background:rgba(0,0,0,.78);color:#fff;padding:10px 16px;border-radius:12px;font-size:14px;opacity:0;transition:opacity .3s;pointer-events:none}
 .toast.on{opacity:1}
 .center{min-height:70vh;display:flex;flex-direction:column;justify-content:center}
+.nameinput{display:block;width:100%;margin-top:22px;padding:14px 16px;border:1.5px solid var(--line);border-radius:14px;background:var(--card);color:var(--blue);font:inherit;font-size:18px}
+.nameinput:focus{outline:none;border-color:var(--ink)}
+.link-sm{display:block;margin:18px auto 0;color:var(--muted);font-size:13px;text-decoration:underline}
 .homebar{position:sticky;top:0;z-index:20;margin:0 -16px 8px;padding:max(10px,env(safe-area-inset-top)) 16px 10px;background:var(--paper)}
 .homebar button{display:block;width:100%;padding:16px;border-radius:14px;background:var(--ink);color:var(--paper);font-size:18px;font-weight:700}
 .pair{display:flex;gap:10px;margin-top:26px}
@@ -104,8 +107,8 @@ const workHtml = wid => { if (!htmlCache.has(wid)) htmlCache.set(wid, getBin('w/
 
 // —— 存在这台手机里的进度 ——
 let S;
-const load = () => { try { return JSON.parse(localStorage.getItem('gaf-r2:' + ENVNAME) || 'null'); } catch (e) { return null; } };
-const save = () => { try { localStorage.setItem('gaf-r2:' + ENVNAME, JSON.stringify(S)); } catch (e) {} };
+const load = () => { try { return JSON.parse(localStorage.getItem('gaf-r2:' + ENV.who) || 'null'); } catch (e) { return null; } };
+const save = () => { try { localStorage.setItem('gaf-r2:' + ENV.who, JSON.stringify(S)); } catch (e) {} };
 const deviceId = () => { try { const d = JSON.parse(localStorage.getItem('gaf-device') || 'null'); if (d && d.id) return d.id; } catch (e) {} return S.dev; };
 
 // —— 发数据 ——
@@ -248,11 +251,12 @@ function render() {
     const left = ENV.mine.filter(w => !S.marks[w]).length, all = !left;
     if (!S.submitted) {
       body = `<h1>我从你的回答里 get 到的你</h1><p class="sub">每件来自你回答的一道题。点开玩一玩，看完告诉我有没有 get 到你。${left ? `还剩 <span class="blue">${left}</span> 件。` : ''}</p>
-        <div class="grid">${ENV.mine.map(w => mineTile(w, 'open')).join('')}</div>${all ? wrapUp() : ''}`;
+        <div class="grid">${ENV.mine.map(w => mineTile(w, 'open')).join('')}</div>${all ? wrapUp() : ''}${viaName ? '<button class="link-sm" id="notme">不是你？换个名字</button>' : ''}`;
     } else {
       body = `<h1>你的作品</h1><p class="sub">谢谢你，已经收到了。随时可以回来再玩。</p>
         <div class="grid">${ENV.mine.map(w => mineTile(w, 'open')).join('')}</div>
         ${messagesHtml()}
+        ${viaName ? '<button class="link-sm" id="notme">不是你？换个名字</button>' : ''}
         <h2>去看看别人</h2><p class="sub">别人也做了这样的作品，都是匿名的。你的作品也会匿名出现在别人那里。</p>
         <button class="cta" id="goO">${S.browse.people > 0 && S.pos < S.order.length ? `接着看（已经看了 ${S.browse.people} 个人）` : S.pos >= S.order.length ? '所有人都看完了' : '看第一个人'}</button>`;
     }
@@ -266,6 +270,7 @@ function render() {
   app.querySelectorAll('[data-other]').forEach(b => b.onclick = () => openOther(b.dataset.other));
   const on = (id, f) => { const e = $('#' + id); if (e) e.onclick = f; };
   on('send', submitMine);
+  on('notme', notMe);
   on('goO', () => { if (S.pos < S.order.length) enterPerson(); });
   on('nextP', () => { leavePerson(); S.pos++; save(); enterPerson(); });
   on('prevP', () => { leavePerson(); S.pos = Math.max(0, S.pos - 1); save(); enterPerson(); });
@@ -273,25 +278,58 @@ function render() {
 }
 
 function fail(t) { app.innerHTML = `<div class="wrap center"><h1>打不开</h1><p class="sub">${t}</p></div>`; }
-(async () => {
-  const token = location.hash.slice(1).trim();
-  if (!token) return fail('这个链接不完整。请用发给你的完整链接打开。');
+// 公共入口：填问卷第 1 题的名字。写法统一规则必须和 build.mjs 的 normName 一致
+const normName = s => s.normalize('NFKC').toLowerCase().replace(/[\s·・.\-_'"’]/g, '');
+let viaName = false;
+async function unlock(secret) {
   try {
-    ENVNAME = hex(await crypto.subtle.digest('SHA-256', enc.encode('env:' + token))).slice(0, 20);
+    ENVNAME = hex(await crypto.subtle.digest('SHA-256', enc.encode('env:' + secret))).slice(0, 20);
+    const r = await fetch('e/' + ENVNAME + '.bin', { cache: 'no-cache' }); if (!r.ok) return 'missing';
     const tk = await crypto.subtle.deriveKey({ name: 'PBKDF2', salt: SALT, iterations: 150000, hash: 'SHA-256' },
-      await crypto.subtle.importKey('raw', enc.encode(token), 'PBKDF2', false, ['deriveKey']), { name: 'AES-GCM', length: 256 }, false, ['decrypt']);
-    ENV = JSON.parse(dec.decode(await open(tk, await getBin('e/' + ENVNAME + '.bin'))));
+      await crypto.subtle.importKey('raw', enc.encode(secret), 'PBKDF2', false, ['deriveKey']), { name: 'AES-GCM', length: 256 }, false, ['decrypt']);
+    ENV = JSON.parse(dec.decode(await open(tk, await r.arrayBuffer())));
     K = await crypto.subtle.importKey('raw', Uint8Array.from(atob(ENV.k), c => c.charCodeAt(0)), 'AES-GCM', false, ['decrypt']);
     POOL = JSON.parse(dec.decode(await open(K, await getBin('pool.bin'))));
-  } catch (e) { return fail('这个链接打不开。请检查链接是否完整，或者稍后再试。'); }
+    return 'ok';
+  } catch (e) { return 'error'; }
+}
+function askName(msg) {
+  app.innerHTML = `<div class="wrap center"><h1>你叫什么？</h1><p class="sub">填你在问卷第 1 题写的名字，就能看到我从你的回答里做出来的作品。</p>
+    <input id="nm" class="nameinput" autocomplete="off" autocapitalize="off" placeholder="名字" maxlength="40">
+    <button class="cta" id="go">打开</button><div class="note" id="note">${msg || ''}</div></div>`;
+  const go = async () => {
+    const n = normName($('#nm').value || '');
+    if (!n) { $('#note').textContent = '先填名字'; return; }
+    $('#go').disabled = true; $('#note').textContent = ''; $('#go').textContent = '正在找……';
+    const r = await unlock('name:' + n);
+    if (r === 'ok') { viaName = true; try { localStorage.setItem('gaf-r2-name', n); } catch (e) {} return start(); }
+    $('#go').disabled = false; $('#go').textContent = '打开';
+    $('#note').textContent = r === 'missing' ? '没找到这个名字。请填你在问卷第 1 题写的那个写法，比如英文名或昵称。' : '网络不太好，再点一次试试';
+  };
+  $('#go').onclick = go; $('#nm').onkeydown = e => { if (e.key === 'Enter') go(); };
+  setTimeout(() => $('#nm').focus(), 50);
+}
+async function start() {
   S = load() || {};
   const shuffled = others(); for (let i = shuffled.length - 1; i > 0; i--) { const j = Math.floor(Math.random() * (i + 1)); [shuffled[i], shuffled[j]] = [shuffled[j], shuffled[i]]; }
   S = Object.assign({ marks: {}, best: null, score: null, why: null, worst: null, submitted: false, mineTime: {}, t0: now(),
     order: shuffled, pos: 0, page: 'home', browse: { people: 0, seconds: 0 }, rated: {}, dev: 'r2-' + Math.random().toString(36).slice(2, 10) }, S);
+  S.entry = viaName ? 'name' : 'link';
   if (S.page === 'browse') S.page = 'home';
   save();
   await loadMessages();
   render();
+}
+function notMe() { try { localStorage.removeItem('gaf-r2-name'); } catch (e) {} ENV = null; viaName = false; askName(); }
+(async () => {
+  const token = location.hash.slice(1).trim();
+  if (token) {   // 专属链接
+    const r = await unlock(token);
+    return r === 'ok' ? start() : fail('这个链接打不开。请检查链接是否完整，或者稍后再试。');
+  }
+  let saved = null; try { saved = localStorage.getItem('gaf-r2-name'); } catch (e) {}
+  if (saved && await unlock('name:' + saved) === 'ok') { viaName = true; return start(); }
+  askName();
 })();
 </script>
 </body>
