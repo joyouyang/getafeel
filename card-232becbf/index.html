@@ -1,0 +1,21 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="robots" content="noindex">
+<title>把快乐置顶</title>
+<style>
+:root{--barH:calc(56px + env(safe-area-inset-bottom))}
+html,body{margin:0;height:100%;background:#000;overflow:hidden;font-family:-apple-system,BlinkMacSystemFont,"PingFang SC",sans-serif}
+iframe{position:fixed;left:0;top:0;width:100%;height:calc(100% - var(--barH));border:0;background:#000}
+.bar{position:fixed;left:0;right:0;bottom:0;height:var(--barH);padding:0 14px env(safe-area-inset-bottom);background:#111;display:flex;align-items:center;justify-content:space-between;gap:10px}
+.bar span{color:rgba(255,255,255,.7);font-size:14px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.bar a{flex:none;padding:9px 16px;border-radius:999px;background:#fff;color:#111;font-weight:700;font-size:14px;text-decoration:none}
+</style>
+</head>
+<body>
+<iframe src="work.html" title="把快乐置顶" allow="autoplay"></iframe>
+<div class="bar"><span>🔊 有声音，记得关掉静音</span><a href="design.html">看设计思路 →</a></div>
+</body>
+</html>
