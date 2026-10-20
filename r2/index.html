@@ -81,6 +81,7 @@ h2{font-size:18px;margin:30px 0 8px}
 .ctabox b{font-size:16px}
 .ctabox span{color:var(--muted);font-size:14px}
 .ctabox a{align-self:flex-start;margin-top:6px;padding:10px 16px;border-radius:999px;background:var(--blue);color:#fff;text-decoration:none;font-weight:600}
+.sound{margin:10px 0 0;font-size:13px;color:var(--ink)}
 .link-sm{display:block;margin:18px auto 0;color:var(--muted);font-size:13px;text-decoration:underline}
 .homebar{position:sticky;top:0;z-index:20;margin:0 -16px 8px;padding:max(10px,env(safe-area-inset-top)) 16px 10px;background:var(--paper)}
 .homebar .homebtn{display:block;text-align:center;padding:16px;border-radius:14px;background:var(--blue);color:#fff;font-size:18px;font-weight:700;text-decoration:none}
@@ -324,10 +325,10 @@ function render() {
   } else {
     const left = ENV.mine.filter(w => !S.marks[w]).length, all = !left;
     if (!S.submitted) {
-      body = `<h1>我从你的回答里 get 到的你</h1><p class="sub">每件来自你回答的一道题。点开玩一玩，看完告诉我有没有 get 到你。${left ? `还剩 <span class="blue">${left}</span> 件。` : ''}</p>
+      body = `<h1>我从你的回答里 get 到的你</h1><p class="sub">每件来自你回答的一道题。点开玩一玩，看完告诉我有没有 get 到你。${left ? `还剩 <span class="blue">${left}</span> 件。` : ''}</p><p class="sound">🔊 作品大多有声音，记得关掉静音、调大音量</p>
         <div class="grid">${ENV.mine.map(w => mineTile(w, 'open')).join('')}</div>${all ? wrapUp() : ''}${viaName ? '<button class="link-sm" id="notme">不是你？换个名字</button>' : ''}`;
     } else {
-      body = `<h1>你的作品</h1><p class="sub">谢谢你，已经收到了。随时可以回来再玩。</p>
+      body = `<h1>你的作品</h1><p class="sub">谢谢你，已经收到了。随时可以回来再玩。</p><p class="sound">🔊 作品大多有声音，记得关掉静音、调大音量</p>
         <div class="grid">${ENV.mine.map(w => mineTile(w, 'open')).join('')}</div>
         ${messagesHtml()}
         ${viaName ? '<button class="link-sm" id="notme">不是你？换个名字</button>' : ''}
@@ -369,7 +370,7 @@ async function unlock(secret) {
   } catch (e) { return 'error'; }
 }
 function askName(msg) {
-  app.innerHTML = `<div class="wrap center"><h1>你叫什么？</h1><p class="sub">填你在问卷第 1 题写的名字，就能看到我从你的回答里做出来的作品。</p>
+  app.innerHTML = `<div class="wrap center"><h1>你叫什么？</h1><p class="sub">填你在问卷第 1 题写的名字，就能看到我从你的回答里做出来的作品。</p><p class="sound">🔊 作品大多有声音，记得关掉静音、调大音量</p>
     <input id="nm" class="nameinput" autocomplete="off" autocapitalize="off" placeholder="名字" maxlength="40">
     <button class="cta" id="go">打开</button><div class="note" id="note">${msg || ''}</div>
     <button class="link-sm" id="visit">没填过问卷？随便看看别人的 →</button></div>`;
@@ -396,7 +397,8 @@ async function start() {
   save();
   await loadMessages();
   // 访客（10-20）：不看介绍页，直接进第一个人；回来时接着上次那个人，看完了就到结束页
-  if (isVisitor()) { if (S.pos < S.order.length) return enterPerson(); S.page = 'end'; save(); return render(); }
+  if (isVisitor()) { if (!S.soundTip) { S.soundTip = 1; setTimeout(() => toast('🔊 作品大多有声音，记得关掉静音'), 500); }
+    if (S.pos < S.order.length) return enterPerson(); S.page = 'end'; save(); return render(); }
   render();
 }
 function notMe() { try { localStorage.removeItem('gaf-r2-name'); } catch (e) {} ENV = null; viaName = false; askName(); }
