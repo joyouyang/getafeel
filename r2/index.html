@@ -29,12 +29,22 @@ h2{font-size:18px;margin:30px 0 8px}
 .tile.pick{outline:3px solid var(--blue);outline-offset:2px}
 .viewer{position:fixed;inset:0;z-index:70;background:#000;display:none}
 .viewer.on{display:block}
-.viewer iframe{position:absolute;inset:0;width:100%;height:100%;border:0}
-.vtop{position:absolute;left:0;right:0;top:0;padding:max(12px,env(safe-area-inset-top)) 14px 10px;display:flex;justify-content:space-between;align-items:flex-start;pointer-events:none;color:#fff;text-shadow:0 1px 8px rgba(0,0,0,.6);transition:opacity .8s}
+.viewer iframe{position:absolute;left:0;top:0;width:100%;height:calc(100% - var(--barH));border:0;background:#000}
+.viewer{--barH:calc(64px + env(safe-area-inset-bottom))}
+.vfade{position:absolute;left:0;right:0;top:0;bottom:var(--barH);background:#000;opacity:0;pointer-events:none;transition:opacity .18s}
+.vtop{position:absolute;left:0;right:0;top:0;padding:max(12px,env(safe-area-inset-top)) 14px 10px;pointer-events:none;color:#fff;text-shadow:0 1px 8px rgba(0,0,0,.6);transition:opacity .8s}
 .vtop.fade{opacity:0}
 .vtop b{display:block;font-size:17px}
 .vtop span{font-size:12px;opacity:.85}
-.vclose{pointer-events:auto;width:36px;height:36px;border-radius:50%;background:rgba(0,0,0,.4);color:#fff;font-size:20px;backdrop-filter:blur(6px);-webkit-backdrop-filter:blur(6px)}
+.vbar{position:absolute;left:0;right:0;bottom:0;height:var(--barH);padding:9px 10px env(safe-area-inset-bottom);background:#111;display:flex;align-items:flex-start;gap:8px}
+.ib{height:46px;min-width:46px;padding:0 14px;border-radius:999px;background:rgba(255,255,255,.12);color:#fff;font-size:17px;white-space:nowrap}
+.ib.on{color:#ffd76a}
+.vnext{margin-left:auto;height:46px;padding:0 20px;border-radius:999px;background:#fff;color:#111;font-weight:700;font-size:16px}
+.vmark{flex:1;height:46px;border-radius:999px;font-weight:700;font-size:15px}
+.vmark.no{background:rgba(255,255,255,.12);color:#fff}
+.vmark.yes{background:#fff;color:#2557d6}
+.panel{position:absolute;left:0;right:0;bottom:var(--barH);padding:12px 14px;background:rgba(17,17,17,.95);display:none;justify-content:center}
+.panel.on{display:flex}
 .loading{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;color:rgba(255,255,255,.6);font-size:14px}
 .dock{position:absolute;left:0;right:0;bottom:0;padding:12px 14px max(14px,env(safe-area-inset-bottom));display:flex;gap:10px;justify-content:center;background:linear-gradient(transparent,rgba(0,0,0,.45))}
 .pill{min-width:132px;padding:12px 18px;border-radius:999px;background:rgba(255,255,255,.93);color:#111;font-weight:600;font-size:15px;box-shadow:0 4px 18px rgba(0,0,0,.25)}
@@ -73,6 +83,7 @@ h2{font-size:18px;margin:30px 0 8px}
 .ctabox a{align-self:flex-start;margin-top:6px;padding:10px 16px;border-radius:999px;background:var(--blue);color:#fff;text-decoration:none;font-weight:600}
 .link-sm{display:block;margin:18px auto 0;color:var(--muted);font-size:13px;text-decoration:underline}
 .homebar{position:sticky;top:0;z-index:20;margin:0 -16px 8px;padding:max(10px,env(safe-area-inset-top)) 16px 10px;background:var(--paper)}
+.homebar .homebtn{display:block;text-align:center;padding:16px;border-radius:14px;background:var(--blue);color:#fff;font-size:18px;font-weight:700;text-decoration:none}
 .homebar button{display:block;width:100%;padding:16px;border-radius:14px;background:var(--ink);color:var(--paper);font-size:18px;font-weight:700}
 .pair{display:flex;gap:10px;margin-top:26px}
 .pair .cta{margin-top:0;flex:1}
@@ -82,7 +93,7 @@ h2{font-size:18px;margin:30px 0 8px}
 <body>
 <div id="app"><div class="wrap center"><p class="sub">正在打开……</p></div></div>
 <div class="viewer" id="viewer"><iframe title="作品" allow="autoplay; accelerometer; gyroscope"></iframe><div class="loading" id="vload">正在打开作品……</div>
-  <div class="vtop" id="vtop"><div><b></b><span></span></div><button class="vclose" id="vclose" aria-label="关闭">×</button></div>
+  <div class="vfade" id="vfade"></div><div class="vtop" id="vtop"><b></b><span></span></div>
   <div id="vdock"></div>
 </div>
 <div class="toast" id="toast"></div>
@@ -138,23 +149,27 @@ function prelude(){var P=false,ctxs=[],q=[];var AC=window.AudioContext||window.w
   ['pointerdown','touchstart'].forEach(function(t){addEventListener(t,function(){try{parent.postMessage({gaf:'touch'},'*')}catch(e){}},{capture:true,passive:true})});}
 const inject = h => { const t = '<script>(' + prelude.toString() + ')()<\/script>'; return /<head[^>]*>/i.test(h) ? h.replace(/<head[^>]*>/i, m => m + t) : t + h; };
 let vtopTimer, viewing = null;
-async function play(wid, top, sub) {
+const wait = ms => new Promise(r => setTimeout(r, ms));
+async function play(wid, sub) {
+  const switching = viewer.classList.contains('on');
   viewing = { wid, t0: now() };
   vtop.querySelector('b').textContent = '《' + POOL.works[wid].t + '》'; vtop.querySelector('span').textContent = sub;
   vtop.classList.remove('fade'); clearTimeout(vtopTimer); vtopTimer = setTimeout(() => vtop.classList.add('fade'), 3500);
-  $('#vload').style.display = 'flex'; viewer.classList.add('on'); document.body.style.overflow = 'hidden';
-  try { const h = await workHtml(wid); if (viewing && viewing.wid === wid) { ifr.srcdoc = inject(h); setTimeout(() => $('#vload').style.display = 'none', 300); } }
-  catch (e) { $('#vload').textContent = '作品没打开，关掉再试一次'; }
+  if (switching) { $('#vfade').style.opacity = '1'; await wait(180); try { ifr.contentWindow.__gaf && ifr.contentWindow.__gaf.pause(); } catch (e) {} }
+  else { $('#vload').style.display = 'flex'; viewer.classList.add('on'); document.body.style.overflow = 'hidden'; }
+  try {
+    const h = await workHtml(wid);
+    if (viewing && viewing.wid === wid) { ifr.srcdoc = inject(h); setTimeout(() => { $('#vload').style.display = 'none'; $('#vfade').style.opacity = '0'; }, 250); }
+  } catch (e) { $('#vload').style.display = 'flex'; $('#vload').textContent = '作品没打开，点 ← 返回再试一次'; $('#vfade').style.opacity = '0'; }
 }
+function lap() { const v = viewing; viewing = null; return v ? Math.round((now() - v.t0) / 1000) : 0; }   // 结束这一件的计时
 function stop() {
   try { ifr.contentWindow.__gaf && ifr.contentWindow.__gaf.pause(); } catch (e) {}
   ifr.srcdoc = ''; viewer.classList.remove('on'); vdock.innerHTML = ''; document.body.style.overflow = '';
-  const v = viewing; viewing = null; $('#vload').textContent = '正在打开作品……';
-  return v ? Math.round((now() - v.t0) / 1000) : 0;
+  $('#vload').textContent = '正在打开作品……'; $('#vfade').style.opacity = '0';
+  return lap();
 }
 addEventListener('message', e => { if (e.data && e.data.gaf === 'touch') vtop.classList.add('fade'); });
-$('#vclose').onclick = () => { if (closeHook) closeHook(); else { stop(); render(); } };
-let closeHook = null;
 
 const tile = (wid, label, extra = '', attr = '') => {
   const w = POOL.works[wid];
@@ -169,11 +184,11 @@ function mineTile(wid, mode) {
   return tile(wid, BLOCK_ME[POOL.works[wid].b], mode === 'best' && S.best === wid ? 'pick' : '', `data-${mode}="${wid}"`).replace('<span class="t">', stamp + c + '<span class="t">');
 }
 function openMine(wid) {
-  play(wid, '', '来自你回答的：' + BLOCK_ME[POOL.works[wid].b]);
-  vdock.innerHTML = `<div class="dock"><button class="pill ghost" data-m="no">没 get 到</button><button class="pill yes" data-m="yes">get 到我了</button></div>`;
+  play(wid, '来自你回答的：' + BLOCK_ME[POOL.works[wid].b]);
+  vdock.innerHTML = `<div class="vbar"><button class="ib" id="vback" aria-label="返回">←</button><button class="vmark no" data-m="no">没 get 到</button><button class="vmark yes" data-m="yes">get 到我了</button></div>`;
   const done = mark => { const sec = stop(); S.mineTime[wid] = (S.mineTime[wid] || 0) + sec; if (mark) S.marks[wid] = mark; save(); logView('self', wid, sec, { mark: mark || null, submitted: !!S.submitted }); render(); };
   vdock.querySelectorAll('[data-m]').forEach(b => b.onclick = () => done(b.dataset.m));
-  closeHook = () => { closeHook = null; done(null); };
+  $('#vback').onclick = () => done(null);
 }
 function wrapUp() {
   const mine = ENV.mine;
@@ -215,20 +230,54 @@ function leavePerson(keepalive) {
     opened: visit.opened, total_people: S.browse.people, total_seconds: S.browse.seconds } }, keepalive);
   visit = null;
 }
+function nextOf(wid) {   // 这个人的下一件；最后一件之后是下一个人的第一件
+  const g = POOL.groups[visit.g], i = g.indexOf(wid);
+  if (i + 1 < g.length) return { wid: g[i + 1] };
+  if (S.pos + 1 < S.order.length) return { wid: POOL.groups[S.order[S.pos + 1]][0], person: true };
+  return null;
+}
 function openOther(wid) {
-  play(wid, '', '来自 TA 的：' + BLOCK_TA[POOL.works[wid].b]);
-  const r = { star: 0, say: '' };
-  vdock.innerHTML = `<div class="rate"><div class="stars">${[1, 2, 3, 4, 5].map(n => `<button data-star="${n}" aria-label="${n} 星">★</button>`).join('')}</div>
-    <div class="say"><input id="say" placeholder="给 TA 留一句话（TA 会看到）" maxlength="120"><button id="leave">留下</button></div></div>`;
-  vdock.querySelectorAll('[data-star]').forEach(b => b.onclick = () => { r.star = +b.dataset.star; vdock.querySelectorAll('[data-star]').forEach(x => x.classList.toggle('on', +x.dataset.star <= r.star)); });
-  const finish = () => {
-    r.say = ($('#say') && $('#say').value.trim()) || '';
-    const sec = stop(); if (visit) visit.opened[wid] = (visit.opened[wid] || 0) + sec;
-    logView(isVisitor() ? 'visitor' : 'other', wid, sec, { person_no: visit && visit.n, star: r.star || null, said: !!r.say });
-    if (r.star || r.say) { post('gaf_comments', { work_id: wid, star: r.star || null, say: r.say || null }); S.rated[wid] = 1; save(); toast(r.say ? '留下了，TA 之后会看到' : '收到你的星星了'); }
-    closeHook = null; render();
+  play(wid, '来自 TA 的：' + BLOCK_TA[POOL.works[wid].b]);
+  const nx = nextOf(wid); if (nx) workHtml(nx.wid);   // 先把下一件取好，切过去才快
+  const r = { star: 0, say: '', sent: false };
+  vdock.innerHTML = `<div class="panel" id="panel"></div><div class="vbar"><button class="ib" id="vback" aria-label="返回">←</button>
+    <button class="ib" id="bStar" aria-label="打星">☆</button><button class="ib" id="bSay" aria-label="留一句话">💬</button>
+    <button class="vnext" id="bNext">${nx ? (nx.person ? '下一个人 →' : '下一个 →') : '看完了'}</button></div>`;
+  const panel = $('#panel'), close = () => { panel.classList.remove('on'); panel.innerHTML = ''; panel.dataset.k = ''; };
+  $('#bStar').onclick = () => {
+    if (panel.dataset.k === 'star') return close();
+    panel.dataset.k = 'star'; panel.classList.add('on');
+    panel.innerHTML = `<div class="stars">${[1, 2, 3, 4, 5].map(n => `<button data-star="${n}" class="${r.star >= n ? 'on' : ''}" aria-label="${n} 星">★</button>`).join('')}</div>`;
+    panel.querySelectorAll('[data-star]').forEach(b => b.onclick = () => {
+      r.star = +b.dataset.star; panel.querySelectorAll('[data-star]').forEach(x => x.classList.toggle('on', +x.dataset.star <= r.star));
+      $('#bStar').textContent = '★ ' + r.star; $('#bStar').classList.add('on'); setTimeout(close, 350);
+    });
   };
-  $('#leave').onclick = finish; closeHook = finish;
+  $('#bSay').onclick = () => {
+    if (panel.dataset.k === 'say') return close();
+    panel.dataset.k = 'say'; panel.classList.add('on');
+    panel.innerHTML = `<div class="say"><input id="say" placeholder="给 TA 留一句话（TA 会看到）" maxlength="120" value="${esc(r.say)}"><button id="sendSay">发送</button></div>`;
+    const inp = $('#say'); setTimeout(() => inp.focus(), 30);
+    const send = () => { const t = inp.value.trim(); if (!t) return close(); r.say = t; r.sent = true;
+      post('gaf_comments', { work_id: wid, star: r.star || null, say: t }); S.rated[wid] = 1; save();
+      $('#bSay').textContent = '💬 ✓'; $('#bSay').classList.add('on'); close(); toast('留下了，TA 之后会看到'); };
+    $('#sendSay').onclick = send; inp.onkeydown = e => { if (e.key === 'Enter') send(); };
+  };
+  const leave = () => {   // 离开这一件：记时间；只打了星、没留话的，这时把星发出去
+    const sec = lap(); if (visit) visit.opened[wid] = (visit.opened[wid] || 0) + sec;
+    logView(isVisitor() ? 'visitor' : 'other', wid, sec, { person_no: visit && visit.n, star: r.star || null, said: r.sent });
+    if (r.star && !r.sent) { post('gaf_comments', { work_id: wid, star: r.star, say: null }); S.rated[wid] = 1; save(); }
+  };
+  $('#vback').onclick = () => { leave(); stop(); render(); };
+  $('#bNext').onclick = () => {
+    leave();
+    if (!nx) { stop(); leavePerson(); S.pos = S.order.length; S.page = 'end'; save(); return render(); }
+    if (nx.person) {
+      leavePerson(); S.pos++; visit = { g: S.order[S.pos], n: S.pos + 1, t0: now(), opened: {} }; S.page = 'browse'; save(); render();
+      toast('第 ' + visit.n + ' 个人');
+    }
+    openOther(nx.wid);
+  };
 }
 addEventListener('pagehide', () => {
   if (viewing) {   // 关页面时正在看作品：算进停留时间，也记一条
@@ -260,10 +309,10 @@ function messagesHtml() {
 // ============ 页面 ============
 function render() {
   let body;
-  const cta = `<div class="ctabox"><b>你也想要一组这样的作品吗？</b><span>回答 10 个小问题，我从你的回答里做给你。</span><a href="${SURVEY}" target="_blank" rel="noopener" id="cta">去填问卷 →</a></div>`;
+  const cta = `<div class="ctabox"><b>你也想要一组这样的作品吗？</b><span>回答 10 个小问题，我从你的回答里做给你。</span><a href="${SURVEY}" target="_blank" rel="noopener">去填问卷 →</a></div>`;
   if (S.page === 'browse' && visit) {
     const g = POOL.groups[visit.g];
-    body = `<div class="homebar"><button id="home">${isVisitor() ? '← 回到开头' : '← 回到我的作品'}</button></div><h1>第 ${visit.n} 个人</h1><p class="sub">这些都是根据 TA 的回答做的。点开玩一玩，喜欢就给颗星、留句话。</p>
+    body = `<div class="homebar">${isVisitor() ? `<a class="homebtn" href="${SURVEY}" target="_blank" rel="noopener">我也想要 · 去填问卷 →</a>` : '<button id="home">← 回到我的作品</button>'}</div><h1>第 ${visit.n} 个人</h1><p class="sub">这些都是根据 TA 的回答做的。点开玩一玩，喜欢就给颗星、留句话。</p>
       <div class="grid">${g.map(w => tile(w, '来自 TA 的：' + BLOCK_TA[POOL.works[w].b], '', `data-other="${w}"`).replace('<span class="t">', (visit.opened[w] != null ? '<span class="seen">看过</span>' : '') + '<span class="t">')).join('')}</div>
       <div class="pair">${S.pos > 0 ? '<button class="cta soft" id="prevP">← 上一个人</button>' : ''}<button class="cta" id="nextP">${S.pos + 1 < S.order.length ? '看下一个人 →' : '看完了'}</button></div>${isVisitor() ? cta : ''}`;
   } else if (S.page === 'end') {
@@ -296,7 +345,7 @@ function render() {
   const on = (id, f) => { const e = $('#' + id); if (e) e.onclick = f; };
   on('send', submitMine);
   on('notme', notMe);
-  on('cta', () => post('responses', { payload: { schema: 'gaf.visit.v1', ...base(), action: 'cta', person_no: visit && visit.n, total_people: S.browse.people } }, true));
+  app.querySelectorAll(`a[href="${SURVEY}"]`).forEach(a => a.onclick = () => post('responses', { payload: { schema: 'gaf.visit.v1', ...base(), action: 'cta', where: a.closest('.homebar') ? 'top' : 'bottom', person_no: visit && visit.n, total_people: S.browse.people } }, true));
   on('goO', () => { if (S.pos < S.order.length) enterPerson(); });
   on('nextP', () => { leavePerson(); S.pos++; save(); enterPerson(); });
   on('prevP', () => { leavePerson(); S.pos = Math.max(0, S.pos - 1); save(); enterPerson(); });
