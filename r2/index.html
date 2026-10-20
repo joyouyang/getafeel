@@ -372,7 +372,7 @@ function askName(msg) {
   app.innerHTML = `<div class="wrap center"><h1>你叫什么？</h1><p class="sub">填你在问卷第 1 题写的名字，就能看到我从你的回答里做出来的作品。</p>
     <input id="nm" class="nameinput" autocomplete="off" autocapitalize="off" placeholder="名字" maxlength="40">
     <button class="cta" id="go">打开</button><div class="note" id="note">${msg || ''}</div>
-    <button class="cta soft" id="visit">我没填过，随便看看</button></div>`;
+    <button class="link-sm" id="visit">没填过问卷？随便看看别人的 →</button></div>`;
   const go = async () => {
     const n = normName($('#nm').value || '');
     if (!n) { $('#note').textContent = '先填名字'; return; }
