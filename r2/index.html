@@ -227,7 +227,7 @@ function leavePerson(keepalive) {
   const sec = Math.round((now() - visit.t0) / 1000);
   S.browse.people = Math.max(S.browse.people, visit.n); S.browse.seconds += sec; save();
   post('responses', { payload: { schema: 'gaf.browse.v1', ...base(), person_no: visit.n, group: POOL.groups[visit.g][0], seconds: sec,
-    opened: visit.opened, total_people: S.browse.people, total_seconds: S.browse.seconds } }, keepalive);
+    opened: visit.opened, total_people: S.browse.people, total_seconds: S.browse.seconds, round: S.rounds || 0 } }, keepalive);
   visit = null;
 }
 function nextOf(wid) {   // 这个人的下一件；最后一件之后是下一个人的第一件
@@ -316,9 +316,9 @@ function render() {
       <div class="grid">${g.map(w => tile(w, '来自 TA 的：' + BLOCK_TA[POOL.works[w].b], '', `data-other="${w}"`).replace('<span class="t">', (visit.opened[w] != null ? '<span class="seen">看过</span>' : '') + '<span class="t">')).join('')}</div>
       <div class="pair">${S.pos > 0 ? '<button class="cta soft" id="prevP">← 上一个人</button>' : ''}<button class="cta" id="nextP">${S.pos + 1 < S.order.length ? '看下一个人 →' : '看完了'}</button></div>${isVisitor() ? cta : ''}`;
   } else if (S.page === 'end') {
-    body = `<div class="center"><h1>所有人都看完了</h1><p class="sub">你一共看了 ${S.browse.people} 个人。谢谢你来逛。</p>${isVisitor() ? cta : ''}<button class="cta soft" id="home">${isVisitor() ? '回到开头' : '回到我的作品'}</button></div>`;
+    body = `<div class="center"><h1>所有人都看完了</h1><p class="sub">你一共看了 ${S.browse.people} 个人。谢谢你来逛。</p><button class="cta" id="goO">再从头看一遍</button>${isVisitor() ? cta : ''}<button class="cta soft" id="home">${isVisitor() ? '回到开头' : '回到我的作品'}</button></div>`;
   } else if (isVisitor()) {
-    const goTxt = S.browse.people > 0 && S.pos < S.order.length ? `接着看（已经看了 ${S.browse.people} 个人）` : S.pos >= S.order.length ? '所有人都看完了' : '看第一个人';
+    const goTxt = S.browse.people > 0 && S.pos < S.order.length ? `接着看（已经看了 ${S.browse.people} 个人）` : S.pos >= S.order.length ? '所有人都看过了，再从头看一遍' : '看第一个人';
     body = `<h1>随便看看</h1><p class="sub">这里每个人都回答了 10 个小问题，我只用其中一个回答，为 TA 做一件作品。<br>都是匿名的。一个人一个人地看，看到喜欢的可以给颗星、留句话。</p>
       <button class="cta" id="goO">${goTxt}</button>${cta}<button class="link-sm" id="notme">我填过问卷，用名字打开我的作品</button>`;
   } else {
@@ -332,7 +332,7 @@ function render() {
         ${messagesHtml()}
         ${viaName ? '<button class="link-sm" id="notme">不是你？换个名字</button>' : ''}
         <h2>去看看别人</h2><p class="sub">别人也做了这样的作品，都是匿名的。你的作品也会匿名出现在别人那里，包括没填过问卷、只是来逛逛的人。</p>
-        <button class="cta" id="goO">${S.browse.people > 0 && S.pos < S.order.length ? `接着看（已经看了 ${S.browse.people} 个人）` : S.pos >= S.order.length ? '所有人都看完了' : '看第一个人'}</button>`;
+        <button class="cta" id="goO">${S.browse.people > 0 && S.pos < S.order.length ? `接着看（已经看了 ${S.browse.people} 个人）` : S.pos >= S.order.length ? '所有人都看过了，再从头看一遍' : '看第一个人'}</button>`;
     }
   }
   app.innerHTML = `<div class="wrap">${body}</div>`;
@@ -346,7 +346,7 @@ function render() {
   on('send', submitMine);
   on('notme', notMe);
   app.querySelectorAll(`a[href="${SURVEY}"]`).forEach(a => a.onclick = () => post('responses', { payload: { schema: 'gaf.visit.v1', ...base(), action: 'cta', where: a.closest('.homebar') ? 'top' : 'bottom', person_no: visit && visit.n, total_people: S.browse.people } }, true));
-  on('goO', () => { if (S.pos < S.order.length) enterPerson(); });
+  on('goO', () => { if (S.pos >= S.order.length) { S.pos = 0; S.rounds = (S.rounds || 0) + 1; save(); } enterPerson(); });
   on('nextP', () => { leavePerson(); S.pos++; save(); enterPerson(); });
   on('prevP', () => { leavePerson(); S.pos = Math.max(0, S.pos - 1); save(); enterPerson(); });
   on('home', () => { leavePerson(); S.page = 'home'; save(); render(); scrollTo(0, 0); });
