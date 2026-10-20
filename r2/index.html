@@ -395,6 +395,8 @@ async function start() {
   if (S.page === 'browse') S.page = 'home';
   save();
   await loadMessages();
+  // 访客（10-20）：不看介绍页，直接进第一个人；回来时接着上次那个人，看完了就到结束页
+  if (isVisitor()) { if (S.pos < S.order.length) return enterPerson(); S.page = 'end'; save(); return render(); }
   render();
 }
 function notMe() { try { localStorage.removeItem('gaf-r2-name'); } catch (e) {} ENV = null; viaName = false; askName(); }
