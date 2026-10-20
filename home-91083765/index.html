@@ -1,0 +1,69 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="robots" content="noindex">
+<title>快乐置顶</title>
+<style>
+:root{--bg:#0b1236;--ink:#f6f1e4;--muted:rgba(246,241,228,.6);--line:rgba(246,241,228,.22);--honey:#ffc95e;--red:#ff8a7a}
+*{box-sizing:border-box}
+html,body{margin:0;height:100%;background:var(--bg);color:var(--ink);font-family:-apple-system,BlinkMacSystemFont,"PingFang SC",sans-serif}
+.gate{min-height:100%;display:flex;flex-direction:column;justify-content:center;padding:24px 20px;max-width:420px;margin:0 auto}
+h1{font-size:28px;margin:0 0 8px;letter-spacing:.02em}
+p{color:var(--muted);margin:0 0 22px;font-size:15px}
+input{width:100%;padding:15px 16px;border-radius:14px;border:1px solid var(--line);background:rgba(255,255,255,.06);color:var(--ink);font-size:16px;outline:none}
+input:focus{border-color:var(--honey)}
+button{width:100%;margin-top:12px;padding:15px;border:0;border-radius:14px;background:var(--honey);color:#1a1405;font-size:16px;font-weight:800}
+.note{min-height:22px;margin-top:10px;font-size:14px;color:var(--red)}
+iframe{position:fixed;inset:0;width:100%;height:100%;border:0;background:var(--bg);display:none}
+iframe.on{display:block}
+</style>
+</head>
+<body>
+<form class="gate" id="gate" autocomplete="off">
+  <h1>快乐置顶</h1>
+  <p>输入密码打开</p>
+  <input id="pw" type="password" placeholder="密码" autocapitalize="off" autocorrect="off" spellcheck="false">
+  <button id="go" type="submit">打开</button>
+  <div class="note" id="note"></div>
+</form>
+<iframe id="home" title="快乐置顶" allow="autoplay"></iframe>
+<iframe id="design" title="这个主页是怎么做出来的"></iframe>
+<script>
+'use strict';
+const KEY = 'gaf-home-pw:' + location.pathname;
+const $ = (s) => document.getElementById(s);
+async function unlock(pw) {
+  const buf = new Uint8Array(await (await fetch('bundle.bin', { cache: 'no-cache' })).arrayBuffer());
+  const salt = buf.slice(0, 16), iv = buf.slice(16, 28), ct = buf.slice(28);
+  const base = await crypto.subtle.importKey('raw', new TextEncoder().encode(pw), 'PBKDF2', false, ['deriveKey']);
+  const key = await crypto.subtle.deriveKey({ name: 'PBKDF2', salt, iterations: 200000, hash: 'SHA-256' }, base, { name: 'AES-GCM', length: 256 }, false, ['decrypt']);
+  return JSON.parse(new TextDecoder().decode(await crypto.subtle.decrypt({ name: 'AES-GCM', iv }, key, ct)));
+}
+function show(b) {
+  $('gate').style.display = 'none';
+  $('home').srcdoc = b.home; $('design').srcdoc = b.design;
+  $('home').classList.add('on'); document.title = '快乐置顶';
+}
+addEventListener('message', (e) => {
+  if (!e.data || !e.data.gaf) return;
+  const toDesign = e.data.gaf === 'design';
+  $('design').classList.toggle('on', toDesign); $('home').classList.toggle('on', !toDesign);
+  if (toDesign) { try { $('design').contentWindow.scrollTo(0, 0); } catch (_) {} }
+});
+$('gate').addEventListener('submit', async (e) => {
+  e.preventDefault();
+  const pw = $('pw').value.trim(); if (!pw) return;
+  $('go').disabled = true; $('go').textContent = '正在打开……'; $('note').textContent = '';
+  try { const b = await unlock(pw); try { localStorage.setItem(KEY, pw); } catch (_) {} show(b); }
+  catch (_) { $('note').textContent = '密码不对，再试一次'; $('go').disabled = false; $('go').textContent = '打开'; }
+});
+(async () => {   // 这台手机输对过一次，下次直接打开
+  let saved = null; try { saved = localStorage.getItem(KEY); } catch (_) {}
+  if (saved) { try { show(await unlock(saved)); return; } catch (_) { try { localStorage.removeItem(KEY); } catch (__) {} } }
+  setTimeout(() => $('pw').focus(), 50);
+})();
+</script>
+</body>
+</html>
