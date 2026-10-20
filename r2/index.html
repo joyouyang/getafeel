@@ -67,6 +67,10 @@ h2{font-size:18px;margin:30px 0 8px}
 .center{min-height:70vh;display:flex;flex-direction:column;justify-content:center}
 .nameinput{display:block;width:100%;margin-top:22px;padding:14px 16px;border:1.5px solid var(--line);border-radius:14px;background:var(--card);color:var(--blue);font:inherit;font-size:18px}
 .nameinput:focus{outline:none;border-color:var(--ink)}
+.ctabox{margin-top:26px;padding:16px;border:1.5px solid var(--line);border-radius:14px;display:flex;flex-direction:column;gap:6px}
+.ctabox b{font-size:16px}
+.ctabox span{color:var(--muted);font-size:14px}
+.ctabox a{align-self:flex-start;margin-top:6px;padding:10px 16px;border-radius:999px;background:var(--blue);color:#fff;text-decoration:none;font-weight:600}
 .link-sm{display:block;margin:18px auto 0;color:var(--muted);font-size:13px;text-decoration:underline}
 .homebar{position:sticky;top:0;z-index:20;margin:0 -16px 8px;padding:max(10px,env(safe-area-inset-top)) 16px 10px;background:var(--paper)}
 .homebar button{display:block;width:100%;padding:16px;border-radius:14px;background:var(--ink);color:var(--paper);font-size:18px;font-weight:700}
@@ -118,7 +122,13 @@ function post(table, body, keepalive) {
   return fetch(API + table, { method: 'POST', keepalive: !!keepalive, headers: { 'Content-Type': 'application/json', apikey: ANON_KEY, Prefer: 'return=minimal' }, body: JSON.stringify(body) })
     .then(r => r.ok).catch(() => false);
 }
-const base = () => ({ who: ENV.who, device_id: deviceId(), ua: navigator.userAgent.slice(0, 200), at: new Date().toISOString() });
+const base = () => ({ who: ENV.who, entry: S && S.entry, device_id: deviceId(), ua: navigator.userAgent.slice(0, 200), at: new Date().toISOString() });
+// 每关掉一件作品记一条（10-20 加）：没交卷、交卷后回来再看，也都有时间
+const SURVEY = '../survey/?invite=3jwnbb';   // 访客想要自己的作品时去填问卷，邀请码 V01
+const isVisitor = () => ENV && ENV.who === 'visitor';
+function logView(role, wid, sec, extra, keepalive) {
+  post('responses', { payload: { schema: 'gaf.view.v1', ...base(), role, work_id: wid, block: POOL.works[wid] && POOL.works[wid].b, seconds: sec, ...(extra || {}) } }, keepalive);
+}
 
 // —— 看作品：和问卷同站，嵌进来，暂停时停声音和动画 ——
 function prelude(){var P=false,ctxs=[],q=[];var AC=window.AudioContext||window.webkitAudioContext;
@@ -161,7 +171,7 @@ function mineTile(wid, mode) {
 function openMine(wid) {
   play(wid, '', '来自你回答的：' + BLOCK_ME[POOL.works[wid].b]);
   vdock.innerHTML = `<div class="dock"><button class="pill ghost" data-m="no">没 get 到</button><button class="pill yes" data-m="yes">get 到我了</button></div>`;
-  const done = mark => { const sec = stop(); S.mineTime[wid] = (S.mineTime[wid] || 0) + sec; if (mark) S.marks[wid] = mark; save(); render(); };
+  const done = mark => { const sec = stop(); S.mineTime[wid] = (S.mineTime[wid] || 0) + sec; if (mark) S.marks[wid] = mark; save(); logView('self', wid, sec, { mark: mark || null, submitted: !!S.submitted }); render(); };
   vdock.querySelectorAll('[data-m]').forEach(b => b.onclick = () => done(b.dataset.m));
   closeHook = () => { closeHook = null; done(null); };
 }
@@ -214,17 +224,27 @@ function openOther(wid) {
   const finish = () => {
     r.say = ($('#say') && $('#say').value.trim()) || '';
     const sec = stop(); if (visit) visit.opened[wid] = (visit.opened[wid] || 0) + sec;
+    logView(isVisitor() ? 'visitor' : 'other', wid, sec, { person_no: visit && visit.n, star: r.star || null, said: !!r.say });
     if (r.star || r.say) { post('gaf_comments', { work_id: wid, star: r.star || null, say: r.say || null }); S.rated[wid] = 1; save(); toast(r.say ? '留下了，TA 之后会看到' : '收到你的星星了'); }
     closeHook = null; render();
   };
   $('#leave').onclick = finish; closeHook = finish;
 }
-addEventListener('pagehide', () => { if (viewing && closeHook) { /* 关页面时正在看作品，算进停留时间 */ const sec = Math.round((now() - viewing.t0) / 1000); if (visit) visit.opened[viewing.wid] = (visit.opened[viewing.wid] || 0) + sec; } leavePerson(true); });
+addEventListener('pagehide', () => {
+  if (viewing) {   // 关页面时正在看作品：算进停留时间，也记一条
+    const sec = Math.round((now() - viewing.t0) / 1000);
+    if (visit) visit.opened[viewing.wid] = (visit.opened[viewing.wid] || 0) + sec;
+    const own = ENV.mine.includes(viewing.wid);
+    logView(own ? 'self' : isVisitor() ? 'visitor' : 'other', viewing.wid, sec, { closed_page: true }, true);
+    viewing.t0 = now();
+  }
+  leavePerson(true);
+});
 
 // ============ 别人留给你的话 ============
 let MSG = {};
 async function loadMessages() {
-  if (DRY) return;
+  if (DRY || !ENV.mine.length) return;
   try {
     const q = `gaf_comments?select=work_id,star,say,created_at&work_id=in.(${ENV.mine.join(',')})&order=created_at.desc`;
     const r = await fetch(API + q, { headers: { apikey: ANON_KEY } }); if (!r.ok) return;
@@ -240,13 +260,18 @@ function messagesHtml() {
 // ============ 页面 ============
 function render() {
   let body;
+  const cta = `<div class="ctabox"><b>你也想要一组这样的作品吗？</b><span>回答 10 个小问题，我从你的回答里做给你。</span><a href="${SURVEY}" target="_blank" rel="noopener" id="cta">去填问卷 →</a></div>`;
   if (S.page === 'browse' && visit) {
     const g = POOL.groups[visit.g];
-    body = `<div class="homebar"><button id="home">← 回到我的作品</button></div><h1>第 ${visit.n} 个人</h1><p class="sub">这些都是根据 TA 的回答做的。点开玩一玩，喜欢就给颗星、留句话。</p>
+    body = `<div class="homebar"><button id="home">${isVisitor() ? '← 回到开头' : '← 回到我的作品'}</button></div><h1>第 ${visit.n} 个人</h1><p class="sub">这些都是根据 TA 的回答做的。点开玩一玩，喜欢就给颗星、留句话。</p>
       <div class="grid">${g.map(w => tile(w, '来自 TA 的：' + BLOCK_TA[POOL.works[w].b], '', `data-other="${w}"`).replace('<span class="t">', (visit.opened[w] != null ? '<span class="seen">看过</span>' : '') + '<span class="t">')).join('')}</div>
-      <div class="pair">${S.pos > 0 ? '<button class="cta soft" id="prevP">← 上一个人</button>' : ''}<button class="cta" id="nextP">${S.pos + 1 < S.order.length ? '看下一个人 →' : '看完了'}</button></div>`;
+      <div class="pair">${S.pos > 0 ? '<button class="cta soft" id="prevP">← 上一个人</button>' : ''}<button class="cta" id="nextP">${S.pos + 1 < S.order.length ? '看下一个人 →' : '看完了'}</button></div>${isVisitor() ? cta : ''}`;
   } else if (S.page === 'end') {
-    body = `<div class="center"><h1>所有人都看完了</h1><p class="sub">你一共看了 ${S.browse.people} 个人。谢谢你来逛。</p><button class="cta soft" id="home">回到我的作品</button></div>`;
+    body = `<div class="center"><h1>所有人都看完了</h1><p class="sub">你一共看了 ${S.browse.people} 个人。谢谢你来逛。</p>${isVisitor() ? cta : ''}<button class="cta soft" id="home">${isVisitor() ? '回到开头' : '回到我的作品'}</button></div>`;
+  } else if (isVisitor()) {
+    const goTxt = S.browse.people > 0 && S.pos < S.order.length ? `接着看（已经看了 ${S.browse.people} 个人）` : S.pos >= S.order.length ? '所有人都看完了' : '看第一个人';
+    body = `<h1>随便看看</h1><p class="sub">这里每个人都回答了 10 个小问题，我只用其中一个回答，为 TA 做一件作品。<br>都是匿名的。一个人一个人地看，看到喜欢的可以给颗星、留句话。</p>
+      <button class="cta" id="goO">${goTxt}</button>${cta}<button class="link-sm" id="notme">我填过问卷，用名字打开我的作品</button>`;
   } else {
     const left = ENV.mine.filter(w => !S.marks[w]).length, all = !left;
     if (!S.submitted) {
@@ -257,7 +282,7 @@ function render() {
         <div class="grid">${ENV.mine.map(w => mineTile(w, 'open')).join('')}</div>
         ${messagesHtml()}
         ${viaName ? '<button class="link-sm" id="notme">不是你？换个名字</button>' : ''}
-        <h2>去看看别人</h2><p class="sub">别人也做了这样的作品，都是匿名的。你的作品也会匿名出现在别人那里。</p>
+        <h2>去看看别人</h2><p class="sub">别人也做了这样的作品，都是匿名的。你的作品也会匿名出现在别人那里，包括没填过问卷、只是来逛逛的人。</p>
         <button class="cta" id="goO">${S.browse.people > 0 && S.pos < S.order.length ? `接着看（已经看了 ${S.browse.people} 个人）` : S.pos >= S.order.length ? '所有人都看完了' : '看第一个人'}</button>`;
     }
   }
@@ -271,6 +296,7 @@ function render() {
   const on = (id, f) => { const e = $('#' + id); if (e) e.onclick = f; };
   on('send', submitMine);
   on('notme', notMe);
+  on('cta', () => post('responses', { payload: { schema: 'gaf.visit.v1', ...base(), action: 'cta', person_no: visit && visit.n, total_people: S.browse.people } }, true));
   on('goO', () => { if (S.pos < S.order.length) enterPerson(); });
   on('nextP', () => { leavePerson(); S.pos++; save(); enterPerson(); });
   on('prevP', () => { leavePerson(); S.pos = Math.max(0, S.pos - 1); save(); enterPerson(); });
@@ -296,7 +322,8 @@ async function unlock(secret) {
 function askName(msg) {
   app.innerHTML = `<div class="wrap center"><h1>你叫什么？</h1><p class="sub">填你在问卷第 1 题写的名字，就能看到我从你的回答里做出来的作品。</p>
     <input id="nm" class="nameinput" autocomplete="off" autocapitalize="off" placeholder="名字" maxlength="40">
-    <button class="cta" id="go">打开</button><div class="note" id="note">${msg || ''}</div></div>`;
+    <button class="cta" id="go">打开</button><div class="note" id="note">${msg || ''}</div>
+    <button class="cta soft" id="visit">我没填过，随便看看</button></div>`;
   const go = async () => {
     const n = normName($('#nm').value || '');
     if (!n) { $('#note').textContent = '先填名字'; return; }
@@ -307,6 +334,7 @@ function askName(msg) {
     $('#note').textContent = r === 'missing' ? '没找到这个名字。请填你在问卷第 1 题写的那个写法，比如英文名或昵称。' : '网络不太好，再点一次试试';
   };
   $('#go').onclick = go; $('#nm').onkeydown = e => { if (e.key === 'Enter') go(); };
+  $('#visit').onclick = async () => { $('#visit').disabled = true; const r = await unlock('visitor'); if (r === 'ok') { viaName = false; try { localStorage.setItem('gaf-r2-name', '#visitor'); } catch (e) {} return start(); } $('#visit').disabled = false; $('#note').textContent = '网络不太好，再点一次试试'; };
   setTimeout(() => $('#nm').focus(), 50);
 }
 async function start() {
@@ -314,7 +342,7 @@ async function start() {
   const shuffled = others(); for (let i = shuffled.length - 1; i > 0; i--) { const j = Math.floor(Math.random() * (i + 1)); [shuffled[i], shuffled[j]] = [shuffled[j], shuffled[i]]; }
   S = Object.assign({ marks: {}, best: null, score: null, why: null, worst: null, submitted: false, mineTime: {}, t0: now(),
     order: shuffled, pos: 0, page: 'home', browse: { people: 0, seconds: 0 }, rated: {}, dev: 'r2-' + Math.random().toString(36).slice(2, 10) }, S);
-  S.entry = viaName ? 'name' : 'link';
+  S.entry = isVisitor() ? 'visitor' : viaName ? 'name' : 'link';
   if (S.page === 'browse') S.page = 'home';
   save();
   await loadMessages();
@@ -323,12 +351,13 @@ async function start() {
 function notMe() { try { localStorage.removeItem('gaf-r2-name'); } catch (e) {} ENV = null; viaName = false; askName(); }
 (async () => {
   const token = location.hash.slice(1).trim();
-  if (token) {   // 专属链接
-    const r = await unlock(token);
+  if (token) {   // 专属链接；#visitor 是访客链接
+    const r = await unlock(token === 'visitor' ? 'visitor' : token);
     return r === 'ok' ? start() : fail('这个链接打不开。请检查链接是否完整，或者稍后再试。');
   }
   let saved = null; try { saved = localStorage.getItem('gaf-r2-name'); } catch (e) {}
-  if (saved && await unlock('name:' + saved) === 'ok') { viaName = true; return start(); }
+  if (saved === '#visitor' && await unlock('visitor') === 'ok') return start();
+  if (saved && saved !== '#visitor' && await unlock('name:' + saved) === 'ok') { viaName = true; return start(); }
   askName();
 })();
 </script>
