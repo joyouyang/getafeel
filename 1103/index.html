@@ -4,41 +4,53 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <meta name="robots" content="noindex">
-<meta name="theme-color" content="#05060a">
+<meta name="theme-color" content="#cdb999">
 <title>11.03</title>
 <style>
-:root{--bg:#05060a;--snow:#eef0f4;--line:rgba(238,240,244,.22);--wine:#a3243f}
+:root{--kraft:#cdb999;--kraft2:#c3ad8b;--label:#f4efe6;--ink:#3b3530;--line:rgba(59,53,48,.55)}
 *{box-sizing:border-box}
-html,body{margin:0;height:100%;background:var(--bg);color:var(--snow);overflow:hidden;-webkit-tap-highlight-color:transparent}
-body{transition:opacity .8s}
+html,body{margin:0;height:100%;overflow:hidden;-webkit-tap-highlight-color:transparent;-webkit-user-select:none;user-select:none}
+body{background:var(--kraft);transition:opacity .9s}
+/* 牛皮纸的纤维 */
+body::before{content:"";position:fixed;inset:0;pointer-events:none;opacity:.55;
+  background:
+    repeating-linear-gradient(83deg,rgba(255,255,255,.05) 0 1px,transparent 1px 7px),
+    repeating-linear-gradient(-7deg,rgba(80,60,30,.05) 0 1px,transparent 1px 11px),
+    radial-gradient(120% 80% at 30% 20%,rgba(255,250,240,.18),transparent 60%),
+    radial-gradient(90% 70% at 80% 90%,rgba(90,70,40,.14),transparent 70%)}
 body.out{opacity:0}
-.br{position:fixed;width:22px;height:22px;border:1px solid rgba(238,240,244,.32)}
-.tl{left:22px;top:calc(env(safe-area-inset-top) + 48px);border-right:0;border-bottom:0}
-.tr{right:22px;top:calc(env(safe-area-inset-top) + 48px);border-left:0;border-bottom:0}
-.bl{left:22px;bottom:calc(env(safe-area-inset-bottom) + 48px);border-right:0;border-top:0}
-.brr{right:22px;bottom:calc(env(safe-area-inset-bottom) + 48px);border-left:0;border-top:0}
-.rec{position:fixed;right:34px;top:calc(env(safe-area-inset-top) + 62px);width:7px;height:7px;border-radius:50%;background:var(--wine);box-shadow:0 0 8px rgba(163,36,63,.8);animation:br 2.6s ease-in-out infinite}
-@keyframes br{0%,100%{opacity:.35}50%{opacity:1}}
-form{position:fixed;left:50%;top:44%;transform:translate(-50%,-50%);width:min(64vw,260px)}
-input{width:100%;padding:10px 0;border:0;border-bottom:1px solid var(--line);background:transparent;color:var(--snow);font:300 20px/1.2 -apple-system,"Helvetica Neue",sans-serif;letter-spacing:.42em;text-align:center;outline:none;border-radius:0;-webkit-appearance:none;caret-color:var(--wine);transition:border-color .4s}
-input::placeholder{color:rgba(238,240,244,.28);letter-spacing:.3em;font-size:15px}
-input:focus{border-bottom-color:rgba(238,240,244,.45)}
-form.no{animation:no .42s}
-@keyframes no{20%,60%{transform:translate(calc(-50% - 7px),-50%)}40%,80%{transform:translate(calc(-50% + 7px),-50%)}}
-form.wait input{opacity:.4}
+/* 面单 */
+.label{position:fixed;left:50%;top:46%;width:min(80vw,330px);padding:34px 22px 30px;transform:translate(-50%,-50%) rotate(-1.2deg);
+  background:var(--label);border-radius:3px;box-shadow:0 1px 0 rgba(0,0,0,.04),0 10px 30px rgba(60,40,20,.18)}
+.label::before{content:"";position:absolute;left:0;right:0;top:12px;border-top:1px dashed rgba(59,53,48,.18)}
+.boxes{display:flex;justify-content:center;gap:6px}
+.boxes span{width:30px;height:38px;border:1px solid var(--line);display:flex;align-items:center;justify-content:center;
+  font:400 22px/1 "Bradley Hand","Snell Roundhand","Noteworthy",cursive;color:var(--ink);background:rgba(255,255,255,.35)}
+.boxes span:nth-child(4){margin-right:8px}
+.boxes span.cur{animation:hint 2.2s ease-in-out infinite}
+@keyframes hint{0%,100%{border-color:var(--line)}50%{border-color:rgba(59,53,48,.95);box-shadow:inset 0 -2px 0 rgba(59,53,48,.35)}}
+.label.no{animation:no .42s}
+@keyframes no{20%,60%{transform:translate(calc(-50% - 7px),-50%) rotate(-1.2deg)}40%,80%{transform:translate(calc(-50% + 7px),-50%) rotate(-1.2deg)}}
+.label.wait .boxes span{opacity:.45}
+/* 真正接收输入的框，盖在格子上、看不见 */
+#pw{position:absolute;inset:0;width:100%;height:100%;opacity:.01;border:0;background:transparent;color:transparent;caret-color:transparent;font-size:16px;outline:none}
 </style>
 </head>
 <body>
-<div class="br tl"></div><div class="br tr"></div><div class="br bl"></div><div class="br brr"></div>
-<div class="rec"></div>
-<form id="gate" autocomplete="off">
-  <input id="pw" type="password" inputmode="numeric" pattern="[0-9]*" placeholder="密码" autocapitalize="off" autocorrect="off" spellcheck="false" aria-label="密码">
-</form>
+<div class="label" id="label">
+  <div class="boxes" id="boxes"><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span></div>
+  <input id="pw" type="tel" inputmode="numeric" pattern="[0-9]*" maxlength="8" autocomplete="off" autocapitalize="off" autocorrect="off" spellcheck="false" aria-label="8 位数字">
+</div>
 <script>
 (function () {   // 不留全局变量：解锁后主页写进同一个窗口，重名会冲突
   'use strict';
   var KEY = 'gaf-home-pw:' + location.pathname, busy = false;
-  var form = document.getElementById('gate'), input = document.getElementById('pw');
+  var label = document.getElementById('label'), input = document.getElementById('pw');
+  var cells = document.getElementById('boxes').children;
+  function paint() {
+    var v = input.value;
+    for (var i = 0; i < cells.length; i++) { cells[i].textContent = v[i] || ''; cells[i].className = i === v.length ? 'cur' : ''; }
+  }
   function unlock(pw) {
     return fetch('bundle.bin', { cache: 'no-cache' }).then(function (r) { return r.arrayBuffer(); }).then(function (ab) {
       var buf = new Uint8Array(ab), salt = buf.slice(0, 16), iv = buf.slice(16, 28), ct = buf.slice(28);
@@ -49,22 +61,23 @@ form.wait input{opacity:.4}
   }
   function show(html, fade) {
     function go() { document.open(); document.write(html); document.close(); }
-    if (fade) { document.body.classList.add('out'); setTimeout(go, 800); } else go();
+    if (fade) { document.body.classList.add('out'); setTimeout(go, 900); } else go();
   }
   function tryPw() {
-    var pw = input.value.trim(); if (!pw || busy) return;
-    busy = true; form.classList.add('wait'); input.blur();
+    var pw = input.value.replace(/\D/g, ''); if (pw.length < 8 || busy) return;
+    busy = true; label.classList.add('wait'); input.blur();
     unlock(pw).then(function (html) {
       try { localStorage.setItem(KEY, pw); } catch (_) {}
       show(html, true);
     }, function () {
-      busy = false; form.classList.remove('wait'); input.value = '';
-      form.classList.remove('no'); void form.offsetWidth; form.classList.add('no');
+      busy = false; label.classList.remove('wait'); input.value = ''; paint();
+      label.classList.remove('no'); void label.offsetWidth; label.classList.add('no');
       setTimeout(function () { input.focus(); }, 60);
     });
   }
-  form.addEventListener('submit', function (e) { e.preventDefault(); tryPw(); });
-  input.addEventListener('input', function () { if (input.value.trim().length >= 8) tryPw(); });   // 数字键盘没有回车，输满就试
+  input.addEventListener('input', function () { input.value = input.value.replace(/\D/g, '').slice(0, 8); paint(); if (input.value.length === 8) tryPw(); });
+  input.addEventListener('keydown', function (e) { if (e.key === 'Enter') { e.preventDefault(); tryPw(); } });
+  paint();
   var saved = null; try { saved = localStorage.getItem(KEY); } catch (_) {}
   if (saved) {   // 这台手机输对过一次，下次直接打开
     unlock(saved).then(function (html) { show(html, false); }, function () { try { localStorage.removeItem(KEY); } catch (_) {} input.focus(); });
