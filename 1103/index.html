@@ -1,0 +1,75 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="robots" content="noindex">
+<meta name="theme-color" content="#05060a">
+<title>11.03</title>
+<style>
+:root{--bg:#05060a;--snow:#eef0f4;--line:rgba(238,240,244,.22);--wine:#a3243f}
+*{box-sizing:border-box}
+html,body{margin:0;height:100%;background:var(--bg);color:var(--snow);overflow:hidden;-webkit-tap-highlight-color:transparent}
+body{transition:opacity .8s}
+body.out{opacity:0}
+.br{position:fixed;width:22px;height:22px;border:1px solid rgba(238,240,244,.32)}
+.tl{left:22px;top:calc(env(safe-area-inset-top) + 48px);border-right:0;border-bottom:0}
+.tr{right:22px;top:calc(env(safe-area-inset-top) + 48px);border-left:0;border-bottom:0}
+.bl{left:22px;bottom:calc(env(safe-area-inset-bottom) + 48px);border-right:0;border-top:0}
+.brr{right:22px;bottom:calc(env(safe-area-inset-bottom) + 48px);border-left:0;border-top:0}
+.rec{position:fixed;right:34px;top:calc(env(safe-area-inset-top) + 62px);width:7px;height:7px;border-radius:50%;background:var(--wine);box-shadow:0 0 8px rgba(163,36,63,.8);animation:br 2.6s ease-in-out infinite}
+@keyframes br{0%,100%{opacity:.35}50%{opacity:1}}
+form{position:fixed;left:50%;top:44%;transform:translate(-50%,-50%);width:min(64vw,260px)}
+input{width:100%;padding:10px 0;border:0;border-bottom:1px solid var(--line);background:transparent;color:var(--snow);font:300 20px/1.2 -apple-system,"Helvetica Neue",sans-serif;letter-spacing:.42em;text-align:center;outline:none;border-radius:0;-webkit-appearance:none;caret-color:var(--wine);transition:border-color .4s}
+input::placeholder{color:rgba(238,240,244,.28);letter-spacing:.3em;font-size:15px}
+input:focus{border-bottom-color:rgba(238,240,244,.45)}
+form.no{animation:no .42s}
+@keyframes no{20%,60%{transform:translate(calc(-50% - 7px),-50%)}40%,80%{transform:translate(calc(-50% + 7px),-50%)}}
+form.wait input{opacity:.4}
+</style>
+</head>
+<body>
+<div class="br tl"></div><div class="br tr"></div><div class="br bl"></div><div class="br brr"></div>
+<div class="rec"></div>
+<form id="gate" autocomplete="off">
+  <input id="pw" type="password" inputmode="numeric" pattern="[0-9]*" placeholder="密码" autocapitalize="off" autocorrect="off" spellcheck="false" aria-label="密码">
+</form>
+<script>
+(function () {   // 不留全局变量：解锁后主页写进同一个窗口，重名会冲突
+  'use strict';
+  var KEY = 'gaf-home-pw:' + location.pathname, busy = false;
+  var form = document.getElementById('gate'), input = document.getElementById('pw');
+  function unlock(pw) {
+    return fetch('bundle.bin', { cache: 'no-cache' }).then(function (r) { return r.arrayBuffer(); }).then(function (ab) {
+      var buf = new Uint8Array(ab), salt = buf.slice(0, 16), iv = buf.slice(16, 28), ct = buf.slice(28);
+      return crypto.subtle.importKey('raw', new TextEncoder().encode(pw), 'PBKDF2', false, ['deriveKey']).then(function (base) {
+        return crypto.subtle.deriveKey({ name: 'PBKDF2', salt: salt, iterations: 200000, hash: 'SHA-256' }, base, { name: 'AES-GCM', length: 256 }, false, ['decrypt']);
+      }).then(function (key) { return crypto.subtle.decrypt({ name: 'AES-GCM', iv: iv }, key, ct); });
+    }).then(function (pt) { return new TextDecoder().decode(pt); });
+  }
+  function show(html, fade) {
+    function go() { document.open(); document.write(html); document.close(); }
+    if (fade) { document.body.classList.add('out'); setTimeout(go, 800); } else go();
+  }
+  function tryPw() {
+    var pw = input.value.trim(); if (!pw || busy) return;
+    busy = true; form.classList.add('wait'); input.blur();
+    unlock(pw).then(function (html) {
+      try { localStorage.setItem(KEY, pw); } catch (_) {}
+      show(html, true);
+    }, function () {
+      busy = false; form.classList.remove('wait'); input.value = '';
+      form.classList.remove('no'); void form.offsetWidth; form.classList.add('no');
+      setTimeout(function () { input.focus(); }, 60);
+    });
+  }
+  form.addEventListener('submit', function (e) { e.preventDefault(); tryPw(); });
+  input.addEventListener('input', function () { if (input.value.trim().length >= 8) tryPw(); });   // 数字键盘没有回车，输满就试
+  var saved = null; try { saved = localStorage.getItem(KEY); } catch (_) {}
+  if (saved) {   // 这台手机输对过一次，下次直接打开
+    unlock(saved).then(function (html) { show(html, false); }, function () { try { localStorage.removeItem(KEY); } catch (_) {} input.focus(); });
+  } else setTimeout(function () { input.focus(); }, 50);
+})();
+</script>
+</body>
+</html>
